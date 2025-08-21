@@ -424,7 +424,7 @@ def initialize_flattrade_for_trading():
             return True, "Flattrade API ready for trading"
         
         # Fallback: Check for auth code file (for backward compatibility)
-        auth_code_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'flattrade_auth_code.txt')
+        auth_code_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'Flattrade_auth_code.txt')
         
         if os.path.exists(auth_code_file):
             with open(auth_code_file, 'r') as f:
@@ -1059,7 +1059,7 @@ def generate_flattrade_oauth_url(api_key):
         query_string = urlencode(params)
         oauth_url = f'{base_url}?{query_string}'
         
-        print(f'✅ OAuth URL generated successfully:')
+        print(f'[OK] OAuth URL generated successfully:')
         print(f'📋 URL: {oauth_url}')
         print(f'🔑 API Key: {api_key}')
         print(f'📍 Redirect URI: http://localhost:3001/callback')
@@ -1097,7 +1097,7 @@ def check_flattrade_auth_code():
     """Check for Flattrade authorization code and authenticate"""
     try:
         # Check for authorization code file
-        auth_code_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'flattrade_auth_code.txt')
+        auth_code_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'Flattrade_auth_code.txt')
         
         if not os.path.exists(auth_code_file):
             return """❌ **No Authorization Code Found**
@@ -1282,7 +1282,7 @@ def check_angelone_callback_status():
     """Check for Angel One callback parameters and process authentication"""
     try:
         # Check for callback data file
-        callback_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'angelone_callback.txt')
+        callback_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'Angelone_auth_callback.txt')
         
         if not os.path.exists(callback_file):
             return """❌ **No Callback Data Found**
