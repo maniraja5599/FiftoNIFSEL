@@ -12,6 +12,12 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime
 import threading
 import time
+import threading
+from urllib.parse import urlparse, parse_qs
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from datetime import datetime
+import threading
+import time
 
 class OAuthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -44,7 +50,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             print(f"[SUCCESS] Authorization code received: {auth_code}")
             
             # Save the authorization code to a temporary file
-            temp_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'flattrade_auth_code.txt')
+            temp_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'Flattrade_auth_code.txt')
             os.makedirs(os.path.dirname(temp_file), exist_ok=True)
             with open(temp_file, 'w') as f:
                 f.write(auth_code)
@@ -66,7 +72,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             <!DOCTYPE html>
             <html>
             <head>
-                <title>✅ FiFTO - Flattrade Authentication Complete!</title>
+                <title>[SUCCESS] FiFTO - Flattrade Authentication Complete!</title>
                 <style>
                     body {{ 
                         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -96,9 +102,14 @@ class OAuthHandler(BaseHTTPRequestHandler):
                     }}
                     .success {{ 
                         color: #10b981; 
-                        font-size: 64px; 
+                        font-size: 32px; 
                         margin-bottom: 20px; 
                         animation: pulse 2s infinite;
+                        font-weight: bold;
+                        background: #f0fdf4;
+                        padding: 15px;
+                        border-radius: 10px;
+                        border: 2px solid #10b981;
                     }}
                     @keyframes pulse {{
                         0%, 100% {{ transform: scale(1); }}
@@ -185,11 +196,11 @@ class OAuthHandler(BaseHTTPRequestHandler):
                         const redirectElement = document.getElementById('redirect-info');
                         
                         if (countdownElement) {{
-                            countdownElement.innerHTML = `🔄 Redirecting to FiFTO app in <strong>${{countdown}}</strong> seconds...`;
+                            countdownElement.innerHTML = `[REDIRECT] Redirecting to FiFTO app in <strong>${{countdown}}</strong> seconds...`;
                         }}
                         
                         if (redirectElement) {{
-                            redirectElement.innerHTML = `🔄 Auto-redirecting to FiFTO app in ${{countdown}} seconds. Click "Return to App" to go immediately.`;
+                            redirectElement.innerHTML = `[REDIRECT] Auto-redirecting to FiFTO app in ${{countdown}} seconds. Click "Return to App" to go immediately.`;
                         }}
                         
                         countdown--;
@@ -221,29 +232,29 @@ class OAuthHandler(BaseHTTPRequestHandler):
             </head>
             <body>
                 <div class="container">
-                    <div class="success">🎉</div>
+                    <div class="success">[SUCCESS]</div>
                     <div class="title">Flattrade OAuth Complete!</div>
-                    <div class="subtitle">✅ Authentication Successful</div>
+                    <div class="subtitle">[SUCCESS] Authentication Successful</div>
                     
                     <div class="highlight">
-                        🚀 Your FiFTO application is now connected to Flattrade!
+                        [ROCKET] Your FiFTO application is now connected to Flattrade!
                     </div>
                     
                     <div class="code">
-                        <strong>🔑 Authorization Code:</strong><br>
+                        <strong>[KEY] Authorization Code:</strong><br>
                         {auth_code}
                     </div>
                     
                     <div class="redirect-info" id="redirect-info">
-                        🔄 Auto-redirecting to FiFTO app in 5 seconds. Click "Return to App" to go immediately.
+                        [REDIRECT] Auto-redirecting to FiFTO app in 5 seconds. Click "Return to App" to go immediately.
                     </div>
                     
                     <div class="countdown" id="countdown">
-                        🔄 Redirecting to FiFTO app in <strong>5</strong> seconds...
+                        [REDIRECT] Redirecting to FiFTO app in <strong>5</strong> seconds...
                     </div>
                     
-                    <button onclick="redirectToApp()" class="button">🏠 Return to FiFTO App</button>
-                    <button onclick="closeWindow()" class="button">❌ Close Window</button>
+                    <button onclick="redirectToApp()" class="button">[HOME] Return to FiFTO App</button>
+                    <button onclick="closeWindow()" class="button">[CLOSE] Close Window</button>
                 </div>
             </body>
             </html>
@@ -251,12 +262,12 @@ class OAuthHandler(BaseHTTPRequestHandler):
             
             self.wfile.write(success_html.encode())
             
-            # Enhanced server shutdown - faster response
+            # Enhanced server shutdown - giving enough time for UI display
             print("[SUCCESS] OAuth authentication completed successfully!")
             print("[SAVED] Authorization code saved securely")
             print("[REDIRECT] Redirecting user back to main FiFTO application")
-            print("[SHUTDOWN] Scheduling server shutdown in 2 seconds...")
-            threading.Timer(2.0, lambda: os._exit(0)).start()
+            print("[SHUTDOWN] Scheduling server shutdown in 10 seconds...")
+            threading.Timer(10.0, lambda: os._exit(0)).start()
             
         else:
             # Enhanced error handling with debug information
@@ -274,7 +285,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             <!DOCTYPE html>
             <html>
             <head>
-                <title>🔍 FiFTO - OAuth Debug Information</title>
+                <title>[DEBUG] FiFTO - OAuth Debug Information</title>
                 <style>
                     body {{ 
                         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
@@ -296,9 +307,14 @@ class OAuthHandler(BaseHTTPRequestHandler):
                     }}
                     .error {{ 
                         color: #ef4444; 
-                        font-size: 48px; 
+                        font-size: 32px; 
                         margin-bottom: 20px; 
                         text-align: center;
+                        font-weight: bold;
+                        background: #fef2f2;
+                        padding: 15px;
+                        border-radius: 10px;
+                        border: 2px solid #ef4444;
                     }}
                     .title {{
                         color: #1f2937;
@@ -347,7 +363,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
             </head>
             <body>
                 <div class="container">
-                    <div class="error">🔍</div>
+                    <div class="error">[DEBUG]</div>
                     <div class="title">OAuth Debug Information</div>
                     
                     <div class="info">
@@ -367,7 +383,7 @@ class OAuthHandler(BaseHTTPRequestHandler):
                     </div>
                     
                     <div style="text-align: center;">
-                        <button onclick="redirectToApp()" class="button">🏠 Return to FiFTO App</button>
+                        <button onclick="redirectToApp()" class="button">[HOME] Return to FiFTO App</button>
                     </div>
                 </div>
             </body>
