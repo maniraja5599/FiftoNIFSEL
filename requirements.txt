@@ -1,0 +1,79 @@
+# 📋 Requirements File for FiFTO Selling v4
+
+# Core Dependencies
+gradio>=4.0.0              # Web UI framework
+pandas>=1.5.0              # Data manipulation
+matplotlib>=3.6.0          # Plotting and charts
+numpy>=1.21.0              # Numerical computing
+
+# Web and API
+requests>=2.28.0           # HTTP requests for API calls
+yfinance>=0.2.0            # Market data (Yahoo Finance)
+
+# Scheduling and Time
+apscheduler>=3.9.0         # Job scheduling
+pytz>=2022.7               # Timezone handling
+
+# Security and Authentication
+hashlib                    # Built-in: HMAC for API authentication
+hmac                       # Built-in: Message authentication
+base64                     # Built-in: Encoding
+
+# System and File Operations
+json                       # Built-in: JSON handling
+os                         # Built-in: OS operations
+time                       # Built-in: Time operations
+datetime                   # Built-in: Date/time operations
+uuid                       # Built-in: UUID generation
+traceback                  # Built-in: Error tracing
+
+# Concurrency
+concurrent.futures         # Built-in: Parallel execution
+threading                  # Built-in: Threading support
+
+# Web and URL Operations
+urllib3>=1.26.0            # URL handling
+webbrowser                 # Built-in: Browser operations
+
+# Process Management
+subprocess                 # Built-in: Process management
+atexit                     # Built-in: Exit handlers
+
+# Data Structures
+collections                # Built-in: Specialized containers
+defaultdict                # Part of collections
+
+# Math and Calculations
+math                       # Built-in: Mathematical functions
+
+# Development and Debugging (Optional)
+# logging                  # Built-in: Logging framework
+# pprint                   # Built-in: Pretty printing
+
+# Optional: Enhanced Features
+# telegram-bot-api>=1.0.0  # Telegram bot integration (if using custom bot)
+# python-telegram-bot>=20.0 # Alternative Telegram library
+
+# Optional: Database Support
+# sqlite3                  # Built-in: SQLite database
+# sqlalchemy>=1.4.0        # Advanced database ORM
+
+# Optional: Advanced Plotting
+# plotly>=5.0.0            # Interactive plots
+# seaborn>=0.11.0          # Statistical plotting
+
+# Optional: Data Analysis
+# scipy>=1.9.0             # Scientific computing
+# scikit-learn>=1.1.0      # Machine learning
+
+# Optional: Excel Support
+# openpyxl>=3.0.0          # Excel file handling
+# xlsxwriter>=3.0.0        # Excel writing
+
+# Optional: Configuration Management
+# configparser             # Built-in: Configuration files
+# yaml>=6.0                # YAML configuration files
+
+# Note: Many modules are built-in to Python and don't need installation
+# Install only the non-built-in packages with:
+# pip install -r requirements.txt

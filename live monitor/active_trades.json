@@ -1,0 +1,50 @@
+[
+    {
+        "id": "NIFTY_14-Aug-2025_HighReward_FridaySelling",
+        "start_time": "2025-08-08 09:18",
+        "instrument": "NIFTY",
+        "expiry": "14-Aug-2025",
+        "reward_type": "High Reward",
+        "ce_strike": 24850,
+        "pe_strike": 24350,
+        "ce_hedge_strike": 25300,
+        "pe_hedge_strike": 23600,
+        "initial_net_premium": 80.8,
+        "target_amount": 5151.0,
+        "stoploss_amount": 5151.0,
+        "status": "Running",
+        "entry_tag": "Friday Selling"
+    },
+    {
+        "id": "NIFTY_14-Aug-2025_MidReward_FridaySelling",
+        "start_time": "2025-08-08 09:18",
+        "instrument": "NIFTY",
+        "expiry": "14-Aug-2025",
+        "reward_type": "Mid Reward",
+        "ce_strike": 24900,
+        "pe_strike": 24300,
+        "ce_hedge_strike": 25400,
+        "pe_hedge_strike": 23500,
+        "initial_net_premium": 64.25,
+        "target_amount": 4095.94,
+        "stoploss_amount": 4095.94,
+        "status": "Running",
+        "entry_tag": "Friday Selling"
+    },
+    {
+        "id": "NIFTY_14-Aug-2025_LowReward_FridaySelling",
+        "start_time": "2025-08-08 09:18",
+        "instrument": "NIFTY",
+        "expiry": "14-Aug-2025",
+        "reward_type": "Low Reward",
+        "ce_strike": 24950,
+        "pe_strike": 24250,
+        "ce_hedge_strike": 25500,
+        "pe_hedge_strike": 23400,
+        "initial_net_premium": 50.99999999999999,
+        "target_amount": 3251.25,
+        "stoploss_amount": 3251.25,
+        "status": "Running",
+        "entry_tag": "Friday Selling"
+    }
+]
