@@ -13,10 +13,11 @@
 - **Market Orders**: Instant execution with market price orders
 
 ### 🔧 **Technical Excellence**  
-- **Live Flattrade Integration**: Real API connectivity with OAuth authentication
-- **Persistent Sessions**: Token storage for seamless reconnection
-- **Correct Symbol Format**: `NIFTY21AUG25C24500` format for Flattrade compatibility
-- **NRML Product Type**: Overnight position capability
+- **Multi-Broker Support**: Flattrade + Angel One SmartAPI integration
+- **Automatic Broker Selection**: Seamless fallback between brokers
+- **Persistent Sessions**: Token storage and auto-refresh
+- **Correct Symbol Formats**: Flattrade (NIFTY21AUG25C24500) & Angel One (NIFTY21AUG2525000CE)
+- **NRML/CARRYFORWARD Product Types**: Overnight position capability
 
 ### 📊 **Monitoring & Analysis**
 - **Real-time P&L Tracking**: Live trade monitoring with auto-alerts
@@ -37,7 +38,7 @@
 # Navigate to project directory
 cd "FiFTO Selling v4"
 
-# Install dependencies
+# Install dependencies (includes pyotp for Angel One)
 pip install -r requirements.txt
 
 # Option 1: Use launcher (recommended)
@@ -47,14 +48,23 @@ run all.bat
 python selling.py
 ```
 
-### 2. **Setup Flattrade**
+### 2. **Setup Your Broker**
+
+#### **Option A: Flattrade Setup**
 1. Open http://localhost:7861
-2. Go to **Settings** tab
-3. Configure Flattrade credentials:
+2. Go to **Settings** → **Broker Accounts** → **Flattrade** tab
+3. Configure credentials:
    - Client ID, API Key, Secret Key
-   - User ID, Password, TOTP Key
-4. Click **"Authenticate with Flattrade"**
-5. Complete OAuth flow
+4. Click **"Generate OAuth URL"** and complete authentication
+
+#### **Option B: Angel One Setup**
+1. Go to **Settings** → **Broker Accounts** → **AngelOne** tab  
+2. Configure credentials:
+   - Client ID (e.g., A123456)
+   - API Key (from SmartAPI registration)
+   - Login PIN (4 or 6 digits)
+   - TOTP Secret Key (from Google Authenticator setup)
+3. Click **"Test Connection & Authenticate"**
 
 ### 3. **Place Your First Trade**
 1. Go to **Manual Trade Entry** tab
@@ -63,7 +73,7 @@ python selling.py
    - Expiry: Select date
    - Strikes: Set CE/PE sell and hedge strikes
    - Quantity: Number of lots
-3. Enable **Live Trading**
+3. Enable **"🔴 PLACE LIVE ORDERS WITH BROKER"**
 4. Click **"Add Manual Trade"**
 
 ## 📋 Strategy Examples
@@ -131,23 +141,31 @@ Quantity: 1 lot (15 qty)
 - `FLATTRADE_API_GUIDE.md` - API integration details
 
 ### **API Integration**
-- **Base URL**: `https://piconnect.flattrade.in/PiConnectTP`
-- **Authentication**: OAuth 2.0 + HMAC SHA-256
-- **Order Format**: JSON with jData/jKey structure
+- **Flattrade API**: `https://piconnect.flattrade.in/PiConnectTP`
+- **Angel One API**: `https://apiconnect.angelone.in` 
+- **Authentication**: OAuth 2.0 (Flattrade) + TOTP (Angel One)
+- **Order Format**: JSON with broker-specific structures
 - **Rate Limits**: ~10 requests/second (handled automatically)
 
 ### **Symbol Format**
 ```
-Flattrade Format: [UNDERLYING][DD][MMM][YY][C/P][STRIKE]
+Flattrade Format: SYMBOL + DD + MMM + YY + C/P + STRIKE
 Examples:
 - NIFTY21AUG25C24500  (NIFTY Call)
 - NIFTY21AUG25P24500  (NIFTY Put)  
 - BANKNIFTY21AUG25C51000 (Bank NIFTY Call)
+
+Angel One Format: SYMBOL + DD + MMM + YY + STRIKE + CE/PE  
+Examples:
+- NIFTY21AUG2524500CE  (NIFTY Call)
+- NIFTY21AUG2524500PE  (NIFTY Put)
+- BANKNIFTY21AUG2551000CE (Bank NIFTY Call)
 ```
 
 ### **Performance Optimizations**
 - **Parallel API Calls**: ThreadPoolExecutor for concurrent requests
-- **Token Persistence**: Automatic token storage and reuse
+- **Multi-Broker Fallback**: Automatic broker selection (Flattrade → Angel One)
+- **Token Persistence**: Automatic token storage and refresh
 - **Market Orders**: No price rejection delays
 - **Hedge-First**: Optimal margin utilization
 
@@ -187,10 +205,11 @@ Examples:
 ## 🤝 Support & Troubleshooting
 
 ### **Common Solutions**
-- **"Invalid Trading Symbol"**: Check symbol format (NIFTY21AUG25C24500)
+- **"Invalid Trading Symbol"**: Check symbol format (Flattrade: NIFTY21AUG25C24500, Angel One: NIFTY21AUG2524500CE)
 - **"Insufficient Margin"**: Ensure adequate funds or reduce quantity
-- **"Authentication Failed"**: Re-authenticate in Settings tab
+- **"Authentication Failed"**: Re-authenticate in Settings → Broker Accounts
 - **"Order Rejected"**: Verify market hours and symbol validity
+- **"TOTP Error"**: Check Google Authenticator setup for Angel One
 
 ### **Getting Help**
 1. Check documentation guides
@@ -207,23 +226,24 @@ Examples:
 
 ### **Success Rate**
 - **Market Orders**: 99%+ execution rate
-- **Symbol Format**: Correct Flattrade compatibility
+- **Multi-Broker Support**: Flattrade + Angel One compatibility
+- **Symbol Formats**: Correct broker-specific formatting
 - **Error Handling**: Comprehensive validation and retry logic
 
 ## 🔮 Future Enhancements
 
 ### **Planned Features**
-- Multi-broker support (Zerodha, Angel One)
-- Advanced strategy builder
-- Backtesting capabilities
-- Mobile app interface
-- Portfolio analytics
+- Additional brokers (Zerodha, Upstox, ICICI Direct)
+- Advanced strategy builder with multiple legs
+- Backtesting capabilities with historical data
+- Mobile app interface for iOS/Android
+- Portfolio analytics and risk metrics
 
 ### **API Improvements**
-- WebSocket integration for real-time data
-- Enhanced error recovery
+- WebSocket integration for real-time data streaming
+- Enhanced error recovery with automatic retries
 - Load balancing for high-frequency trading
-- Advanced order types (OCO, bracket orders)
+- Advanced order types (OCO, bracket orders, GTT)
 
 ---
 
@@ -231,7 +251,7 @@ Examples:
 
 1. **Install** → `pip install -r requirements.txt`
 2. **Run** → `run all.bat` or `python selling.py`  
-3. **Configure** → Settings tab
+3. **Configure** → Settings → Broker Accounts (Flattrade or Angel One)
 4. **Trade** → Manual Entry tab
 5. **Monitor** → Live Monitor dashboard (localhost:5555)
 
