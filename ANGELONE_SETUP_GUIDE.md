@@ -41,6 +41,11 @@ This guide will help you configure Angel One broker integration in FiFTO Selling
    - Note down your **API Key** (32-character string)
    - This will be used in FiFTO configuration
 
+4. **Configure Redirect URL (Optional for Web Authentication)**
+   - If you want to use web-based authentication (similar to Flattrade):
+   - Set Redirect URL: `http://localhost:3001/callback`
+   - This enables the Publisher Login flow
+
 ### **Step 2: Setup TOTP (Two-Factor Authentication)**
 
 1. **Enable TOTP in Angel One Account**
@@ -109,7 +114,52 @@ Examples:
 ✅ BANKNIFTY21AUG2551000PE (BANKNIFTY 51000 Put)
 ```
 
-## 📊 Live Trading Process
+## � Authentication Methods
+
+Angel One SmartAPI supports **two authentication methods**:
+
+### **Method 1: Direct API Authentication (Recommended)**
+- **How it works**: Uses credentials + TOTP for direct API login
+- **Required**: Client ID, API Key, Login PIN, TOTP Secret
+- **Benefits**: 
+  - ✅ Fully automated authentication
+  - ✅ No manual browser interaction required
+  - ✅ Faster authentication process
+  - ✅ Works headless/server environments
+- **Use case**: Best for automated trading systems
+
+### **Method 2: Web-based Authentication (Optional)**
+- **How it works**: Similar to Flattrade OAuth, uses browser login
+- **Required**: Client ID, API Key, Redirect URL
+- **Benefits**:
+  - ✅ Familiar OAuth-like flow
+  - ✅ Visual confirmation of login
+  - ✅ Similar to Flattrade experience
+- **Use case**: For users who prefer web-based login
+
+### **Setting up Web Authentication (Optional)**
+
+If you want to use web-based authentication similar to Flattrade:
+
+1. **Configure Redirect URL in SmartAPI App**
+   - Login to SmartAPI Portal
+   - Edit your app settings
+   - Set Redirect URL: `http://localhost:3001/callback`
+
+2. **Start OAuth Server**
+   ```bash
+   python oauth_callback_server.py
+   ```
+
+3. **Use Web Authentication in FiFTO**
+   - Expand "Web Authentication (Optional)" section
+   - Click "Generate Publisher Login URL"
+   - Follow the browser authentication flow
+   - Click "Check Callback Status" after login
+
+**Note**: Most users should use **Method 1 (Direct API)** as it's more reliable and automated.
+
+## �📊 Live Trading Process
 
 ### **Order Execution Flow**
 1. **Broker Selection**: FiFTO automatically selects Angel One if configured

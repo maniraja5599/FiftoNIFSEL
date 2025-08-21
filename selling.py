@@ -69,7 +69,8 @@ def load_settings():
                 "client_id": "",
                 "api_key": "",
                 "secret_key": "",
-                "access_token": ""
+                "access_token": "",
+                "redirect_url": "http://localhost:3001/callback"
             },
             "zerodha": {
                 "enabled": False,
@@ -911,7 +912,7 @@ def load_broker_settings_for_ui(broker_name):
     
     return enabled, client_id, api_key, secret_key, status
 
-def update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key):
+def update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key, redirect_url=None):
     """Update Angel One specific configuration settings"""
     try:
         settings = load_settings()
@@ -925,6 +926,10 @@ def update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key):
         settings['brokers']['angelone']['api_key'] = api_key.strip() if api_key else ""
         settings['brokers']['angelone']['client_pin'] = client_pin.strip() if client_pin else ""
         settings['brokers']['angelone']['totp_key'] = totp_key.strip() if totp_key else ""
+        
+        # Add redirect URL for web authentication (optional)
+        if redirect_url is not None:
+            settings['brokers']['angelone']['redirect_url'] = redirect_url.strip() if redirect_url else "http://localhost:3001/callback"
         
         save_settings(settings)
         return f"AngelOne settings updated successfully. {'Enabled' if enabled else 'Disabled'}."
@@ -941,6 +946,7 @@ def load_angelone_settings_for_ui():
     api_key = angelone_config.get('api_key', '')
     client_pin = angelone_config.get('client_pin', '')
     totp_key = angelone_config.get('totp_key', '')
+    redirect_url = angelone_config.get('redirect_url', 'http://localhost:3001/callback')
     access_token = angelone_config.get('access_token', '')
     
     # Create status message
@@ -966,7 +972,7 @@ def load_angelone_settings_for_ui():
     if access_token:
         auth_status = "**Authentication Status:** ✅ Authenticated and ready for trading"
     
-    return enabled, client_id, api_key, client_pin, totp_key, status, auth_status
+    return enabled, client_id, api_key, client_pin, totp_key, redirect_url, status, auth_status
 
 def test_angelone_connection():
     """Test Angel One connection and authenticate"""
@@ -1201,6 +1207,183 @@ def check_flattrade_auth_code():
 **🔧 Please try:**
 1. Restart the OAuth authentication process
 2. Check your broker settings
+3. Ensure all credentials are correctly entered
+4. Contact support if the issue persists
+"""
+
+def generate_angelone_oauth_url(api_key):
+    """Generate Angel One Publisher Login URL for web-based authentication"""
+    try:
+        if not api_key or not api_key.strip():
+            return """❌ **API Key Required for Publisher Login URL Generation**
+            
+**Missing:** API Key field is empty
+
+**📋 Instructions:**
+1. Enter your **Angel One API Key** in the API Key field above
+2. This API Key will be used for the Publisher Login URL
+3. Click "Generate Publisher Login URL" again after entering the API Key
+
+**🔧 Troubleshooting:**
+- Make sure you're using the API Key from SmartAPI portal
+- API Key format: Usually alphanumeric string
+- This enables web-based authentication similar to Flattrade
+"""
+        
+        # Angel One Publisher Login parameters
+        params = {
+            'api_key': api_key.strip(),
+            'state': 'fifto_angelone_auth'  # State parameter for tracking
+        }
+        
+        # Angel One Publisher Login endpoint
+        base_url = 'https://smartapi.angelone.in/publisher-login'
+        query_string = urlencode(params)
+        publisher_url = f'{base_url}?{query_string}'
+        
+        print(f'✅ Angel One Publisher Login URL generated successfully:')
+        print(f'📋 URL: {publisher_url}')
+        print(f'🔑 API Key: {api_key}')
+        print(f'🎯 Publisher Login Endpoint: {base_url}')
+        print(f'📊 Parameters: {params}')
+        
+        return f"""🔗 **Angel One Publisher Login URL Generated Successfully!**
+
+**🌐 Publisher Login URL:**
+```
+{publisher_url}
+```
+
+**📋 Instructions:**
+1. 🟢 **Configure Redirect URL** - Set your app's redirect URL to: `http://localhost:3001/callback`
+2. 🔗 **Click the URL** - Open the Publisher Login URL above in your browser
+3. 🔐 **Login to Angel One** - Complete the authentication process
+4. ✅ **Check Callback** - Click "Check Callback Status" after login
+
+**🔧 Configuration Notes:**
+- **API Key:** `{api_key}`
+- **State:** `fifto_angelone_auth`
+- **Expected Redirect:** Your configured redirect URL in SmartAPI portal
+
+**⚠️ Important:** 
+- This requires your SmartAPI app to have a redirect URL configured
+- The redirect URL must match what's set in your Angel One app settings
+- For web-based authentication similar to Flattrade OAuth flow
+
+**💡 Alternative:** You can still use direct API authentication with TOTP instead.
+"""
+    
+    except Exception as e:
+        error_msg = f'❌ Error generating Publisher Login URL: {str(e)}'
+        print(error_msg)
+        return error_msg
+
+def check_angelone_callback_status():
+    """Check for Angel One callback parameters and process authentication"""
+    try:
+        # Check for callback data file
+        callback_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'angelone_callback.txt')
+        
+        if not os.path.exists(callback_file):
+            return """❌ **No Callback Data Found**
+            
+**📝 Instructions:**
+1. Make sure you completed the Publisher Login authentication process
+2. Check that the callback was received at your redirect URL
+3. Try the authentication process again if needed
+
+**🔧 If you're having issues:**
+- Ensure your SmartAPI app has the correct redirect URL configured
+- Check that the redirect URL matches: `http://localhost:3001/callback`
+- Verify you're using the correct API key
+- Make sure you clicked the generated Publisher Login URL
+
+**💡 Note:** 
+This web-based authentication is optional. You can use direct API authentication with TOTP instead.
+"""
+        
+        # Read the callback data
+        with open(callback_file, 'r') as f:
+            callback_data = f.read().strip()
+        
+        if not callback_data:
+            return "❌ **Empty callback data found. Please try authentication again.**"
+        
+        # Parse callback data (expecting auth_token and feed_token)
+        try:
+            callback_info = json.loads(callback_data)
+            auth_token = callback_info.get('auth_token', '')
+            feed_token = callback_info.get('feed_token', '')
+            state = callback_info.get('state', '')
+            
+            if not auth_token:
+                return "❌ **No auth_token found in callback. Please try authentication again.**"
+            
+            # Verify state parameter
+            if state != 'fifto_angelone_auth':
+                return f"❌ **State mismatch. Expected 'fifto_angelone_auth', got '{state}'**"
+            
+            # Update Angel One settings with tokens
+            settings = load_settings()
+            if 'brokers' not in settings:
+                settings['brokers'] = {}
+            if 'angelone' not in settings['brokers']:
+                settings['brokers']['angelone'] = {}
+            
+            # Store the tokens (these would be equivalent to access tokens)
+            settings['brokers']['angelone']['auth_token'] = auth_token
+            settings['brokers']['angelone']['feed_token'] = feed_token
+            settings['brokers']['angelone']['web_authenticated'] = True
+            
+            save_settings(settings)
+            
+            # Clean up the callback file
+            try:
+                os.remove(callback_file)
+            except:
+                pass
+            
+            return f"""✅ **Angel One Web Authentication Successful!**
+
+**🎯 Status:** Ready for API operations
+
+**🔧 Authentication Details:**
+- **Auth Token:** `{auth_token[:20]}...` (received)
+- **Feed Token:** `{feed_token[:20] if feed_token else 'Not provided'}...`
+- **State:** `{state}` ✅ Verified
+- **Method:** Web-based Publisher Login
+
+**💡 Next Steps:**
+- You can now use Angel One for API operations
+- Web authentication tokens have been stored
+- You may still need to configure TOTP for trading operations
+
+**📋 Note:** 
+Some Angel One API operations may still require direct API authentication with TOTP.
+This web authentication provides session tokens for basic API access.
+"""
+            
+        except json.JSONDecodeError:
+            return f"""❌ **Invalid callback data format**
+
+**Error:** Could not parse callback information
+
+**🔧 Troubleshooting:**
+1. Ensure the callback URL is correctly configured
+2. Try the authentication process again
+3. Check that your SmartAPI app settings are correct
+
+**📋 Callback Data:** `{callback_data[:50]}...`
+"""
+    
+    except Exception as e:
+        return f"""❌ **Error Checking Callback Status**
+
+**Error Details:** {str(e)}
+
+**🔧 Please try:**
+1. Restart the Publisher Login authentication process
+2. Check your SmartAPI app configuration
 3. Ensure all credentials are correctly entered
 4. Contact support if the issue persists
 """
@@ -2597,6 +2780,24 @@ def build_ui():
                             info="Secret key from TOTP setup (Google Authenticator)"
                         )
                         
+                        with gr.Accordion("Web Authentication (Optional)", open=False):
+                            gr.Markdown("""
+                            **Alternative Web-based Authentication:**
+                            For users who prefer web-based login similar to Flattrade OAuth flow.
+                            This is optional - you can use either direct API login or web authentication.
+                            """)
+                            angelone_redirect_url = gr.Textbox(
+                                label="Redirect URL", 
+                                value="http://localhost:3001/callback",
+                                info="URL for web-based authentication callback"
+                            )
+                            with gr.Row():
+                                generate_angelone_oauth_btn = gr.Button("Generate Publisher Login URL", variant="secondary")
+                                check_angelone_callback_btn = gr.Button("Check Callback Status", variant="secondary")
+                            
+                            angelone_oauth_url_display = gr.Markdown(value="**Publisher Login URL will appear here**")
+                            angelone_callback_status = gr.Markdown(value="**Callback status will appear here**")
+                        
                         with gr.Row():
                             save_angelone_btn = gr.Button("Save AngelOne Settings", variant="primary")
                             test_angelone_btn = gr.Button("Test Connection & Authenticate", variant="secondary")
@@ -2750,17 +2951,28 @@ def build_ui():
         )
         
         save_angelone_btn.click(
-            fn=update_angelone_settings,
-            inputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key],
+            fn=lambda enabled, client_id, api_key, client_pin, totp_key, redirect_url: update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key, redirect_url),
+            inputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_redirect_url],
             outputs=[settings_status_box]
         ).then(
             fn=load_angelone_settings_for_ui,
-            outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_status, angelone_auth_status]
+            outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_redirect_url, angelone_status, angelone_auth_status]
         )
         
         test_angelone_btn.click(
             fn=test_angelone_connection,
             outputs=[settings_status_box]
+        )
+        
+        generate_angelone_oauth_btn.click(
+            fn=lambda client_id, api_key, redirect_url: generate_angelone_oauth_url(api_key),
+            inputs=[angelone_client_id, angelone_api_key, angelone_redirect_url],
+            outputs=[angelone_oauth_url_display]
+        )
+        
+        check_angelone_callback_btn.click(
+            fn=check_angelone_callback_status,
+            outputs=[angelone_callback_status]
         )
         
         authenticate_angelone_btn.click(
@@ -2788,7 +3000,7 @@ def build_ui():
         
         # Load broker settings on demo start
         demo.load(fn=lambda: load_broker_settings_for_ui("flattrade"), outputs=[flattrade_enabled, flattrade_client_id, flattrade_api_key, flattrade_secret_key, flattrade_status])
-        demo.load(fn=load_angelone_settings_for_ui, outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_status, angelone_auth_status])
+        demo.load(fn=load_angelone_settings_for_ui, outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_redirect_url, angelone_status, angelone_auth_status])
         demo.load(fn=lambda: load_broker_settings_for_ui("zerodha"), outputs=[zerodha_enabled, zerodha_client_id, zerodha_api_key, zerodha_secret_key, zerodha_status])
         demo.load(fn=get_broker_status_summary, outputs=[broker_status_display])
 
