@@ -23,6 +23,9 @@ import webbrowser
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# Import live auto trading module
+from live_auto_trading import initialize_live_trading, get_live_trade_manager, TradingMode
+
 # --- Configuration ---
 # Default Telegram credentials (will be overridden by settings)
 DEFAULT_BOT_TOKEN = "7476365992:AAGjDcQcMB7lkiy92VoDnZwixatakhe02DI"
@@ -44,6 +47,9 @@ scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Kolkata'))
 
 # In-memory store for 5-minute P/L tracking for the daily graph
 daily_pnl_tracker = defaultdict(list)
+
+# --- Initialize Live Auto Trading ---
+live_trade_manager = initialize_live_trading(DATA_DIR)
 
 
 # --- Settings Management ---
@@ -2075,6 +2081,25 @@ def run_scheduled_analysis(schedule_id, index, calc_type):
     add_msg = add_trades_to_db(analysis_data)
     print(add_msg); send_daily_chart_to_telegram(summary_path, hedge_path, payoff_path, analysis_data)
     send_telegram_message(f"🤖 *Auto-Generation Successful ({index})* 🤖\n\n{add_msg}")
+    
+    # --- Live Auto Trading Integration ---
+    if live_trade_manager and live_trade_manager.config.enabled:
+        print("--- Executing Live Auto Trading ---")
+        schedule_info = {"id": schedule_id, "index": index, "calc_type": calc_type}
+        auto_trade_result = live_trade_manager.execute_automated_strategy(analysis_data, schedule_info)
+        print(f"Auto Trade Result: {auto_trade_result}")
+        
+        # Send auto trading status to Telegram
+        if auto_trade_result.get('status') == 'success':
+            auto_msg = f"🔴 *Live Auto Trading Executed* 🔴\n\n"
+            auto_msg += f"Mode: {live_trade_manager.config.trading_mode.value.upper()}\n"
+            for result in auto_trade_result.get('results', []):
+                auto_msg += f"• {result['strategy']}: {result['status']}\n"
+            send_telegram_message(auto_msg)
+        elif auto_trade_result.get('status') not in ['disabled', 'no_strategies']:
+            send_telegram_message(f"⚠️ Auto Trading Issue: {auto_trade_result.get('message')}")
+    else:
+        print("--- Live Auto Trading Disabled ---")
 
 def sync_scheduler_with_settings():
     print("--- Syncing scheduler with settings... ---")
@@ -2572,6 +2597,95 @@ def clear_pnl_history_new_ui():
     no_data_html = "<div style='text-align: center; padding: 50px; font-size: 1.5em; color: #888;'>No Historical P&L Data Found</div>"
     return "Successfully cleared all P&L history.", no_data_html, None, no_data_html
 
+# --- Live Auto Trading UI Functions ---
+def update_auto_trade_settings(enabled, mode, high_reward, mid_reward, low_reward, 
+                             use_existing_targets, auto_square_off, 
+                             position_multiplier, max_positions):
+    """Update live auto trading configuration"""
+    try:
+        if not live_trade_manager:
+            return "Error: Live trade manager not initialized", get_auto_trade_status()
+        
+        # Update configuration
+        live_trade_manager.config.enabled = enabled
+        live_trade_manager.config.trading_mode = TradingMode.LIVE if mode == "live" else TradingMode.PAPER
+        live_trade_manager.config.strategies = {
+            "High Reward": high_reward,
+            "Mid Reward": mid_reward,
+            "Low Reward": low_reward
+        }
+        live_trade_manager.config.use_existing_targets = use_existing_targets
+        live_trade_manager.config.auto_square_off = auto_square_off
+        live_trade_manager.config.position_size_multiplier = position_multiplier
+        live_trade_manager.config.max_positions_per_strategy = int(max_positions)
+        
+        # Save configuration
+        live_trade_manager.save_config()
+        
+        # Start/stop position monitoring based on settings
+        if enabled and auto_square_off:
+            live_trade_manager.start_position_monitoring()
+        else:
+            live_trade_manager.stop_position_monitoring()
+        
+        status_msg = f"Auto trading settings saved successfully. Mode: {mode.upper()}"
+        if enabled:
+            enabled_strategies = [k for k, v in live_trade_manager.config.strategies.items() if v]
+            status_msg += f"\nEnabled strategies: {', '.join(enabled_strategies) if enabled_strategies else 'None'}"
+        
+        return status_msg, get_auto_trade_status()
+        
+    except Exception as e:
+        return f"Error saving auto trade settings: {str(e)}", get_auto_trade_status()
+
+def get_auto_trade_status():
+    """Get current auto trading status for display"""
+    try:
+        if not live_trade_manager:
+            return "**Status:** Live trade manager not available"
+        
+        status = live_trade_manager.get_automation_status()
+        
+        status_md = "**Live Auto Trading Status**\n\n"
+        status_md += f"• **Enabled:** {'✅ Yes' if status['enabled'] else '❌ No'}\n"
+        status_md += f"• **Mode:** {status['trading_mode'].upper()}\n"
+        
+        enabled_strategies = [k for k, v in status['active_strategies'].items() if v]
+        status_md += f"• **Active Strategies:** {', '.join(enabled_strategies) if enabled_strategies else 'None'}\n"
+        status_md += f"• **Active Positions:** {status['active_positions_count']}\n"
+        status_md += f"• **Total Positions:** {status['total_positions']}\n"
+        status_md += f"• **Total P/L:** ₹{status['total_pnl']:.2f}\n"
+        status_md += f"• **Auto Square-off:** {'✅ Enabled' if status['auto_square_off_enabled'] else '❌ Disabled'}\n"
+        status_md += f"• **Use Generated Targets:** {'✅ Yes' if status['use_existing_targets'] else '❌ No'}"
+        
+        return status_md
+        
+    except Exception as e:
+        return f"**Status:** Error loading status - {str(e)}"
+
+def load_auto_trade_settings_for_ui():
+    """Load auto trade settings for UI initialization"""
+    try:
+        if not live_trade_manager:
+            return False, "paper", True, False, False, True, True, 1.0, 1
+        
+        config = live_trade_manager.config
+        strategies = config.strategies or {}
+        return (
+            config.enabled,
+            config.trading_mode.value,
+            strategies.get("High Reward", True),
+            strategies.get("Mid Reward", False), 
+            strategies.get("Low Reward", False),
+            config.use_existing_targets,
+            config.auto_square_off,
+            config.position_size_multiplier,
+            config.max_positions_per_strategy
+        )
+    except Exception as e:
+        print(f"Error loading auto trade settings: {e}")
+        return False, "paper", True, False, False, True, True, 1.0, 1
+
 def build_ui():
     with gr.Blocks(title="FiFTO Analyzer") as demo:
         gr.Markdown("# FiFTO WEEKLY SELLING")
@@ -2902,6 +3016,82 @@ def build_ui():
                                 new_schedule_calc = gr.Dropdown(["Weekly", "Monthly"], label="Calculation", value="Weekly")
                         with gr.Row():
                             add_schedule_button, delete_schedule_button = gr.Button("Add Schedule", variant="primary"), gr.Button("Delete Selected Schedule", interactive=False)
+                        
+                        # --- Live Auto Trading Section ---
+                        gr.Markdown("### 🔴 Live Auto Trading")
+                        gr.Markdown("""
+                        **Automated Trading Integration with Auto-Generation Schedules**
+                        
+                        When enabled, this feature will automatically execute trades after scheduled strategy generation.
+                        
+                        ⚠️ **WARNING**: Live mode places real orders with your broker. Paper mode is for testing only.
+                        """)
+                        
+                        with gr.Row():
+                            auto_trade_enabled = gr.Checkbox(
+                                label="Enable Auto Trading", 
+                                value=False,
+                                info="Master switch for automated trading"
+                            )
+                            auto_trade_mode = gr.Radio(
+                                ["paper", "live"], 
+                                label="Trading Mode", 
+                                value="paper",
+                                info="Paper = simulation, Live = real orders"
+                            )
+                        
+                        with gr.Row():
+                            auto_trade_high_reward = gr.Checkbox(
+                                label="High Reward Strategy", 
+                                value=True,
+                                info="Default enabled - highest profit potential"
+                            )
+                            auto_trade_mid_reward = gr.Checkbox(
+                                label="Mid Reward Strategy", 
+                                value=False,
+                                info="Medium risk/reward ratio"
+                            )
+                            auto_trade_low_reward = gr.Checkbox(
+                                label="Low Reward Strategy", 
+                                value=False,
+                                info="Conservative approach"
+                            )
+                        
+                        with gr.Row():
+                            auto_trade_use_existing_targets = gr.Checkbox(
+                                label="Use Generated Target/SL", 
+                                value=True,
+                                info="Use strategy's calculated target/stoploss (recommended)"
+                            )
+                            auto_trade_auto_square_off = gr.Checkbox(
+                                label="Auto Square-off", 
+                                value=True,
+                                info="Automatically close positions when target/SL hit"
+                            )
+                        
+                        with gr.Row():
+                            auto_trade_position_multiplier = gr.Number(
+                                label="Position Size Multiplier", 
+                                value=1.0,
+                                minimum=0.1,
+                                maximum=5.0,
+                                step=0.1,
+                                info="Multiply default lot size (1.0 = normal size)"
+                            )
+                            auto_trade_max_positions = gr.Number(
+                                label="Max Positions per Strategy", 
+                                value=1,
+                                minimum=1,
+                                maximum=5,
+                                step=1,
+                                info="Limit concurrent positions per strategy"
+                            )
+                        
+                        with gr.Row():
+                            save_auto_trade_button = gr.Button("Save Auto Trading Settings", variant="primary")
+                            auto_trade_status_button = gr.Button("View Status", variant="secondary")
+                        
+                        auto_trade_status_display = gr.Markdown(value="**Status:** Loading...", visible=True)
                 settings_status_box = gr.Textbox(label="Status", interactive=False)
 
         def handle_schedule_select(schedules_df, evt: gr.SelectData):
@@ -2923,6 +3113,33 @@ def build_ui():
         add_schedule_button.click(fn=add_new_schedule, inputs=[new_schedule_days, new_schedule_time, new_schedule_index, new_schedule_calc], outputs=[schedules_df, settings_status_box])
         schedules_df.select(fn=handle_schedule_select, inputs=[schedules_df], outputs=[selected_schedule_id_hidden, delete_schedule_button])
         delete_schedule_button.click(fn=delete_schedule_by_id, inputs=[selected_schedule_id_hidden], outputs=[schedules_df, settings_status_box]).then(lambda: ("", gr.Button(interactive=False)), outputs=[selected_schedule_id_hidden, delete_schedule_button])
+
+        # Live Auto Trading Event Handlers
+        save_auto_trade_button.click(
+            fn=update_auto_trade_settings,
+            inputs=[
+                auto_trade_enabled, auto_trade_mode, auto_trade_high_reward, 
+                auto_trade_mid_reward, auto_trade_low_reward, auto_trade_use_existing_targets,
+                auto_trade_auto_square_off, auto_trade_position_multiplier, auto_trade_max_positions
+            ],
+            outputs=[settings_status_box, auto_trade_status_display]
+        )
+        
+        auto_trade_status_button.click(
+            fn=lambda: get_auto_trade_status(),
+            outputs=[auto_trade_status_display]
+        )
+        
+        # Load auto trade settings on startup
+        demo.load(
+            fn=lambda: (*load_auto_trade_settings_for_ui(), get_auto_trade_status()),
+            outputs=[
+                auto_trade_enabled, auto_trade_mode, auto_trade_high_reward,
+                auto_trade_mid_reward, auto_trade_low_reward, auto_trade_use_existing_targets,
+                auto_trade_auto_square_off, auto_trade_position_multiplier, 
+                auto_trade_max_positions, auto_trade_status_display
+            ]
+        )
 
         # Broker Account Event Handlers
         save_flattrade_btn.click(
