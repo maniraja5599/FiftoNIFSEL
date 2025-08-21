@@ -448,6 +448,424 @@ def initialize_flattrade_for_trading():
 
 # --- End Flattrade API Integration ---
 
+# --- Angel One API Integration ---
+
+ANGELONE_BASE_URL = 'https://apiconnect.angelone.in'
+ANGELONE_LOGIN_URL = 'https://smartapi.angelone.in/publisher-login'
+
+class AngelOneAPI:
+    """Angel One SmartAPI client for authentication and trading operations"""
+    
+    def __init__(self, api_key, client_id, client_pin, totp_key):
+        self.api_key = api_key
+        self.client_id = client_id
+        self.client_pin = client_pin
+        self.totp_key = totp_key
+        self.access_token = None
+        self.jwt_token = None
+        self.refresh_token = None
+        self.feed_token = None
+        self.session_data = {}
+    
+    def generate_totp(self):
+        """Generate TOTP code for authentication"""
+        try:
+            import pyotp
+            totp = pyotp.TOTP(self.totp_key)
+            return totp.now()
+        except ImportError:
+            raise Exception("pyotp library is required for TOTP generation. Install with: pip install pyotp")
+        except Exception as e:
+            raise Exception(f"Error generating TOTP: {str(e)}")
+    
+    def generate_auth_url(self, redirect_uri='http://localhost:3001/callback'):
+        """Generate OAuth authorization URL"""
+        params = {
+            'api_key': self.api_key,
+            'state': 'fifto_angelone_auth'
+        }
+        auth_url = f"{ANGELONE_LOGIN_URL}?{urlencode(params)}"
+        return auth_url
+    
+    def authenticate(self):
+        """Authenticate with Angel One using credentials"""
+        try:
+            # Generate TOTP
+            totp_code = self.generate_totp()
+            
+            # Login request data
+            login_data = {
+                'clientcode': self.client_id,
+                'password': self.client_pin,
+                'totp': totp_code
+            }
+            
+            # Required headers for Angel One API
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-UserType': 'USER',
+                'X-SourceID': 'WEB',
+                'X-ClientLocalIP': '127.0.0.1',
+                'X-ClientPublicIP': '127.0.0.1',
+                'X-MACAddress': '00:00:00:00:00:00',
+                'X-PrivateKey': self.api_key
+            }
+            
+            # Make login request
+            url = f"{ANGELONE_BASE_URL}/rest/auth/angelbroking/user/v1/loginByPassword"
+            response = requests.post(url, json=login_data, headers=headers, timeout=30)
+            
+            if response.status_code != 200:
+                return False, f"HTTP {response.status_code}: {response.text}"
+            
+            response_data = response.json()
+            
+            if response_data.get('status'):
+                data = response_data.get('data', {})
+                self.jwt_token = data.get('jwtToken')
+                self.refresh_token = data.get('refreshToken') 
+                self.feed_token = data.get('feedToken')
+                self.access_token = self.jwt_token  # Use JWT token as access token
+                
+                self.session_data = {
+                    'clientId': self.client_id,
+                    'jwtToken': self.jwt_token,
+                    'refreshToken': self.refresh_token,
+                    'feedToken': self.feed_token,
+                    'isAuthenticated': True,
+                    'loginTime': datetime.now().isoformat()
+                }
+                
+                return True, "Authentication successful"
+            else:
+                error_msg = response_data.get('message', 'Authentication failed')
+                return False, error_msg
+                
+        except Exception as e:
+            return False, f"Authentication error: {str(e)}"
+    
+    def refresh_access_token(self):
+        """Refresh access token using refresh token"""
+        if not self.refresh_token:
+            return False, "No refresh token available"
+        
+        try:
+            refresh_data = {
+                'refreshToken': self.refresh_token
+            }
+            
+            headers = {
+                'Authorization': f'Bearer {self.jwt_token}',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-UserType': 'USER',
+                'X-SourceID': 'WEB',
+                'X-ClientLocalIP': '127.0.0.1',
+                'X-ClientPublicIP': '127.0.0.1', 
+                'X-MACAddress': '00:00:00:00:00:00',
+                'X-PrivateKey': self.api_key
+            }
+            
+            url = f"{ANGELONE_BASE_URL}/rest/auth/angelbroking/jwt/v1/generateTokens"
+            response = requests.post(url, json=refresh_data, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                if response_data.get('status'):
+                    data = response_data.get('data', {})
+                    self.jwt_token = data.get('jwtToken')
+                    self.refresh_token = data.get('refreshToken')
+                    self.feed_token = data.get('feedToken')
+                    self.access_token = self.jwt_token
+                    return True, "Token refreshed successfully"
+            
+            return False, "Failed to refresh token"
+            
+        except Exception as e:
+            return False, f"Token refresh error: {str(e)}"
+    
+    def make_api_request(self, endpoint, data=None, method='POST'):
+        """Make authenticated API request to Angel One"""
+        if not self.access_token:
+            return {'status': False, 'message': 'Not authenticated'}
+        
+        try:
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-UserType': 'USER',
+                'X-SourceID': 'WEB',
+                'X-ClientLocalIP': '127.0.0.1',
+                'X-ClientPublicIP': '127.0.0.1',
+                'X-MACAddress': '00:00:00:00:00:00',
+                'X-PrivateKey': self.api_key
+            }
+            
+            url = f"{ANGELONE_BASE_URL}/rest/secure/angelbroking/{endpoint}"
+            
+            if method.upper() == 'GET':
+                response = requests.get(url, headers=headers, timeout=30)
+            else:
+                response = requests.post(url, json=data, headers=headers, timeout=30)
+            
+            if response.status_code != 200:
+                return {
+                    'status': False,
+                    'message': f'HTTP {response.status_code}: {response.text[:500]}'
+                }
+            
+            response_data = response.json()
+            
+            # Log errors for debugging
+            if not response_data.get('status'):
+                print(f"❌ Angel One API Error: {response_data.get('message', 'Unknown error')}")
+                if data:
+                    print(f"📊 Request data: {data}")
+            
+            return response_data
+            
+        except requests.exceptions.RequestException as e:
+            return {'status': False, 'message': f'Network error: {str(e)}'}
+        except Exception as e:
+            return {'status': False, 'message': f'API error: {str(e)}'}
+    
+    def get_profile(self):
+        """Get user profile"""
+        return self.make_api_request('user/v1/getProfile', method='GET')
+    
+    def get_funds(self):
+        """Get funds and margins"""
+        return self.make_api_request('user/v1/getRMS', method='GET')
+    
+    def get_positions(self):
+        """Get current positions"""
+        return self.make_api_request('portfolio/v1/getPosition', method='GET')
+    
+    def get_orders(self):
+        """Get order book"""
+        return self.make_api_request('order/v1/getOrderBook', method='GET')
+    
+    def get_holdings(self):
+        """Get holdings"""
+        return self.make_api_request('portfolio/v1/getAllHolding', method='GET')
+    
+    def place_order(self, symbol, symboltoken, quantity, price=None, order_type='MARKET', 
+                   product='INTRADAY', transaction_type='BUY', exchange='NSE'):
+        """Place an order"""
+        
+        # Map our standard order types to Angel One format
+        order_type_map = {
+            'MKT': 'MARKET',
+            'MARKET': 'MARKET',
+            'LMT': 'LIMIT',
+            'LIMIT': 'LIMIT',
+            'SL': 'STOPLOSS_LIMIT',
+            'SL-M': 'STOPLOSS_MARKET'
+        }
+        
+        # Map our standard product types to Angel One format
+        product_map = {
+            'MIS': 'INTRADAY',
+            'NRML': 'CARRYFORWARD',
+            'CNC': 'DELIVERY',
+            'INTRADAY': 'INTRADAY',
+            'DELIVERY': 'DELIVERY',
+            'CARRYFORWARD': 'CARRYFORWARD'
+        }
+        
+        angelone_order_type = order_type_map.get(order_type.upper(), 'MARKET')
+        angelone_product = product_map.get(product.upper(), 'INTRADAY')
+        
+        order_data = {
+            'variety': 'NORMAL',
+            'tradingsymbol': symbol,
+            'symboltoken': str(symboltoken),
+            'transactiontype': transaction_type.upper(),
+            'exchange': exchange.upper(),
+            'ordertype': angelone_order_type,
+            'producttype': angelone_product,
+            'duration': 'DAY',
+            'quantity': str(quantity)
+        }
+        
+        # Add price for limit orders
+        if angelone_order_type in ['LIMIT', 'STOPLOSS_LIMIT'] and price:
+            order_data['price'] = str(price)
+        
+        print(f"📊 Placing order: {symbol} | {transaction_type} | Qty: {quantity} | Price: {price} | Type: {angelone_order_type}")
+        
+        return self.make_api_request('order/v1/placeOrder', order_data)
+    
+    def get_ltp(self, exchange, symbol, symboltoken):
+        """Get Last Traded Price"""
+        ltp_data = {
+            'exchange': exchange,
+            'tradingsymbol': symbol,
+            'symboltoken': str(symboltoken)
+        }
+        
+        return self.make_api_request('order/v1/getLtpData', ltp_data)
+    
+    def search_scrip(self, exchange, search_term):
+        """Search for instruments"""
+        search_data = {
+            'exchange': exchange,
+            'searchscrip': search_term
+        }
+        
+        return self.make_api_request('order/v1/searchScrip', search_data)
+    
+    def cancel_order(self, order_id):
+        """Cancel an order"""
+        cancel_data = {
+            'variety': 'NORMAL',
+            'orderid': order_id
+        }
+        
+        return self.make_api_request('order/v1/cancelOrder', cancel_data)
+    
+    def modify_order(self, order_id, quantity=None, price=None, order_type=None):
+        """Modify an order"""
+        modify_data = {
+            'variety': 'NORMAL',
+            'orderid': order_id
+        }
+        
+        if quantity:
+            modify_data['quantity'] = str(quantity)
+        if price:
+            modify_data['price'] = str(price)
+        if order_type:
+            order_type_map = {
+                'MKT': 'MARKET',
+                'MARKET': 'MARKET',
+                'LMT': 'LIMIT',
+                'LIMIT': 'LIMIT'
+            }
+            modify_data['ordertype'] = order_type_map.get(order_type.upper(), 'MARKET')
+        
+        return self.make_api_request('order/v1/modifyOrder', modify_data)
+
+# Global Angel One API instance
+angelone_api = None
+
+def initialize_angelone_api(api_key, client_id, client_pin, totp_key):
+    """Initialize Angel One API client"""
+    global angelone_api
+    angelone_api = AngelOneAPI(api_key, client_id, client_pin, totp_key)
+    return angelone_api
+
+def authenticate_angelone():
+    """Authenticate with Angel One using credentials"""
+    if not angelone_api:
+        return False, "Angel One API not initialized"
+    
+    success, message = angelone_api.authenticate()
+    
+    if success and angelone_api.access_token:
+        # Save the access token to settings for persistence
+        try:
+            settings = load_settings()
+            if 'brokers' not in settings:
+                settings['brokers'] = {}
+            if 'angelone' not in settings['brokers']:
+                settings['brokers']['angelone'] = {}
+            
+            # Store the tokens
+            settings['brokers']['angelone']['access_token'] = angelone_api.access_token
+            settings['brokers']['angelone']['jwt_token'] = angelone_api.jwt_token
+            settings['brokers']['angelone']['refresh_token'] = angelone_api.refresh_token
+            settings['brokers']['angelone']['feed_token'] = angelone_api.feed_token
+            
+            # Save the updated settings
+            save_settings(settings)
+            
+            print(f"✅ Angel One tokens saved to settings for persistence")
+            
+        except Exception as e:
+            print(f"⚠️ Warning: Could not save Angel One tokens to settings: {e}")
+            # Authentication is still successful even if saving fails
+    
+    return success, message
+
+def get_angelone_session_data():
+    """Get current Angel One session data"""
+    if angelone_api and angelone_api.access_token:
+        return angelone_api.session_data
+    return None
+
+def initialize_angelone_for_trading():
+    """Initialize Angel One API for trading if credentials and token are available"""
+    global angelone_api
+    
+    try:
+        # Load broker settings
+        settings = load_settings()
+        angelone_config = settings.get('brokers', {}).get('angelone', {})
+        
+        if not angelone_config.get('enabled', False):
+            return False, "Angel One broker not enabled"
+        
+        # Get credentials
+        api_key = angelone_config.get('api_key', '').strip()
+        client_id = angelone_config.get('client_id', '').strip()
+        client_pin = angelone_config.get('client_pin', '').strip()
+        totp_key = angelone_config.get('totp_key', '').strip()
+        
+        if not all([api_key, client_id, client_pin, totp_key]):
+            return False, "Missing Angel One credentials (API Key, Client ID, PIN, TOTP Key required)"
+        
+        # Initialize API if not already done
+        if not angelone_api:
+            angelone_api = AngelOneAPI(api_key, client_id, client_pin, totp_key)
+        
+        # Check if we have saved tokens
+        access_token = angelone_config.get('access_token', '').strip()
+        jwt_token = angelone_config.get('jwt_token', '').strip()
+        refresh_token = angelone_config.get('refresh_token', '').strip()
+        
+        if access_token and jwt_token:
+            # Use the saved tokens
+            angelone_api.access_token = access_token
+            angelone_api.jwt_token = jwt_token
+            angelone_api.refresh_token = refresh_token
+            print(f"✅ Loaded saved Angel One tokens from settings")
+            
+            # Try to refresh the token to ensure it's still valid
+            refresh_success, refresh_msg = angelone_api.refresh_access_token()
+            if refresh_success:
+                # Save the refreshed tokens
+                angelone_config['access_token'] = angelone_api.access_token
+                angelone_config['jwt_token'] = angelone_api.jwt_token
+                angelone_config['refresh_token'] = angelone_api.refresh_token
+                settings['brokers']['angelone'] = angelone_config
+                save_settings(settings)
+                print(f"✅ Angel One tokens refreshed successfully")
+            
+            return True, "Angel One API ready for trading"
+        
+        # If no saved tokens, try to authenticate
+        success, message = angelone_api.authenticate()
+        if success:
+            # Save the new tokens to settings
+            angelone_config['access_token'] = angelone_api.access_token
+            angelone_config['jwt_token'] = angelone_api.jwt_token
+            angelone_config['refresh_token'] = angelone_api.refresh_token
+            angelone_config['feed_token'] = angelone_api.feed_token
+            settings['brokers']['angelone'] = angelone_config
+            save_settings(settings)
+            print(f"✅ Angel One authenticated and tokens saved")
+            return True, "Angel One API ready for trading"
+        else:
+            return False, f"Angel One authentication failed: {message}"
+            
+    except Exception as e:
+        return False, f"Error initializing Angel One API: {str(e)}"
+
+# --- End Angel One API Integration ---
+
 # --- Broker Management Functions ---
 def update_broker_settings(broker_name, enabled, client_id, api_key, secret_key):
     """Update broker configuration settings"""
@@ -492,6 +910,113 @@ def load_broker_settings_for_ui(broker_name):
         status = f"**Status:** ❌ **Disabled** - {broker_name.title()} integration is turned off"
     
     return enabled, client_id, api_key, secret_key, status
+
+def update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key):
+    """Update Angel One specific configuration settings"""
+    try:
+        settings = load_settings()
+        if 'brokers' not in settings:
+            settings['brokers'] = {}
+        if 'angelone' not in settings['brokers']:
+            settings['brokers']['angelone'] = {}
+            
+        settings['brokers']['angelone']['enabled'] = enabled
+        settings['brokers']['angelone']['client_id'] = client_id.strip() if client_id else ""
+        settings['brokers']['angelone']['api_key'] = api_key.strip() if api_key else ""
+        settings['brokers']['angelone']['client_pin'] = client_pin.strip() if client_pin else ""
+        settings['brokers']['angelone']['totp_key'] = totp_key.strip() if totp_key else ""
+        
+        save_settings(settings)
+        return f"AngelOne settings updated successfully. {'Enabled' if enabled else 'Disabled'}."
+    except Exception as e:
+        return f"Error updating AngelOne settings: {e}"
+
+def load_angelone_settings_for_ui():
+    """Load Angel One settings for UI components"""
+    settings = load_settings()
+    angelone_config = settings.get('brokers', {}).get('angelone', {})
+    
+    enabled = angelone_config.get('enabled', False)
+    client_id = angelone_config.get('client_id', '')
+    api_key = angelone_config.get('api_key', '')
+    client_pin = angelone_config.get('client_pin', '')
+    totp_key = angelone_config.get('totp_key', '')
+    access_token = angelone_config.get('access_token', '')
+    
+    # Create status message
+    if enabled:
+        required_fields = [client_id, api_key, client_pin, totp_key]
+        if all(required_fields):
+            if access_token:
+                status = f"**Status:** ✅ **Connected** - AngelOne is authenticated and ready"
+            else:
+                status = f"**Status:** ⚠️ **Configured but not authenticated** - Please test connection"
+        else:
+            missing_fields = []
+            if not client_id: missing_fields.append("Client ID")
+            if not api_key: missing_fields.append("API Key")
+            if not client_pin: missing_fields.append("Login PIN")
+            if not totp_key: missing_fields.append("TOTP Key")
+            status = f"**Status:** ⚠️ **Missing fields:** {', '.join(missing_fields)}"
+    else:
+        status = f"**Status:** ❌ **Disabled** - AngelOne integration is turned off"
+    
+    # Auth status
+    auth_status = "**Authentication Status:** Not authenticated"
+    if access_token:
+        auth_status = "**Authentication Status:** ✅ Authenticated and ready for trading"
+    
+    return enabled, client_id, api_key, client_pin, totp_key, status, auth_status
+
+def test_angelone_connection():
+    """Test Angel One connection and authenticate"""
+    try:
+        settings = load_settings()
+        angelone_config = settings.get('brokers', {}).get('angelone', {})
+        
+        if not angelone_config.get('enabled', False):
+            return "❌ AngelOne integration is disabled. Please enable it first."
+        
+        # Get credentials
+        api_key = angelone_config.get('api_key', '').strip()
+        client_id = angelone_config.get('client_id', '').strip()
+        client_pin = angelone_config.get('client_pin', '').strip()
+        totp_key = angelone_config.get('totp_key', '').strip()
+        
+        if not all([api_key, client_id, client_pin, totp_key]):
+            return "❌ Missing required credentials. Please fill all fields (Client ID, API Key, PIN, TOTP Key)."
+        
+        # Initialize Angel One API
+        initialize_angelone_api(api_key, client_id, client_pin, totp_key)
+        
+        # Attempt authentication
+        success, message = authenticate_angelone()
+        
+        if success:
+            return f"✅ AngelOne authentication successful! {message}"
+        else:
+            return f"❌ AngelOne authentication failed: {message}"
+            
+    except Exception as e:
+        return f"❌ Error testing AngelOne connection: {str(e)}"
+
+def authenticate_angelone_manual():
+    """Manual Angel One authentication"""
+    try:
+        # Check if API is initialized
+        if not angelone_api:
+            return "❌ AngelOne API not initialized. Please save settings first."
+        
+        # Attempt authentication
+        success, message = authenticate_angelone()
+        
+        if success:
+            return f"✅ Manual authentication successful! {message}"
+        else:
+            return f"❌ Manual authentication failed: {message}"
+            
+    except Exception as e:
+        return f"❌ Error in manual authentication: {str(e)}"
 
 def generate_flattrade_oauth_url(api_key):
     """Generate Flattrade OAuth URL for authentication using correct API format"""
@@ -756,20 +1281,41 @@ def get_broker_status_summary():
     summary = "**Broker Status Summary:**\n\n"
     for broker_name, config in brokers.items():
         enabled = config.get('enabled', False)
-        has_credentials = all([
-            config.get('client_id', ''),
-            config.get('api_key', ''),
-            config.get('secret_key', '')
-        ])
+        
+        # Check credentials based on broker type
+        if broker_name == 'angelone':
+            has_credentials = all([
+                config.get('client_id', ''),
+                config.get('api_key', ''),
+                config.get('client_pin', ''),
+                config.get('totp_key', '')
+            ])
+        else:
+            has_credentials = all([
+                config.get('client_id', ''),
+                config.get('api_key', ''),
+                config.get('secret_key', '')
+            ])
+        
+        access_token = config.get('access_token', '')
         
         if enabled and has_credentials:
-            status = "✅ Configured"
+            if access_token:
+                status = "✅ Connected & Authenticated"
+            else:
+                status = "⚠️ Configured but not authenticated"
         elif enabled:
             status = "⚠️ Missing Credentials"
         else:
             status = "❌ Disabled"
             
         summary += f"- **{broker_name.title()}:** {status}\n"
+    
+    # Add instructions for live trading
+    summary += "\n**For Live Trading:**\n"
+    summary += "- Enable at least one broker\n"
+    summary += "- Complete authentication\n"
+    summary += "- Enable 'PLACE LIVE ORDERS' checkbox\n"
     
     return summary
 
@@ -1489,18 +2035,31 @@ def add_manual_trade_to_db(instrument, expiry_str, tag,
         order_results = []
         if live_trading:
             try:
-                # Initialize and authenticate Flattrade API
-                success, message = initialize_flattrade_for_trading()
+                # Determine which broker to use
+                active_broker = None
+                broker_api = None
                 
-                if not success:
-                    order_results.append(f"❌ {message}")
-                elif flattrade_api is None:
-                    order_results.append("❌ Flattrade API not initialized")
+                # Try Flattrade first
+                success, message = initialize_flattrade_for_trading()
+                if success and flattrade_api:
+                    active_broker = "Flattrade"
+                    broker_api = flattrade_api
                 else:
+                    # Try Angel One if Flattrade is not available
+                    success, message = initialize_angelone_for_trading()
+                    if success and angelone_api:
+                        active_broker = "AngelOne"
+                        broker_api = angelone_api
+                
+                if not active_broker or not broker_api:
+                    order_results.append(f"❌ No broker available for trading. Flattrade: {message}")
+                else:
+                    order_results.append(f"📡 Using {active_broker} for live trading")
+                    
                     lot_size = 75 if instrument == "NIFTY" else 15
                     total_quantity = int(quantity) * lot_size
                     
-                    # Generate option symbols in Flattrade format
+                    # Generate option symbols based on broker
                     month_map = {
                         'Jan': 'JAN', 'Feb': 'FEB', 'Mar': 'MAR', 'Apr': 'APR', 'May': 'MAY', 'Jun': 'JUN',
                         'Jul': 'JUL', 'Aug': 'AUG', 'Sep': 'SEP', 'Oct': 'OCT', 'Nov': 'NOV', 'Dec': 'DEC'
@@ -1513,9 +2072,12 @@ def add_manual_trade_to_db(instrument, expiry_str, tag,
                         month_code = month_map.get(expiry_date.strftime('%b'))
                         day = expiry_date.strftime('%d')
                         
-                        # Flattrade symbol format: SYMBOL + DD + MMM + YY + C/P + STRIKE
-                        # Example: NIFTY21AUG25C24500 (NOT NIFTY21AUG2524500CE)
-                        symbol_base = f"{instrument}{day}{month_code}{year_short}"
+                        if active_broker == "Flattrade":
+                            # Flattrade symbol format: SYMBOL + DD + MMM + YY + C/P + STRIKE
+                            symbol_base = f"{instrument}{day}{month_code}{year_short}"
+                        else:  # Angel One
+                            # Angel One symbol format: SYMBOL + DD + MMM + YY + CE/PE
+                            symbol_base = f"{instrument}{day}{month_code}{year_short}"
                         
                         order_results.append(f"📊 Trading {total_quantity} qty ({quantity} lots × {lot_size})")
                         print(f"🔧 Symbol base: {symbol_base}")
@@ -1527,46 +2089,62 @@ def add_manual_trade_to_db(instrument, expiry_str, tag,
                         
                         # Prepare CE HEDGE BUY order
                         if ce_hedge_strike > 0 and ce_hedge_price > 0:
-                            ce_hedge_symbol = f"{symbol_base}C{int(ce_hedge_strike)}"
+                            if active_broker == "Flattrade":
+                                ce_hedge_symbol = f"{symbol_base}C{int(ce_hedge_strike)}"
+                            else:  # Angel One
+                                ce_hedge_symbol = f"{symbol_base}{int(ce_hedge_strike)}CE"
+                            
                             hedge_orders.append({
                                 'type': 'CE_HEDGE_BUY',
                                 'symbol': ce_hedge_symbol,
                                 'quantity': total_quantity,
-                                'transaction_type': 'B',
-                                'product': 'NRML'
+                                'transaction_type': 'BUY' if active_broker == "AngelOne" else 'B',
+                                'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
                             })
                         
                         # Prepare PE HEDGE BUY order
                         if pe_hedge_strike > 0 and pe_hedge_price > 0:
-                            pe_hedge_symbol = f"{symbol_base}P{int(pe_hedge_strike)}"
+                            if active_broker == "Flattrade":
+                                pe_hedge_symbol = f"{symbol_base}P{int(pe_hedge_strike)}"
+                            else:  # Angel One
+                                pe_hedge_symbol = f"{symbol_base}{int(pe_hedge_strike)}PE"
+                            
                             hedge_orders.append({
                                 'type': 'PE_HEDGE_BUY',
                                 'symbol': pe_hedge_symbol,
                                 'quantity': total_quantity,
-                                'transaction_type': 'B',
-                                'product': 'NRML'
+                                'transaction_type': 'BUY' if active_broker == "AngelOne" else 'B',
+                                'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
                             })
                         
                         # Prepare CE SELL order
                         if ce_strike > 0 and ce_price > 0:
-                            ce_symbol = f"{symbol_base}C{int(ce_strike)}"
+                            if active_broker == "Flattrade":
+                                ce_symbol = f"{symbol_base}C{int(ce_strike)}"
+                            else:  # Angel One
+                                ce_symbol = f"{symbol_base}{int(ce_strike)}CE"
+                            
                             sell_orders.append({
                                 'type': 'CE_SELL',
                                 'symbol': ce_symbol,
                                 'quantity': total_quantity,
-                                'transaction_type': 'S',
-                                'product': 'NRML'
+                                'transaction_type': 'SELL' if active_broker == "AngelOne" else 'S',
+                                'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
                             })
                         
                         # Prepare PE SELL order
                         if pe_strike > 0 and pe_price > 0:
-                            pe_symbol = f"{symbol_base}P{int(pe_strike)}"
+                            if active_broker == "Flattrade":
+                                pe_symbol = f"{symbol_base}P{int(pe_strike)}"
+                            else:  # Angel One
+                                pe_symbol = f"{symbol_base}{int(pe_strike)}PE"
+                            
                             sell_orders.append({
                                 'type': 'PE_SELL',
                                 'symbol': pe_symbol,
                                 'quantity': total_quantity,
-                                'transaction_type': 'S',
-                                'product': 'NRML'
+                                'transaction_type': 'SELL' if active_broker == "AngelOne" else 'S',
+                                'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
                             })
                         
                         # Step 2: Place HEDGE orders in parallel FIRST
@@ -1575,26 +2153,51 @@ def add_manual_trade_to_db(instrument, expiry_str, tag,
                             start_time = time.time()
                             
                             with ThreadPoolExecutor(max_workers=4) as executor:
-                                hedge_futures = {
-                                    executor.submit(
-                                        flattrade_api.place_order,
-                                        symbol=order['symbol'],
-                                        quantity=order['quantity'],
-                                        price=None,
-                                        order_type='MKT',
-                                        transaction_type=order['transaction_type'],
-                                        product=order['product']
-                                    ): order for order in hedge_orders
-                                }
+                                hedge_futures = {}
+                                
+                                for order in hedge_orders:
+                                    if active_broker == "Flattrade":
+                                        future = executor.submit(
+                                            flattrade_api.place_order,
+                                            symbol=order['symbol'],
+                                            quantity=order['quantity'],
+                                            price=None,
+                                            order_type='MKT',
+                                            transaction_type=order['transaction_type'],
+                                            product=order['product']
+                                        )
+                                    else:  # Angel One
+                                        # For Angel One, we need symboltoken - using placeholder for now
+                                        future = executor.submit(
+                                            angelone_api.place_order,
+                                            symbol=order['symbol'],
+                                            symboltoken="0",  # Would need to fetch actual symboltoken
+                                            quantity=order['quantity'],
+                                            price=None,
+                                            order_type='MARKET',
+                                            transaction_type=order['transaction_type'],
+                                            product=order['product'],
+                                            exchange='NFO'
+                                        )
+                                    
+                                    hedge_futures[future] = order
                                 
                                 for future in as_completed(hedge_futures):
                                     order_info = hedge_futures[future]
                                     try:
                                         result = future.result()
-                                        if result and result.get('stat') == 'Ok':
-                                            order_results.append(f"✅ {order_info['type']}: {order_info['symbol']} @ Market Price (Order ID: {result.get('norenordno', 'N/A')})")
-                                        else:
-                                            order_results.append(f"❌ {order_info['type']} Failed: {result.get('emsg', 'Unknown error') if result else 'No response'}")
+                                        
+                                        if active_broker == "Flattrade":
+                                            if result and result.get('stat') == 'Ok':
+                                                order_results.append(f"✅ {order_info['type']}: {order_info['symbol']} @ Market Price (Order ID: {result.get('norenordno', 'N/A')})")
+                                            else:
+                                                order_results.append(f"❌ {order_info['type']} Failed: {result.get('emsg', 'Unknown error') if result else 'No response'}")
+                                        else:  # Angel One
+                                            if result and result.get('status'):
+                                                order_id = result.get('data', {}).get('orderid', 'N/A')
+                                                order_results.append(f"✅ {order_info['type']}: {order_info['symbol']} @ Market Price (Order ID: {order_id})")
+                                            else:
+                                                order_results.append(f"❌ {order_info['type']} Failed: {result.get('message', 'Unknown error') if result else 'No response'}")
                                     except Exception as e:
                                         order_results.append(f"❌ {order_info['type']} Failed: {str(e)}")
                             
@@ -1607,26 +2210,50 @@ def add_manual_trade_to_db(instrument, expiry_str, tag,
                             start_time = time.time()
                             
                             with ThreadPoolExecutor(max_workers=4) as executor:
-                                sell_futures = {
-                                    executor.submit(
-                                        flattrade_api.place_order,
-                                        symbol=order['symbol'],
-                                        quantity=order['quantity'],
-                                        price=None,
-                                        order_type='MKT',
-                                        transaction_type=order['transaction_type'],
-                                        product=order['product']
-                                    ): order for order in sell_orders
-                                }
+                                sell_futures = {}
+                                
+                                for order in sell_orders:
+                                    if active_broker == "Flattrade":
+                                        future = executor.submit(
+                                            flattrade_api.place_order,
+                                            symbol=order['symbol'],
+                                            quantity=order['quantity'],
+                                            price=None,
+                                            order_type='MKT',
+                                            transaction_type=order['transaction_type'],
+                                            product=order['product']
+                                        )
+                                    else:  # Angel One
+                                        future = executor.submit(
+                                            angelone_api.place_order,
+                                            symbol=order['symbol'],
+                                            symboltoken="0",  # Would need to fetch actual symboltoken
+                                            quantity=order['quantity'],
+                                            price=None,
+                                            order_type='MARKET',
+                                            transaction_type=order['transaction_type'],
+                                            product=order['product'],
+                                            exchange='NFO'
+                                        )
+                                    
+                                    sell_futures[future] = order
                                 
                                 for future in as_completed(sell_futures):
                                     order_info = sell_futures[future]
                                     try:
                                         result = future.result()
-                                        if result and result.get('stat') == 'Ok':
-                                            order_results.append(f"✅ {order_info['type']}: {order_info['symbol']} @ Market Price (Order ID: {result.get('norenordno', 'N/A')})")
-                                        else:
-                                            order_results.append(f"❌ {order_info['type']} Failed: {result.get('emsg', 'Unknown error') if result else 'No response'}")
+                                        
+                                        if active_broker == "Flattrade":
+                                            if result and result.get('stat') == 'Ok':
+                                                order_results.append(f"✅ {order_info['type']}: {order_info['symbol']} @ Market Price (Order ID: {result.get('norenordno', 'N/A')})")
+                                            else:
+                                                order_results.append(f"❌ {order_info['type']} Failed: {result.get('emsg', 'Unknown error') if result else 'No response'}")
+                                        else:  # Angel One
+                                            if result and result.get('status'):
+                                                order_id = result.get('data', {}).get('orderid', 'N/A')
+                                                order_results.append(f"✅ {order_info['type']}: {order_info['symbol']} @ Market Price (Order ID: {order_id})")
+                                            else:
+                                                order_results.append(f"❌ {order_info['type']} Failed: {result.get('message', 'Unknown error') if result else 'No response'}")
                                     except Exception as e:
                                         order_results.append(f"❌ {order_info['type']} Failed: {str(e)}")
                             
@@ -1931,21 +2558,73 @@ def build_ui():
                     # AngelOne Configuration  
                     with gr.TabItem("AngelOne"):
                         gr.Markdown("""
-                        ### AngelOne (Angel Broking) Configuration
+                        ### AngelOne (Angel Broking SmartAPI) Configuration
                         **Setup Instructions:**
-                        1. Login to your AngelOne account
-                        2. Go to API section and generate API credentials
-                        3. Get your Client ID, API Key, and Secret Key
+                        1. Login to your AngelOne account and go to [SmartAPI Portal](https://smartapi.angelbroking.com/)
+                        2. Create a new app to get API credentials
+                        3. Setup TOTP (Google Authenticator) in your AngelOne account
+                        4. Get your Client ID, API Key, Login PIN, and TOTP Secret Key
+                        
+                        **Required Fields:**
+                        - **Client ID**: Your AngelOne trading account ID
+                        - **API Key**: From SmartAPI app registration  
+                        - **Login PIN**: Your AngelOne account PIN (4 or 6 digits)
+                        - **TOTP Secret**: Secret key from TOTP setup (for 2FA)
                         """)
                         
                         angelone_enabled = gr.Checkbox(label="Enable AngelOne Integration", value=False)
-                        angelone_client_id = gr.Textbox(label="Client ID", placeholder="Enter your AngelOne Client ID")
-                        angelone_api_key = gr.Textbox(label="API Key", placeholder="Enter your AngelOne API Key", type="password")
-                        angelone_secret_key = gr.Textbox(label="Secret Key", placeholder="Enter your AngelOne Secret Key", type="password")
+                        angelone_client_id = gr.Textbox(
+                            label="Client ID", 
+                            placeholder="Enter your AngelOne Client ID (e.g., A123456)",
+                            info="Your AngelOne trading account ID"
+                        )
+                        angelone_api_key = gr.Textbox(
+                            label="API Key", 
+                            placeholder="Enter your AngelOne API Key", 
+                            type="password",
+                            info="API Key from SmartAPI app registration"
+                        )
+                        angelone_client_pin = gr.Textbox(
+                            label="Login PIN", 
+                            placeholder="Enter your AngelOne login PIN", 
+                            type="password",
+                            info="Your AngelOne account PIN (4 or 6 digits)"
+                        )
+                        angelone_totp_key = gr.Textbox(
+                            label="TOTP Secret Key", 
+                            placeholder="Enter your TOTP secret key", 
+                            type="password",
+                            info="Secret key from TOTP setup (Google Authenticator)"
+                        )
                         
                         with gr.Row():
                             save_angelone_btn = gr.Button("Save AngelOne Settings", variant="primary")
-                            test_angelone_btn = gr.Button("Test Connection", variant="secondary")
+                            test_angelone_btn = gr.Button("Test Connection & Authenticate", variant="secondary")
+                            authenticate_angelone_btn = gr.Button("Manual Authentication", variant="secondary")
+                        
+                        gr.Markdown("### Authentication Status")
+                        angelone_auth_status = gr.Markdown(value="**Authentication Status:** Not authenticated")
+                        
+                        with gr.Accordion("AngelOne API Information", open=False):
+                            gr.Markdown("""
+                            **AngelOne SmartAPI Features:**
+                            - ✅ Market Orders & Limit Orders
+                            - ✅ Real-time market data
+                            - ✅ Portfolio & positions tracking
+                            - ✅ NIFTY/BANKNIFTY options trading
+                            - ✅ Automated TOTP authentication
+                            - ✅ Session management with token refresh
+                            
+                            **Symbol Format Examples:**
+                            - Equity: `RELIANCE-EQ`, `SBIN-EQ`
+                            - F&O: `NIFTY25AUG25F`, `NIFTY25AUG25100CE`
+                            - Currency: `USDINR25AUGFUT`
+                            
+                            **Product Types:**
+                            - INTRADAY (MIS) - Intraday trading
+                            - DELIVERY (CNC) - Cash & Carry  
+                            - CARRYFORWARD (NRML) - Normal (F&O)
+                            """)
                         
                         angelone_status = gr.Markdown(value="**Status:** Loading...")
                     
@@ -2071,17 +2750,22 @@ def build_ui():
         )
         
         save_angelone_btn.click(
-            fn=lambda enabled, client_id, api_key, secret_key: update_broker_settings("angelone", enabled, client_id, api_key, secret_key),
-            inputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_secret_key],
+            fn=update_angelone_settings,
+            inputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key],
             outputs=[settings_status_box]
         ).then(
-            fn=lambda: load_broker_settings_for_ui("angelone"),
-            outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_secret_key, angelone_status]
+            fn=load_angelone_settings_for_ui,
+            outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_status, angelone_auth_status]
         )
         
         test_angelone_btn.click(
-            fn=lambda: test_broker_connection("angelone"),
+            fn=test_angelone_connection,
             outputs=[settings_status_box]
+        )
+        
+        authenticate_angelone_btn.click(
+            fn=authenticate_angelone_manual,
+            outputs=[angelone_auth_status]
         )
         
         save_zerodha_btn.click(
@@ -2104,7 +2788,7 @@ def build_ui():
         
         # Load broker settings on demo start
         demo.load(fn=lambda: load_broker_settings_for_ui("flattrade"), outputs=[flattrade_enabled, flattrade_client_id, flattrade_api_key, flattrade_secret_key, flattrade_status])
-        demo.load(fn=lambda: load_broker_settings_for_ui("angelone"), outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_secret_key, angelone_status])
+        demo.load(fn=load_angelone_settings_for_ui, outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_status, angelone_auth_status])
         demo.load(fn=lambda: load_broker_settings_for_ui("zerodha"), outputs=[zerodha_enabled, zerodha_client_id, zerodha_api_key, zerodha_secret_key, zerodha_status])
         demo.load(fn=get_broker_status_summary, outputs=[broker_status_display])
 

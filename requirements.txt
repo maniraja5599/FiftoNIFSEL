@@ -18,6 +18,7 @@ pytz>=2022.7               # Timezone handling
 hashlib                    # Built-in: HMAC for API authentication
 hmac                       # Built-in: Message authentication
 base64                     # Built-in: Encoding
+pyotp>=2.8.0               # TOTP generation for 2FA (Angel One)
 
 # System and File Operations
 json                       # Built-in: JSON handling
