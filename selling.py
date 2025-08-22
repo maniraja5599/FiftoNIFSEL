@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')  # Set non-interactive backend to prevent GUI issues
 import matplotlib.pyplot as plt
 import pandas as pd
 import requests
@@ -1663,6 +1665,10 @@ def generate_analysis(instrument_name, calculation_type, selected_expiry_str, he
         display_df['Target/SL (₹)'] = df['Target']
         display_df = display_df[['Entry', 'CE Strike', 'CE Price', 'PE Strike', 'PE Price', 'Net Credit', 'Target/SL (₹)']]
 
+        # Set matplotlib backend to non-GUI for threading compatibility
+        import matplotlib
+        matplotlib.use('Agg')  # Non-interactive backend
+        
         fig, ax = plt.subplots(figsize=(14, 5))
         fig.patch.set_facecolor('#e0f7fa')
         ax.axis('off')
@@ -1771,6 +1777,75 @@ def add_trades_to_db(analysis_data):
     return "No new trades were added. They may already exist."
 
 def add_to_analysis(analysis_data): return add_trades_to_db(analysis_data), gr.DataFrame(value=load_trades_for_display())
+
+def add_automated_trades_to_active_analysis(analysis_data, auto_trade_result):
+    """
+    Add only the successfully executed automated trades to Active Analysis
+    This ensures automated trades are tracked with existing target/stoploss monitoring
+    """
+    if not analysis_data or not analysis_data.get('df_data'):
+        return "No analysis data to add."
+    
+    if auto_trade_result.get('status') != 'success':
+        return "No successful automated trades to add."
+    
+    # Get list of successfully executed strategies
+    executed_strategies = []
+    for result in auto_trade_result.get('results', []):
+        if isinstance(result, dict) and result.get('status') == 'success':
+            executed_strategies.append(result.get('strategy'))
+        elif isinstance(result, str) and 'success' in result.lower():
+            # If result is a string containing success, extract strategy name
+            executed_strategies.append(result)
+    
+    if not executed_strategies:
+        return "No successful automated trades found."
+    
+    # Add only executed strategies to Active Analysis
+    trades = load_trades()
+    new_trades_added = 0
+    entry_tag = f"{datetime.now().strftime('%b-%d %A')} Auto-Trading"
+    
+    for entry in analysis_data['df_data']:
+        strategy_name = entry['Entry']
+        
+        # Only add if this strategy was successfully executed
+        if strategy_name not in executed_strategies:
+            continue
+            
+        trade_id = f"{analysis_data['instrument']}_{analysis_data['expiry']}_{strategy_name.replace(' ', '')}_{entry_tag.replace(' ', '')}"
+        
+        # Check if trade already exists
+        if any(t['id'] == trade_id for t in trades):
+            continue
+            
+        # Add trade to Active Analysis
+        trade_entry = {
+            "id": trade_id,
+            "start_time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "instrument": analysis_data['instrument'],
+            "expiry": analysis_data['expiry'],
+            "reward_type": strategy_name,
+            "ce_strike": entry['CE Strike'],
+            "pe_strike": entry['PE Strike'],
+            "ce_hedge_strike": entry['CE Hedge Strike'],
+            "pe_hedge_strike": entry['PE Hedge Strike'],
+            "initial_net_premium": entry['Net Premium'],
+            "target_amount": entry['Target'],
+            "stoploss_amount": entry['Stoploss'],
+            "status": "Running",
+            "entry_tag": entry_tag,
+            "automated_trade": True  # Flag to identify automated trades
+        }
+        
+        trades.append(trade_entry)
+        new_trades_added += 1
+    
+    if new_trades_added > 0:
+        save_trades(trades)
+        return f"Added {new_trades_added} automated trade(s) to Active Analysis with tag '{entry_tag}'."
+    
+    return "No new automated trades were added to Active Analysis."
 
 def load_trades_for_display():
     trades = load_trades()
@@ -2078,28 +2153,46 @@ def run_scheduled_analysis(schedule_id, index, calc_type):
     future_expiries = sorted([d for d in data['records']['expiryDates'] if datetime.strptime(d, "%d-%b-%Y").date() >= datetime.now().date()], key=lambda x: datetime.strptime(x, "%d-%b-%Y"))
     if not future_expiries: print(f"Scheduled run '{schedule_id}' failed: No future expiry dates found."); return
     summary_path, hedge_path, payoff_path, _, analysis_data, _, _, _ = generate_analysis(index, calc_type, future_expiries[0], hedge_perc)
-    add_msg = add_trades_to_db(analysis_data)
-    print(add_msg); send_daily_chart_to_telegram(summary_path, hedge_path, payoff_path, analysis_data)
-    send_telegram_message(f"🤖 *Auto-Generation Successful ({index})* 🤖\n\n{add_msg}")
     
-    # --- Live Auto Trading Integration ---
+    # --- Live Auto Trading Integration (BEFORE adding to DB) ---
+    live_trade_executed = False
     if live_trade_manager and live_trade_manager.config.enabled:
         print("--- Executing Live Auto Trading ---")
         schedule_info = {"id": schedule_id, "index": index, "calc_type": calc_type}
         auto_trade_result = live_trade_manager.execute_automated_strategy(analysis_data, schedule_info)
         print(f"Auto Trade Result: {auto_trade_result}")
         
-        # Send auto trading status to Telegram
         if auto_trade_result.get('status') == 'success':
+            live_trade_executed = True
+            # Add successfully executed trades to Active Analysis
+            add_msg = add_automated_trades_to_active_analysis(analysis_data, auto_trade_result)
+            
+            # Send auto trading status to Telegram
             auto_msg = f"🔴 *Live Auto Trading Executed* 🔴\n\n"
             auto_msg += f"Mode: {live_trade_manager.config.trading_mode.value.upper()}\n"
             for result in auto_trade_result.get('results', []):
-                auto_msg += f"• {result['strategy']}: {result['status']}\n"
+                if isinstance(result, dict):
+                    strategy_name = result.get('strategy', 'Unknown')
+                    status = result.get('status', 'Unknown')
+                    auto_msg += f"• {strategy_name}: {status}\n"
+                else:
+                    # If result is a string, use it directly
+                    auto_msg += f"• {str(result)}\n"
+            auto_msg += f"\n{add_msg}"
             send_telegram_message(auto_msg)
         elif auto_trade_result.get('status') not in ['disabled', 'no_strategies']:
             send_telegram_message(f"⚠️ Auto Trading Issue: {auto_trade_result.get('message')}")
     else:
         print("--- Live Auto Trading Disabled ---")
+    
+    # --- Traditional behavior: Add all strategies to DB if live trading not executed ---
+    if not live_trade_executed:
+        add_msg = add_trades_to_db(analysis_data)
+        print(add_msg)
+    
+    # Send charts and notification
+    send_daily_chart_to_telegram(summary_path, hedge_path, payoff_path, analysis_data)
+    send_telegram_message(f"🤖 *Auto-Generation Successful ({index})* 🤖\n\n{add_msg}")
 
 def sync_scheduler_with_settings():
     print("--- Syncing scheduler with settings... ---")
@@ -2667,7 +2760,7 @@ def load_auto_trade_settings_for_ui():
     """Load auto trade settings for UI initialization"""
     try:
         if not live_trade_manager:
-            return False, "paper", True, False, False, True, True, 1.0, 1
+            return False, "live", True, False, False, True, True, 1.0, 1
         
         config = live_trade_manager.config
         strategies = config.strategies or {}
@@ -2684,7 +2777,7 @@ def load_auto_trade_settings_for_ui():
         )
     except Exception as e:
         print(f"Error loading auto trade settings: {e}")
-        return False, "paper", True, False, False, True, True, 1.0, 1
+        return False, "live", True, False, False, True, True, 1.0, 1
 
 def build_ui():
     with gr.Blocks(title="FiFTO Analyzer") as demo:
@@ -3036,7 +3129,7 @@ def build_ui():
                             auto_trade_mode = gr.Radio(
                                 ["paper", "live"], 
                                 label="Trading Mode", 
-                                value="paper",
+                                value="live",
                                 info="Paper = simulation, Live = real orders"
                             )
                         

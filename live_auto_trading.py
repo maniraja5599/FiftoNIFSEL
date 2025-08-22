@@ -26,7 +26,8 @@ class AutoTradeStatus(Enum):
 class AutoTradeConfig:
     """Configuration for automated trading"""
     enabled: bool = False
-    trading_mode: TradingMode = TradingMode.PAPER
+    trading_mode: TradingMode = TradingMode.LIVE  # Changed to LIVE mode for real trading
+    preferred_broker: str = 'flattrade'  # 'flattrade' or 'angelone'
     strategies: Optional[Dict[str, bool]] = None  # {"High Reward": True, "Mid Reward": False, "Low Reward": False}
     use_existing_targets: bool = True  # Use generated target/SL, don't create separate
     auto_square_off: bool = True  # Auto close positions when target/SL hit
@@ -62,6 +63,11 @@ class LiveTradeManager:
             try:
                 with open(self.config_file, 'r') as f:
                     data = json.load(f)
+                
+                # Handle enum conversion for trading_mode
+                if 'trading_mode' in data and isinstance(data['trading_mode'], str):
+                    data['trading_mode'] = TradingMode(data['trading_mode'])
+                
                 return AutoTradeConfig(**data)
             except Exception as e:
                 print(f"Error loading auto-trade config: {e}")
@@ -186,33 +192,22 @@ class LiveTradeManager:
                     "reason": f"Broker not connected: {broker_status['message']}"
                 }
             
-            # 2. Calculate position size
-            base_lot_size = analysis_data.get('lot_size', 75)  # NIFTY default
-            position_size = int(base_lot_size * self.config.position_size_multiplier)
+            # 2. Calculate position size (number of lots)
+            # Use 1 lot as default, multiplied by position_size_multiplier 
+            num_lots = int(1 * self.config.position_size_multiplier)
             
-            # 3. Execute hedge orders first (as per manual order reference)
-            hedge_orders = self._place_hedge_orders(strategy, position_size, analysis_data)
-            if not hedge_orders['success']:
+            # 3. FAST PARALLEL ORDER PLACEMENT - Execute all orders simultaneously
+            all_orders_result = self._place_all_orders_parallel(strategy, num_lots, analysis_data)
+            if not all_orders_result['success']:
                 return {
                     "strategy": strategy['Entry'],
                     "status": "error",
-                    "reason": f"Hedge orders failed: {hedge_orders['message']}"
-                }
-            
-            # 4. Execute main selling orders
-            main_orders = self._place_main_orders(strategy, position_size, analysis_data)
-            if not main_orders['success']:
-                # If main orders fail, try to close hedge positions
-                self._emergency_close_hedges(hedge_orders['order_ids'])
-                return {
-                    "strategy": strategy['Entry'],
-                    "status": "error",
-                    "reason": f"Main orders failed: {main_orders['message']}"
+                    "reason": f"Order placement failed: {all_orders_result['message']}"
                 }
             
             # 5. Create position entry
             position = self._create_position_entry(strategy, analysis_data, schedule_info, 
-                                                 hedge_orders['order_ids'], main_orders['order_ids'])
+                                                 all_orders_result['order_ids'], [])
             self.active_positions.append(position)
             self.save_positions()
             
@@ -220,16 +215,17 @@ class LiveTradeManager:
             self.log_trade_action("live_strategy_executed", {
                 "strategy": strategy['Entry'],
                 "position_id": position['id'],
-                "hedge_orders": hedge_orders['order_ids'],
-                "main_orders": main_orders['order_ids'],
-                "position_size": position_size
+                "all_orders": all_orders_result['order_ids'],
+                "successful_orders": all_orders_result.get('successful_orders', []),
+                "failed_orders": all_orders_result.get('failed_orders', []),
+                "position_size": num_lots
             })
             
             return {
                 "strategy": strategy['Entry'],
                 "status": "success",
                 "position_id": position['id'],
-                "message": f"Live orders placed successfully"
+                "message": f"Live orders placed successfully (Parallel execution)"
             }
             
         except Exception as e:
@@ -421,18 +417,659 @@ class LiveTradeManager:
     
     def _check_broker_connection(self) -> Dict:
         """Check if broker is connected and authenticated"""
-        # Implement broker connection check
-        return {"connected": False, "message": "Broker integration not implemented"}
+        try:
+            # Import the broker connection check functions from selling.py
+            import sys
+            import os
+            
+            # Add current directory to path to import from selling.py
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            if current_dir not in sys.path:
+                sys.path.insert(0, current_dir)
+            
+            # Import selling module functions
+            try:
+                from selling import flattrade_api, angelone_api, initialize_flattrade_for_trading, initialize_angelone_for_trading
+                
+                # Check preferred broker first
+                if self.config.preferred_broker == 'flattrade':
+                    # Check Flattrade connection
+                    if flattrade_api and flattrade_api.access_token:
+                        # Test the session with a simple API call
+                        try:
+                            test_result = flattrade_api.make_api_request('UserDetails', {})
+                            if test_result and test_result.get('stat') == 'Ok':
+                                return {"connected": True, "broker": "flattrade", "message": "Flattrade connected"}
+                            else:
+                                # Session might be expired, try to reinitialize
+                                success, message = initialize_flattrade_for_trading()
+                                if success:
+                                    return {"connected": True, "broker": "flattrade", "message": "Flattrade session refreshed"}
+                                else:
+                                    return {"connected": False, "message": f"Flattrade session expired: {message}"}
+                        except Exception as e:
+                            return {"connected": False, "message": f"Flattrade session test failed: {e}"}
+                    else:
+                        # Try to initialize
+                        success, message = initialize_flattrade_for_trading()
+                        if success:
+                            return {"connected": True, "broker": "flattrade", "message": "Flattrade initialized"}
+                        else:
+                            return {"connected": False, "message": f"Flattrade: {message}"}
+                
+                elif self.config.preferred_broker == 'angelone':
+                    # Check Angel One connection
+                    if angelone_api and angelone_api.access_token:
+                        return {"connected": True, "broker": "angelone", "message": "Angel One connected"}
+                    else:
+                        # Try to initialize
+                        success, message = initialize_angelone_for_trading()
+                        if success:
+                            return {"connected": True, "broker": "angelone", "message": "Angel One initialized"}
+                        else:
+                            return {"connected": False, "message": f"Angel One: {message}"}
+                
+                # If preferred broker fails, try the other one
+                if flattrade_api and flattrade_api.access_token:
+                    return {"connected": True, "broker": "flattrade", "message": "Flattrade connected (fallback)"}
+                elif angelone_api and angelone_api.access_token:
+                    return {"connected": True, "broker": "angelone", "message": "Angel One connected (fallback)"}
+                
+                return {"connected": False, "message": "No broker connected. Please authenticate first."}
+                
+            except ImportError as e:
+                return {"connected": False, "message": f"Failed to import broker modules: {e}"}
+                
+        except Exception as e:
+            return {"connected": False, "message": f"Broker connection check failed: {e}"}
     
-    def _place_hedge_orders(self, strategy: Dict, position_size: int, analysis_data: Dict) -> Dict:
+    def _place_order_with_retry(self, api, broker, symbol, quantity, price, order_type, product, transaction_type, exchange):
+        """Place order with session expiry retry logic"""
+        try:
+            # First attempt
+            if broker == 'flattrade':
+                result = getattr(api, 'place_order')(
+                    symbol, quantity, price, order_type, product, transaction_type, exchange
+                )
+            else:  # angelone
+                result = {"stat": "Not_Ok", "emsg": "Angel One requires symbol token lookup (not implemented yet)"}
+            
+            # Check if session expired
+            if result and isinstance(result, dict):
+                error_msg = result.get('emsg', '')
+                if 'Session Expired' in error_msg or 'Invalid Session Key' in error_msg:
+                    print(f"🔄 Session expired, attempting to refresh...")
+                    
+                    # Try to refresh session
+                    if broker == 'flattrade':
+                        # Clear the current expired token first
+                        api.access_token = None
+                        
+                        # Try to get a fresh token using auth code
+                        auth_code_file = os.path.join(os.path.expanduser('~'), '.fifto_analyzer_data', 'Flattrade_auth_code.txt')
+                        if os.path.exists(auth_code_file):
+                            with open(auth_code_file, 'r') as f:
+                                auth_code = f.read().strip()
+                            
+                            # Get new access token
+                            success, message = api.get_access_token(auth_code)
+                            if success:
+                                print(f"✅ Session refreshed successfully")
+                                
+                                # Save the new token to settings
+                                try:
+                                    from selling import load_settings, save_settings
+                                    settings = load_settings()
+                                    if 'brokers' not in settings:
+                                        settings['brokers'] = {}
+                                    if 'flattrade' not in settings['brokers']:
+                                        settings['brokers']['flattrade'] = {}
+                                    
+                                    settings['brokers']['flattrade']['access_token'] = api.access_token
+                                    save_settings(settings)
+                                    print(f"✅ New token saved to settings")
+                                except Exception as save_error:
+                                    print(f"⚠️ Warning: Could not save new token: {save_error}")
+                                
+                                # Retry the order with refreshed session
+                                result = getattr(api, 'place_order')(
+                                    symbol, quantity, price, order_type, product, transaction_type, exchange
+                                )
+                            else:
+                                # Auth code expired or invalid
+                                print(f"❌ Session refresh failed: Auth code expired or invalid")
+                                return {"stat": "Not_Ok", "emsg": "Session expired. Auth code has expired (typically 5-10 minutes). Please re-authenticate: 1) Go to Broker Settings, 2) Click 'Start OAuth Authentication', 3) Complete login process."}
+                        else:
+                            print(f"❌ No auth code file found for session refresh")
+                            return {"stat": "Not_Ok", "emsg": "Session expired and no auth code available. Please re-authenticate: 1) Go to Broker Settings, 2) Click 'Start OAuth Authentication', 3) Complete login process."}
+                    else:  # angelone
+                        from selling import initialize_angelone_for_trading
+                        success, message = initialize_angelone_for_trading()
+                        if success:
+                            print(f"✅ Session refreshed successfully")
+                            # Retry logic for angelone would go here
+                            result = {"stat": "Not_Ok", "emsg": "Angel One retry not implemented yet"}
+                        else:
+                            print(f"❌ Session refresh failed: {message}")
+                            return {"stat": "Not_Ok", "emsg": f"Session refresh failed: {message}"}
+            
+            return result
+            
+        except Exception as e:
+            return {"stat": "Not_Ok", "emsg": f"Order placement error: {str(e)}"}
+    
+    def _place_all_orders_parallel(self, strategy: Dict, num_lots: int, analysis_data: Dict) -> Dict:
+        """Place all orders in parallel for fastest execution"""
+        import threading
+        import time
+        
+        try:
+            # Get broker info
+            broker_status = self._check_broker_connection()
+            if not broker_status['connected']:
+                return {"success": False, "message": broker_status['message'], "order_ids": []}
+            
+            broker = broker_status['broker']
+            
+            # Import correct API
+            if broker == 'flattrade':
+                from selling import flattrade_api
+                api = flattrade_api
+            else:
+                from selling import angelone_api
+                api = angelone_api
+            
+            if not api:
+                return {"success": False, "message": f"{broker} API not available", "order_ids": []}
+            
+            # Extract order data
+            ce_hedge_strike = strategy.get('CE Hedge Strike')
+            pe_hedge_strike = strategy.get('PE Hedge Strike')
+            ce_strike = strategy.get('CE Strike')
+            pe_strike = strategy.get('PE Strike')
+            instrument = analysis_data.get('instrument', 'NIFTY')
+            expiry = analysis_data.get('expiry', '')
+            
+            # Calculate quantities
+            lot_size = 75 if instrument == 'NIFTY' else 35
+            total_quantity = lot_size * num_lots
+            
+            # Format expiry
+            expiry_formatted = self._format_expiry_for_symbol(expiry)
+            print(f"🔍 DEBUG: Parallel orders expiry formatting - Input: {expiry}, Output: {expiry_formatted}")
+            
+            # Prepare all orders
+            orders_to_place = []
+            
+            # Hedge orders (Buy for protection)
+            if ce_hedge_strike and ce_hedge_strike != 'None':
+                ce_hedge_symbol = f"{instrument}{expiry_formatted}C{int(ce_hedge_strike)}"
+                orders_to_place.append({
+                    'type': 'CE_HEDGE',
+                    'symbol': ce_hedge_symbol,
+                    'transaction': 'B',
+                    'quantity': total_quantity
+                })
+            
+            if pe_hedge_strike and pe_hedge_strike != 'None':
+                pe_hedge_symbol = f"{instrument}{expiry_formatted}P{int(pe_hedge_strike)}"
+                orders_to_place.append({
+                    'type': 'PE_HEDGE',
+                    'symbol': pe_hedge_symbol,
+                    'transaction': 'B',
+                    'quantity': total_quantity
+                })
+            
+            # Main selling orders
+            if ce_strike and ce_strike != 'None':
+                ce_sell_symbol = f"{instrument}{expiry_formatted}C{int(ce_strike)}"
+                orders_to_place.append({
+                    'type': 'CE_SELL',
+                    'symbol': ce_sell_symbol,
+                    'transaction': 'S',
+                    'quantity': total_quantity
+                })
+            
+            if pe_strike and pe_strike != 'None':
+                pe_sell_symbol = f"{instrument}{expiry_formatted}P{int(pe_strike)}"
+                orders_to_place.append({
+                    'type': 'PE_SELL',
+                    'symbol': pe_sell_symbol,
+                    'transaction': 'S',
+                    'quantity': total_quantity
+                })
+            
+            if not orders_to_place:
+                return {"success": False, "message": "No orders to place", "order_ids": []}
+            
+            # Execute all orders in parallel
+            results = []
+            threads = []
+            
+            def place_single_order(order_info, result_list, index):
+                """Thread function to place a single order"""
+                try:
+                    print(f"🚀 FAST: Placing {order_info['type']} order for {order_info['symbol']}")
+                    result = self._place_order_with_retry(
+                        api, broker,
+                        order_info['symbol'],
+                        order_info['quantity'],
+                        None,  # Market order
+                        'MKT',
+                        'NRML',
+                        order_info['transaction'],
+                        'NFO'
+                    )
+                    result_list[index] = {
+                        'type': order_info['type'],
+                        'symbol': order_info['symbol'],
+                        'result': result,
+                        'success': result and result.get('stat') == 'Ok'
+                    }
+                except Exception as e:
+                    result_list[index] = {
+                        'type': order_info['type'],
+                        'symbol': order_info['symbol'],
+                        'result': {"stat": "Not_Ok", "emsg": str(e)},
+                        'success': False
+                    }
+            
+            # Initialize results array
+            results = [None] * len(orders_to_place)
+            
+            # Create and start threads for parallel execution
+            for i, order_info in enumerate(orders_to_place):
+                thread = threading.Thread(target=place_single_order, args=(order_info, results, i))
+                threads.append(thread)
+                thread.start()
+            
+            # Wait for all threads to complete
+            for thread in threads:
+                thread.join()
+            
+            # Process results
+            successful_orders = []
+            failed_orders = []
+            order_ids = []
+            
+            for result in results:
+                if result is None:
+                    failed_orders.append("Unknown: Thread failed to complete")
+                    continue
+                    
+                if result['success']:
+                    order_id = result['result'].get('norenordno') or result['result'].get('orderid')
+                    if order_id:
+                        order_ids.append(f"{result['type']}_{order_id}")
+                        successful_orders.append(result['type'])
+                        print(f"✅ FAST: {result['type']} order placed: {result['symbol']}")
+                    else:
+                        failed_orders.append(f"{result['type']}: No order ID returned")
+                else:
+                    error_msg = result['result'].get('emsg', 'Unknown error')
+                    failed_orders.append(f"{result['type']}: {error_msg}")
+                    print(f"❌ FAST: {result['type']} failed: {error_msg}")
+            
+            # Return results
+            if successful_orders:
+                message = f"Parallel orders: {len(successful_orders)} successful"
+                if failed_orders:
+                    message += f", {len(failed_orders)} failed"
+                
+                return {
+                    "success": True,
+                    "message": message,
+                    "order_ids": order_ids,
+                    "successful_orders": successful_orders,
+                    "failed_orders": failed_orders
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"All parallel orders failed: {', '.join(failed_orders)}",
+                    "order_ids": []
+                }
+                
+        except Exception as e:
+            return {"success": False, "message": f"Parallel order placement failed: {str(e)}", "order_ids": []}
+    
+    def _format_expiry_for_symbol(self, expiry: str) -> str:
+        """Helper function to format expiry date for symbol generation"""
+        if not expiry:
+            return ''
+        
+        try:
+            from datetime import datetime
+            
+            # Try multiple date formats
+            date_formats = ['%d-%b-%Y', '%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']
+            
+            for date_format in date_formats:
+                try:
+                    date_obj = datetime.strptime(expiry, date_format)
+                    return date_obj.strftime('%d%b%y').upper()
+                except ValueError:
+                    continue
+            
+            # Manual parsing fallback
+            expiry_str = str(expiry).upper()
+            if 'AUG' in expiry_str and '2025' in expiry_str:
+                day = expiry_str[:2] if expiry_str[:2].isdigit() else expiry_str[0]
+                return f"{day}AUG25"
+            
+            return expiry_str.replace('-', '').replace('/', '')[:7]
+            
+        except Exception:
+            return str(expiry).replace('-', '').replace('/', '')[:7]
+    
+    def _place_hedge_orders(self, strategy: Dict, num_lots: int, analysis_data: Dict) -> Dict:
         """Place hedge orders first (buy options for protection)"""
-        # Implement hedge order placement
-        return {"success": False, "message": "Hedge order placement not implemented", "order_ids": []}
+        try:
+            # Import broker APIs
+            from selling import flattrade_api, angelone_api
+            
+            # Get the connected broker and API instance
+            broker_status = self._check_broker_connection()
+            if not broker_status['connected']:
+                return {"success": False, "message": broker_status['message'], "order_ids": []}
+            
+            broker = broker_status['broker']
+            
+            # Import and get correct API instance
+            if broker == 'flattrade':
+                from selling import flattrade_api
+                api = flattrade_api
+            else:  # angelone
+                from selling import angelone_api
+                api = angelone_api
+            
+            if not api:
+                return {"success": False, "message": f"{broker} API not available", "order_ids": []}
+            
+            order_ids = []
+            errors = []
+            
+            # Extract strategy data
+            ce_hedge_strike = strategy.get('CE Hedge Strike')
+            pe_hedge_strike = strategy.get('PE Hedge Strike')
+            instrument = analysis_data.get('instrument', 'NIFTY')
+            expiry = analysis_data.get('expiry', '')
+            
+            # Get lot size (NIFTY=75, BANKNIFTY=35)
+            lot_size = 75 if instrument == 'NIFTY' else 35
+            total_quantity = lot_size * num_lots
+            
+            # Format expiry for symbol creation
+            if expiry:
+                try:
+                    # Convert date format if needed
+                    from datetime import datetime
+                    
+                    # Try multiple date formats
+                    expiry_formatted = None
+                    date_formats = ['%d-%b-%Y', '%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']
+                    
+                    for date_format in date_formats:
+                        try:
+                            date_obj = datetime.strptime(expiry, date_format)
+                            # Format for Flattrade option symbol (DDMMMYY)
+                            # Example: 21-Aug-2025 -> 21AUG25
+                            expiry_formatted = date_obj.strftime('%d%b%y').upper()
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if not expiry_formatted:
+                        raise ValueError(f"Could not parse date: {expiry}")
+                        
+                except Exception as e:
+                    print(f"⚠️ DEBUG: Expiry format error: {e}, using manual parsing")
+                    # Manual parsing for common formats
+                    expiry_str = str(expiry).upper()
+                    if 'AUG' in expiry_str and '2025' in expiry_str:
+                        # Extract day from start
+                        day = expiry_str[:2] if expiry_str[:2].isdigit() else expiry_str[0]
+                        expiry_formatted = f"{day}AUG25"
+                    elif 'AUG' in expiry_str and '25' in expiry_str:
+                        # Already in correct format
+                        expiry_formatted = expiry_str.replace('-', '')
+                    else:
+                        # Last resort - use as is, cleaned
+                        expiry_formatted = expiry_str.replace('-', '').replace('/', '')[:7]
+            else:
+                expiry_formatted = ''
+            
+            print(f"🔍 DEBUG: Expiry formatting - Input: {expiry}, Output: {expiry_formatted}")
+            
+            # Place CE Hedge (Buy Call for protection) if exists
+            if ce_hedge_strike and ce_hedge_strike != 'None':
+                try:
+                    # Flattrade format: NIFTY21AUG25C24500
+                    ce_symbol = f"{instrument}{expiry_formatted}C{int(ce_hedge_strike)}"
+                    
+                    print(f"🔍 DEBUG: Placing CE hedge order for {ce_symbol} with {total_quantity} quantity ({num_lots} lots)")
+                    result = self._place_order_with_retry(
+                        api, broker,
+                        ce_symbol,           # symbol
+                        total_quantity,      # quantity 
+                        None,                # price (None for market order)
+                        'MKT',               # order_type
+                        'NRML',              # product
+                        'B',                 # transaction_type (B for Buy)
+                        'NFO'                # exchange
+                    )
+                    print(f"🔍 DEBUG: CE hedge order result: {result}")
+                    
+                    if result and result.get('stat') == 'Ok':
+                        order_id = result.get('norenordno') or result.get('orderid')
+                        if order_id:
+                            order_ids.append(f"CE_HEDGE_{order_id}")
+                            print(f"✅ CE Hedge order placed: {ce_symbol} x {total_quantity}")
+                        else:
+                            errors.append(f"CE Hedge: Order placed but no order ID returned")
+                    else:
+                        error_msg = result.get('emsg', 'Unknown error') if result else 'No response'
+                        errors.append(f"CE Hedge failed: {error_msg}")
+                        
+                except Exception as e:
+                    errors.append(f"CE Hedge error: {str(e)}")
+            
+            # Place PE Hedge (Buy Put for protection) if exists  
+            if pe_hedge_strike and pe_hedge_strike != 'None':
+                try:
+                    # Flattrade format: NIFTY21AUG25P24500
+                    pe_symbol = f"{instrument}{expiry_formatted}P{int(pe_hedge_strike)}"
+                    
+                    print(f"🔍 DEBUG: Placing PE hedge order for {pe_symbol} with {total_quantity} quantity ({num_lots} lots)")
+                    result = self._place_order_with_retry(
+                        api, broker,
+                        pe_symbol,           # symbol
+                        total_quantity,      # quantity 
+                        None,                # price (None for market order)
+                        'MKT',               # order_type
+                        'NRML',              # product
+                        'B',                 # transaction_type (B for Buy)
+                        'NFO'                # exchange
+                    )
+                    print(f"🔍 DEBUG: PE hedge order result: {result}")
+                    
+                    if result and result.get('stat') == 'Ok':
+                        order_id = result.get('norenordno') or result.get('orderid')
+                        if order_id:
+                            order_ids.append(f"PE_HEDGE_{order_id}")
+                            print(f"✅ PE Hedge order placed: {pe_symbol} x {total_quantity}")
+                        else:
+                            errors.append(f"PE Hedge: Order placed but no order ID returned")
+                    else:
+                        error_msg = result.get('emsg', 'Unknown error') if result else 'No response'
+                        errors.append(f"PE Hedge failed: {error_msg}")
+                        
+                except Exception as e:
+                    errors.append(f"PE Hedge error: {str(e)}")
+            
+            # Return results
+            if order_ids:
+                message = f"Hedge orders placed: {len(order_ids)} orders"
+                if errors:
+                    message += f" (with {len(errors)} errors: {', '.join(errors)})"
+                return {"success": True, "message": message, "order_ids": order_ids}
+            else:
+                error_msg = f"All hedge orders failed: {', '.join(errors)}" if errors else "No hedge orders to place"
+                return {"success": False, "message": error_msg, "order_ids": []}
+                
+        except Exception as e:
+            return {"success": False, "message": f"Hedge order placement failed: {str(e)}", "order_ids": []}
     
-    def _place_main_orders(self, strategy: Dict, position_size: int, analysis_data: Dict) -> Dict:
-        """Place main selling orders"""
-        # Implement main order placement  
-        return {"success": False, "message": "Main order placement not implemented", "order_ids": []}
+    def _place_main_orders(self, strategy: Dict, num_lots: int, analysis_data: Dict) -> Dict:
+        """Place main selling orders (sell options to collect premium)"""
+        try:
+            # Get the connected broker and API instance
+            broker_status = self._check_broker_connection()
+            if not broker_status['connected']:
+                return {"success": False, "message": broker_status['message'], "order_ids": []}
+            
+            broker = broker_status['broker']
+            
+            # Import and get correct API instance
+            if broker == 'flattrade':
+                from selling import flattrade_api
+                api = flattrade_api
+            else:  # angelone
+                from selling import angelone_api
+                api = angelone_api
+            
+            if not api:
+                return {"success": False, "message": f"{broker} API not available", "order_ids": []}
+            
+            order_ids = []
+            errors = []
+            
+            # Extract strategy data
+            ce_strike = strategy.get('CE Strike')
+            pe_strike = strategy.get('PE Strike')
+            instrument = analysis_data.get('instrument', 'NIFTY')
+            expiry = analysis_data.get('expiry', '')
+            
+            # Get lot size (NIFTY=75, BANKNIFTY=35)
+            lot_size = 75 if instrument == 'NIFTY' else 35
+            total_quantity = lot_size * num_lots
+            
+            # Format expiry for symbol creation
+            if expiry:
+                try:
+                    # Convert date format if needed
+                    from datetime import datetime
+                    
+                    # Try multiple date formats
+                    expiry_formatted = None
+                    date_formats = ['%d-%b-%Y', '%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y']
+                    
+                    for date_format in date_formats:
+                        try:
+                            date_obj = datetime.strptime(expiry, date_format)
+                            # Format for Flattrade option symbol (DDMMMYY)
+                            # Example: 21-Aug-2025 -> 21AUG25
+                            expiry_formatted = date_obj.strftime('%d%b%y').upper()
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if not expiry_formatted:
+                        raise ValueError(f"Could not parse date: {expiry}")
+                        
+                except Exception as e:
+                    print(f"⚠️ DEBUG: Main orders expiry format error: {e}, using manual parsing")
+                    # Manual parsing for common formats
+                    expiry_str = str(expiry).upper()
+                    if 'AUG' in expiry_str and '2025' in expiry_str:
+                        # Extract day from start
+                        day = expiry_str[:2] if expiry_str[:2].isdigit() else expiry_str[0]
+                        expiry_formatted = f"{day}AUG25"
+                    elif 'AUG' in expiry_str and '25' in expiry_str:
+                        # Already in correct format
+                        expiry_formatted = expiry_str.replace('-', '')
+                    else:
+                        # Last resort - use as is, cleaned
+                        expiry_formatted = expiry_str.replace('-', '').replace('/', '')[:7]
+            else:
+                expiry_formatted = ''
+            
+            print(f"🔍 DEBUG: Main orders expiry formatting - Input: {expiry}, Output: {expiry_formatted}")
+            
+            # Place CE Sell Order (Sell Call to collect premium) if exists
+            if ce_strike and ce_strike != 'None':
+                try:
+                    # Flattrade format: NIFTY21AUG25C24500
+                    ce_symbol = f"{instrument}{expiry_formatted}C{int(ce_strike)}"
+                    
+                    result = self._place_order_with_retry(
+                        api, broker,
+                        ce_symbol,           # symbol
+                        total_quantity,      # quantity 
+                        None,                # price (None for market order)
+                        'MKT',               # order_type
+                        'NRML',              # product
+                        'S',                 # transaction_type (S for Sell)
+                        'NFO'                # exchange
+                    )
+                    
+                    if result and result.get('stat') == 'Ok':
+                        order_id = result.get('norenordno') or result.get('orderid')
+                        if order_id:
+                            order_ids.append(f"CE_SELL_{order_id}")
+                            print(f"✅ CE Sell order placed: {ce_symbol} x {total_quantity}")
+                        else:
+                            errors.append(f"CE Sell: Order placed but no order ID returned")
+                    else:
+                        error_msg = result.get('emsg', 'Unknown error') if result else 'No response'
+                        errors.append(f"CE Sell failed: {error_msg}")
+                        
+                except Exception as e:
+                    errors.append(f"CE Sell error: {str(e)}")
+            
+            # Place PE Sell Order (Sell Put to collect premium) if exists  
+            if pe_strike and pe_strike != 'None':
+                try:
+                    # Flattrade format: NIFTY21AUG25P24500
+                    pe_symbol = f"{instrument}{expiry_formatted}P{int(pe_strike)}"
+                    
+                    result = self._place_order_with_retry(
+                        api, broker,
+                        pe_symbol,           # symbol
+                        total_quantity,      # quantity 
+                        None,                # price (None for market order)
+                        'MKT',               # order_type
+                        'NRML',              # product
+                        'S',                 # transaction_type (S for Sell)
+                        'NFO'                # exchange
+                    )
+                    
+                    if result and result.get('stat') == 'Ok':
+                        order_id = result.get('norenordno') or result.get('orderid')
+                        if order_id:
+                            order_ids.append(f"PE_SELL_{order_id}")
+                            print(f"✅ PE Sell order placed: {pe_symbol} x {total_quantity}")
+                        else:
+                            errors.append(f"PE Sell: Order placed but no order ID returned")
+                    else:
+                        error_msg = result.get('emsg', 'Unknown error') if result else 'No response'
+                        errors.append(f"PE Sell failed: {error_msg}")
+                        
+                except Exception as e:
+                    errors.append(f"PE Sell error: {str(e)}")
+            
+            # Return results
+            if order_ids:
+                message = f"Main orders placed: {len(order_ids)} orders"
+                if errors:
+                    message += f" (with {len(errors)} errors: {', '.join(errors)})"
+                return {"success": True, "message": message, "order_ids": order_ids}
+            else:
+                error_msg = f"All main orders failed: {', '.join(errors)}" if errors else "No main orders to place"
+                return {"success": False, "message": error_msg, "order_ids": []}
+                
+        except Exception as e:
+            return {"success": False, "message": f"Main order placement failed: {str(e)}", "order_ids": []}
     
     def _emergency_close_hedges(self, hedge_order_ids: List[str]):
         """Emergency close hedge positions if main orders fail"""
