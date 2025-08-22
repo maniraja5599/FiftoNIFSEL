@@ -1613,6 +1613,40 @@ def send_telegram_message(message, image_paths=None):
         return "Message sent to Telegram."
     except requests.exceptions.RequestException as e: return f"Failed to send to Telegram: {e}"
 
+def send_global_notification(message, notification_type="info"):
+    """Send a global notification that appears in the UI and Telegram"""
+    try:
+        # Send to Telegram
+        telegram_result = send_telegram_message(message)
+        telegram_sent = "sent to Telegram" in telegram_result
+        
+        # Format for UI display with timestamp
+        ist_tz = pytz.timezone('Asia/Kolkata')
+        timestamp = datetime.now(ist_tz).strftime("%H:%M:%S")
+        
+        # Emoji mapping for different notification types
+        emoji_map = {
+            "success": "✅",
+            "warning": "⚠️", 
+            "error": "❌",
+            "info": "ℹ️",
+            "timer": "⏰",
+            "trade": "💰",
+            "schedule": "📅"
+        }
+        
+        emoji = emoji_map.get(notification_type, "ℹ️")
+        
+        # Create formatted notification
+        status_suffix = " (✅ Telegram)" if telegram_sent else " (❌ Telegram)"
+        formatted_message = f"**{emoji} {timestamp}** | {message}{status_suffix}"
+        
+        return formatted_message, telegram_sent
+        
+    except Exception as e:
+        error_msg = f"❌ {datetime.now().strftime('%H:%M:%S')} | Notification error: {str(e)}"
+        return error_msg, False
+
 # --- Charting Functions ---
 def generate_analysis(instrument_name, calculation_type, selected_expiry_str, hedge_premium_percentage, progress=gr.Progress(track_tqdm=True)):
     if not selected_expiry_str or "Loading..." in selected_expiry_str or "Error" in selected_expiry_str: return None, None, None, "Expiry Date has not loaded. Please wait or re-select the Index to try again.", None, None, None, None
@@ -1835,7 +1869,8 @@ def add_automated_trades_to_active_analysis(analysis_data, auto_trade_result):
             "stoploss_amount": entry['Stoploss'],
             "status": "Running",
             "entry_tag": entry_tag,
-            "automated_trade": True  # Flag to identify automated trades
+            "automated_trade": True,  # Flag to identify automated trades
+            "live_trading": True  # Flag to indicate live broker positions (auto-trades are always live)
         }
         
         trades.append(trade_entry)
@@ -1873,6 +1908,143 @@ def close_trade_group_by_tag(tag_to_close, current_df):
     telegram_msg = f"🔔 *Manual Group Square-Off: {tag_to_close}* 🔔\n\n"
     group_final_pnl = 0.0
     closed_trades_details = []
+    
+    # --- LIVE BROKER INTEGRATION: Check if we need to place closing orders ---
+    broker_closing_results = []
+    trades_with_live_orders = [t for t in trades_in_group if t.get('live_trading', False)]
+    
+    if trades_with_live_orders:
+        print(f"🔄 Found {len(trades_with_live_orders)} trades with live orders. Attempting to close positions in broker...")
+        
+        # Determine which broker to use
+        active_broker = None
+        broker_api = None
+        
+        # Try Flattrade first
+        success, message = initialize_flattrade_for_trading()
+        if success and flattrade_api:
+            active_broker = "Flattrade"
+            broker_api = flattrade_api
+            broker_closing_results.append(f"📡 Using Flattrade for closing positions")
+        else:
+            # Try Angel One if Flattrade is not available
+            success, message = initialize_angelone_for_trading()
+            if success and angelone_api:
+                active_broker = "AngelOne"
+                broker_api = angelone_api
+                broker_closing_results.append(f"📡 Using AngelOne for closing positions")
+        
+        if not active_broker or not broker_api:
+            broker_closing_results.append(f"❌ No broker available for closing. Will only update tracking. Error: {message}")
+        else:
+            # Place closing orders for each trade
+            for trade in trades_with_live_orders:
+                try:
+                    expiry_str = trade['expiry']
+                    expiry_date = datetime.strptime(expiry_str, '%d-%b-%Y')
+                    year_short = str(expiry_date.year)[-2:]
+                    month_map = {
+                        'Jan': 'JAN', 'Feb': 'FEB', 'Mar': 'MAR', 'Apr': 'APR', 'May': 'MAY', 'Jun': 'JUN',
+                        'Jul': 'JUL', 'Aug': 'AUG', 'Sep': 'SEP', 'Oct': 'OCT', 'Nov': 'NOV', 'Dec': 'DEC'
+                    }
+                    month_code = month_map.get(expiry_date.strftime('%b'))
+                    day_str = f"{expiry_date.day:02d}"
+                    symbol_base = f"{instrument}{day_str}{month_code}{year_short}"
+                    
+                    closing_orders = []
+                    
+                    # Prepare closing orders (reverse of entry orders)
+                    if trade.get('ce_strike', 0) > 0:
+                        if active_broker == "Flattrade":
+                            ce_symbol = f"{symbol_base}C{int(trade['ce_strike'])}"
+                        else:  # Angel One
+                            ce_symbol = f"{symbol_base}{int(trade['ce_strike'])}CE"
+                        
+                        closing_orders.append({
+                            'type': 'CE_BUY_TO_CLOSE',
+                            'symbol': ce_symbol,
+                            'quantity': lot_size,
+                            'transaction_type': 'BUY' if active_broker == "AngelOne" else 'B',
+                            'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                        })
+                    
+                    if trade.get('pe_strike', 0) > 0:
+                        if active_broker == "Flattrade":
+                            pe_symbol = f"{symbol_base}P{int(trade['pe_strike'])}"
+                        else:  # Angel One
+                            pe_symbol = f"{symbol_base}{int(trade['pe_strike'])}PE"
+                        
+                        closing_orders.append({
+                            'type': 'PE_BUY_TO_CLOSE',
+                            'symbol': pe_symbol,
+                            'quantity': lot_size,
+                            'transaction_type': 'BUY' if active_broker == "AngelOne" else 'B',
+                            'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                        })
+                    
+                    if trade.get('ce_hedge_strike', 0) > 0:
+                        if active_broker == "Flattrade":
+                            ce_hedge_symbol = f"{symbol_base}C{int(trade['ce_hedge_strike'])}"
+                        else:  # Angel One
+                            ce_hedge_symbol = f"{symbol_base}{int(trade['ce_hedge_strike'])}CE"
+                        
+                        closing_orders.append({
+                            'type': 'CE_HEDGE_SELL_TO_CLOSE',
+                            'symbol': ce_hedge_symbol,
+                            'quantity': lot_size,
+                            'transaction_type': 'SELL' if active_broker == "AngelOne" else 'S',
+                            'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                        })
+                    
+                    if trade.get('pe_hedge_strike', 0) > 0:
+                        if active_broker == "Flattrade":
+                            pe_hedge_symbol = f"{symbol_base}P{int(trade['pe_hedge_strike'])}"
+                        else:  # Angel One
+                            pe_hedge_symbol = f"{symbol_base}{int(trade['pe_hedge_strike'])}PE"
+                        
+                        closing_orders.append({
+                            'type': 'PE_HEDGE_SELL_TO_CLOSE',
+                            'symbol': pe_hedge_symbol,
+                            'quantity': lot_size,
+                            'transaction_type': 'SELL' if active_broker == "AngelOne" else 'S',
+                            'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                        })
+                    
+                    # Place closing orders
+                    if closing_orders:
+                        broker_closing_results.append(f"🔄 Closing {len(closing_orders)} positions for trade {trade.get('reward_type', 'Unknown')}...")
+                        
+                        for order in closing_orders:
+                            try:
+                                print(f"📊 Placing closing order: {order['symbol']} | {order['transaction_type']} | Qty: {order['quantity']}")
+                                
+                                if active_broker == "Flattrade":
+                                    result = flattrade_api.place_order(
+                                        symbol=order['symbol'],
+                                        quantity=order['quantity'],
+                                        price=None,
+                                        order_type='MKT',
+                                        transaction_type=order['transaction_type'],
+                                        product=order['product']
+                                    )
+                                    if result and result.get('status') == 'success':
+                                        broker_closing_results.append(f"✅ {order['type']}: {order['symbol']} - Order ID: {result.get('orderid', 'N/A')}")
+                                    else:
+                                        broker_closing_results.append(f"❌ {order['type']}: {order['symbol']} - Failed: {result}")
+                                
+                                else:  # Angel One
+                                    # Note: Angel One requires symboltoken which would need to be looked up
+                                    broker_closing_results.append(f"⚠️ {order['type']}: {order['symbol']} - Angel One closing needs symboltoken implementation")
+                                
+                                time.sleep(0.1)  # Small delay between orders
+                                
+                            except Exception as e:
+                                broker_closing_results.append(f"❌ {order['type']}: {order['symbol']} - Error: {str(e)}")
+                                print(f"Error placing closing order: {e}")
+                    
+                except Exception as e:
+                    broker_closing_results.append(f"❌ Error processing trade {trade.get('reward_type', 'Unknown')}: {str(e)}")
+                    print(f"Error processing trade for closing: {e}")
 
     for trade in trades_in_group:
         current_prices = {'ce': 0.0, 'pe': 0.0, 'ce_hedge': 0.0, 'pe_hedge': 0.0}
@@ -1899,7 +2071,13 @@ def close_trade_group_by_tag(tag_to_close, current_df):
                          f"  - SELL CE {trade['ce_strike']}: `₹{current_prices['ce']:.2f}` | BUY CE {trade.get('ce_hedge_strike','N/A')}: `₹{current_prices['ce_hedge']:.2f}`\n"
                          f"  - SELL PE {trade['pe_strike']}: `₹{current_prices['pe']:.2f}` | BUY PE {trade.get('pe_hedge_strike','N/A')}: `₹{current_prices['pe_hedge']:.2f}`\n\n")
 
-    telegram_msg += f"*Total P/L for this group: ₹{group_final_pnl:,.2f}*"
+    # Add broker closing results to telegram message if any
+    if broker_closing_results:
+        telegram_msg += f"\n\n*🔄 Broker Position Closing:*\n"
+        for result in broker_closing_results:
+            telegram_msg += f"• {result}\n"
+    
+    telegram_msg += f"\n*Total P/L for this group: ₹{group_final_pnl:,.2f}*"
     send_telegram_message(telegram_msg)
 
     history = load_historical_pnl()
@@ -1909,7 +2087,12 @@ def close_trade_group_by_tag(tag_to_close, current_df):
     remaining_trades = [t for t in all_trades if t.get('entry_tag') != tag_to_close]
     save_trades(remaining_trades)
 
-    return load_trades_for_display(), f"Closed group '{tag_to_close}' with final P/L ₹{group_final_pnl:,.2f}. Performance logged to history."
+    # Prepare final status message
+    final_msg = f"Closed group '{tag_to_close}' with final P/L ₹{group_final_pnl:,.2f}. Performance logged to history."
+    if broker_closing_results:
+        final_msg += f"\n\nBroker Position Closing Results:\n" + "\n".join(broker_closing_results)
+    
+    return load_trades_for_display(), final_msg
 
 def clear_all_trades():
     all_trades = load_trades()
@@ -2019,6 +2202,145 @@ def check_for_ts_hits():
                 trade_copy['status'] = 'Target Hit' if alert_reason.startswith('✅') else 'SL Hit'
                 trade_copy['end_time'] = datetime.now(pytz.timezone('Asia/Kolkata')).isoformat()
                 closed_trades_log.append(trade_copy)
+                
+                # --- LIVE BROKER AUTO-CLOSING: Place closing orders if this is a live trade ---
+                broker_closing_msg = ""
+                if trade.get('live_trading', False):
+                    print(f"🔄 Auto-closing live broker positions for trade {trade.get('reward_type', 'Unknown')} due to {alert_reason.strip()}")
+                    
+                    # Determine which broker to use
+                    active_broker = None
+                    broker_api = None
+                    
+                    # Try Flattrade first
+                    try:
+                        success, message = initialize_flattrade_for_trading()
+                        if success and flattrade_api:
+                            active_broker = "Flattrade"
+                            broker_api = flattrade_api
+                        else:
+                            # Try Angel One if Flattrade is not available
+                            success, message = initialize_angelone_for_trading()
+                            if success and angelone_api:
+                                active_broker = "AngelOne"
+                                broker_api = angelone_api
+                    except Exception as e:
+                        print(f"Error initializing broker for auto-closing: {e}")
+                    
+                    if not active_broker or not broker_api:
+                        broker_closing_msg = f"\n⚠️ **Auto-Closing Failed:** No broker available for automatic position closing."
+                        print(f"❌ Auto-closing failed - No broker available")
+                    else:
+                        try:
+                            # Generate option symbols for closing orders
+                            expiry_str = trade['expiry']
+                            expiry_date = datetime.strptime(expiry_str, '%d-%b-%Y')
+                            year_short = str(expiry_date.year)[-2:]
+                            month_map = {
+                                'Jan': 'JAN', 'Feb': 'FEB', 'Mar': 'MAR', 'Apr': 'APR', 'May': 'MAY', 'Jun': 'JUN',
+                                'Jul': 'JUL', 'Aug': 'AUG', 'Sep': 'SEP', 'Oct': 'OCT', 'Nov': 'NOV', 'Dec': 'DEC'
+                            }
+                            month_code = month_map.get(expiry_date.strftime('%b'))
+                            day_str = f"{expiry_date.day:02d}"
+                            symbol_base = f"{instrument}{day_str}{month_code}{year_short}"
+                            
+                            closing_orders = []
+                            
+                            # Prepare closing orders (reverse of entry orders)
+                            if trade.get('ce_strike', 0) > 0:
+                                if active_broker == "Flattrade":
+                                    ce_symbol = f"{symbol_base}C{int(trade['ce_strike'])}"
+                                else:  # Angel One
+                                    ce_symbol = f"{symbol_base}{int(trade['ce_strike'])}CE"
+                                
+                                closing_orders.append({
+                                    'type': 'CE_BUY_TO_CLOSE',
+                                    'symbol': ce_symbol,
+                                    'quantity': lot_size,
+                                    'transaction_type': 'BUY' if active_broker == "AngelOne" else 'B',
+                                    'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                                })
+                            
+                            if trade.get('pe_strike', 0) > 0:
+                                if active_broker == "Flattrade":
+                                    pe_symbol = f"{symbol_base}P{int(trade['pe_strike'])}"
+                                else:  # Angel One
+                                    pe_symbol = f"{symbol_base}{int(trade['pe_strike'])}PE"
+                                
+                                closing_orders.append({
+                                    'type': 'PE_BUY_TO_CLOSE',
+                                    'symbol': pe_symbol,
+                                    'quantity': lot_size,
+                                    'transaction_type': 'BUY' if active_broker == "AngelOne" else 'B',
+                                    'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                                })
+                            
+                            if trade.get('ce_hedge_strike', 0) > 0:
+                                if active_broker == "Flattrade":
+                                    ce_hedge_symbol = f"{symbol_base}C{int(trade['ce_hedge_strike'])}"
+                                else:  # Angel One
+                                    ce_hedge_symbol = f"{symbol_base}{int(trade['ce_hedge_strike'])}CE"
+                                
+                                closing_orders.append({
+                                    'type': 'CE_HEDGE_SELL_TO_CLOSE',
+                                    'symbol': ce_hedge_symbol,
+                                    'quantity': lot_size,
+                                    'transaction_type': 'SELL' if active_broker == "AngelOne" else 'S',
+                                    'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                                })
+                            
+                            if trade.get('pe_hedge_strike', 0) > 0:
+                                if active_broker == "Flattrade":
+                                    pe_hedge_symbol = f"{symbol_base}P{int(trade['pe_hedge_strike'])}"
+                                else:  # Angel One
+                                    pe_hedge_symbol = f"{symbol_base}{int(trade['pe_hedge_strike'])}PE"
+                                
+                                closing_orders.append({
+                                    'type': 'PE_HEDGE_SELL_TO_CLOSE',
+                                    'symbol': pe_hedge_symbol,
+                                    'quantity': lot_size,
+                                    'transaction_type': 'SELL' if active_broker == "AngelOne" else 'S',
+                                    'product': 'CARRYFORWARD' if active_broker == "AngelOne" else 'NRML'
+                                })
+                            
+                            # Place closing orders
+                            if closing_orders:
+                                auto_close_results = []
+                                broker_closing_msg = f"\n\n🤖 **Auto-Closing {len(closing_orders)} positions via {active_broker}:**"
+                                
+                                for order in closing_orders:
+                                    try:
+                                        print(f"📊 Auto-placing closing order: {order['symbol']} | {order['transaction_type']} | Qty: {order['quantity']}")
+                                        
+                                        if active_broker == "Flattrade":
+                                            result = flattrade_api.place_order(
+                                                symbol=order['symbol'],
+                                                quantity=order['quantity'],
+                                                price=None,
+                                                order_type='MKT',
+                                                transaction_type=order['transaction_type'],
+                                                product=order['product']
+                                            )
+                                            if result and result.get('status') == 'success':
+                                                auto_close_results.append(f"✅ {order['type']}: Order ID {result.get('orderid', 'N/A')}")
+                                            else:
+                                                auto_close_results.append(f"❌ {order['type']}: Failed")
+                                        
+                                        else:  # Angel One
+                                            auto_close_results.append(f"⚠️ {order['type']}: Angel One auto-closing needs implementation")
+                                        
+                                        time.sleep(0.1)  # Small delay between orders
+                                        
+                                    except Exception as e:
+                                        auto_close_results.append(f"❌ {order['type']}: Error - {str(e)}")
+                                        print(f"Error auto-placing closing order: {e}")
+                                
+                                broker_closing_msg += "\n" + "\n".join([f"• {result}" for result in auto_close_results])
+                            
+                        except Exception as e:
+                            broker_closing_msg = f"\n⚠️ **Auto-Closing Error:** {str(e)}"
+                            print(f"Error in auto-closing process: {e}")
+                
                 msg = (
                     f"*{alert_reason}*\n\n"
                     f"**Trade Closed:** {trade['instrument']} - {trade['reward_type']}\n"
@@ -2030,7 +2352,7 @@ def check_for_ts_hits():
                     f"  - BUY CE {trade.get('ce_hedge_strike','N/A')} @ {current_prices['ce_hedge']:.2f}\n"
                     f"  - BUY PE {trade.get('pe_hedge_strike','N/A')} @ {current_prices['pe_hedge']:.2f}\n"
                     f"---------------------\n"
-                    f"**Final P/L: ₹{pnl:,.2f}**"
+                    f"**Final P/L: ₹{pnl:,.2f}**{broker_closing_msg}"
                 )
                 print(msg)
                 send_telegram_message(msg)
@@ -2147,11 +2469,28 @@ def send_daily_pnl_graph_to_telegram():
     daily_pnl_tracker.clear()
     
 def run_scheduled_analysis(schedule_id, index, calc_type):
-    print(f"--- Running scheduled job '{schedule_id}' at {datetime.now(pytz.timezone('Asia/Kolkata'))} ---")
+    """Enhanced scheduled analysis with notifications"""
+    start_time = datetime.now(pytz.timezone('Asia/Kolkata'))
+    print(f"--- Running scheduled job '{schedule_id}' at {start_time} ---")
+    
+    # Send schedule start notification
+    schedule_msg = f"📅 Auto-Generation Started: {index} {calc_type} at {start_time.strftime('%H:%M:%S')}"
+    send_global_notification(schedule_msg, "schedule")
+    
     hedge_perc, data = 10.0, get_option_chain_data(index)
-    if not (data and 'records' in data and 'expiryDates' in data['records']): print(f"Scheduled run '{schedule_id}' failed: Could not fetch option chain."); return
+    if not (data and 'records' in data and 'expiryDates' in data['records']): 
+        error_msg = f"❌ Scheduled run '{schedule_id}' failed: Could not fetch option chain."
+        print(error_msg)
+        send_global_notification(f"Auto-Generation Failed: Option chain fetch error for {index}", "error")
+        return
+        
     future_expiries = sorted([d for d in data['records']['expiryDates'] if datetime.strptime(d, "%d-%b-%Y").date() >= datetime.now().date()], key=lambda x: datetime.strptime(x, "%d-%b-%Y"))
-    if not future_expiries: print(f"Scheduled run '{schedule_id}' failed: No future expiry dates found."); return
+    if not future_expiries: 
+        error_msg = f"❌ Scheduled run '{schedule_id}' failed: No future expiry dates found."
+        print(error_msg)
+        send_global_notification(f"Auto-Generation Failed: No future expiry dates for {index}", "error")
+        return
+        
     summary_path, hedge_path, payoff_path, _, analysis_data, _, _, _ = generate_analysis(index, calc_type, future_expiries[0], hedge_perc)
     
     # --- Live Auto Trading Integration (BEFORE adding to DB) ---
@@ -2192,6 +2531,15 @@ def run_scheduled_analysis(schedule_id, index, calc_type):
     
     # Send charts and notification
     send_daily_chart_to_telegram(summary_path, hedge_path, payoff_path, analysis_data)
+    
+    # Enhanced completion notification
+    completion_time = datetime.now(pytz.timezone('Asia/Kolkata'))
+    duration = (completion_time - start_time).total_seconds()
+    
+    success_msg = f"✅ Auto-Generation Complete: {index} {calc_type} in {duration:.1f}s"
+    send_global_notification(success_msg, "success")
+    
+    # Traditional Telegram message
     send_telegram_message(f"🤖 *Auto-Generation Successful ({index})* 🤖\n\n{add_msg}")
 
 def sync_scheduler_with_settings():
@@ -2202,10 +2550,12 @@ def sync_scheduler_with_settings():
     for schedule_item in settings.get('schedules', []):
         if schedule_item.get('enabled', False) and schedule_item.get('days') and schedule_item.get('time'):
             try:
-                hour, minute = map(int, schedule_item['time'].split(':'))
+                time_parts = schedule_item['time'].split(':')
+                hour, minute = int(time_parts[0]), int(time_parts[1])
+                second = int(time_parts[2]) if len(time_parts) > 2 else 0
                 day_str = ",".join([day_map[d] for d in schedule_item['days']])
                 job_id = f"auto_generate_job_{schedule_item['id']}"
-                scheduler.add_job(run_scheduled_analysis, 'cron', day_of_week=day_str, hour=hour, minute=minute, id=job_id, timezone=pytz.timezone('Asia/Kolkata'), misfire_grace_time=600, args=[schedule_item['id'], schedule_item['index'], schedule_item['calc_type']])
+                scheduler.add_job(run_scheduled_analysis, 'cron', day_of_week=day_str, hour=hour, minute=minute, second=second, id=job_id, timezone=pytz.timezone('Asia/Kolkata'), misfire_grace_time=600, args=[schedule_item['id'], schedule_item['index'], schedule_item['calc_type']])
                 print(f"Scheduled job '{job_id}' for {schedule_item['index']} on {day_str} at {schedule_item['time']}")
             except Exception as e: print(f"Could not load schedule '{schedule_item.get('id')}': {e}")
 
@@ -2215,6 +2565,21 @@ def load_schedules_for_display():
 
 def add_new_schedule(days, time_str, index, calc_type):
     if not all([days, time_str, index, calc_type]): return load_schedules_for_display(), "All fields are required."
+    
+    # Validate time format (HH:MM or HH:MM:SS)
+    try:
+        time_parts = time_str.split(':')
+        if len(time_parts) == 2:
+            time_str = f"{time_str}:00"  # Add seconds if not provided
+        elif len(time_parts) != 3:
+            return load_schedules_for_display(), "Invalid time format. Use HH:MM:SS (e.g., 09:20:30)"
+        
+        hour, minute, second = map(int, time_str.split(':'))
+        if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
+            return load_schedules_for_display(), "Invalid time values. Use valid HH:MM:SS format."
+    except ValueError:
+        return load_schedules_for_display(), "Invalid time format. Use HH:MM:SS (e.g., 09:20:30)"
+    
     settings = load_settings()
     settings['schedules'].append({"id": uuid.uuid4().hex[:8], "enabled": True, "days": days, "time": time_str, "index": index, "calc_type": calc_type})
     save_settings(settings); sync_scheduler_with_settings()
@@ -2327,7 +2692,8 @@ def add_manual_trade_to_db(instrument, expiry_str, tag,
             "initial_prices": { "ce": ce_price, "pe": pe_price, "ce_hedge": ce_hedge_price, "pe_hedge": pe_hedge_price },
             "target_amount": final_target,
             "stoploss_amount": final_stoploss,
-            "status": "Running", "entry_tag": tag
+            "status": "Running", "entry_tag": tag,
+            "live_trading": live_trading  # Store the live trading flag
         }
         trades.append(new_trade)
         save_trades(trades)
@@ -2780,8 +3146,80 @@ def load_auto_trade_settings_for_ui():
         return False, "live", True, False, False, True, True, 1.0, 1
 
 def build_ui():
-    with gr.Blocks(title="FiFTO Analyzer") as demo:
+    with gr.Blocks(title="FiFTO Analyzer", css="""
+        /* Enhanced Timer and Notification Styles */
+        #next_schedule_timer {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white !important;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-align: center;
+            animation: pulse 1s ease-in-out infinite;
+            overflow: hidden !important;
+            white-space: nowrap !important;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Remove scrollbars from timer displays */
+        #next_schedule_timer::-webkit-scrollbar {
+            display: none !important;
+        }
+        
+        #next_schedule_timer {
+            -ms-overflow-style: none !important;
+            scrollbar-width: none !important;
+        }
+        
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
+            to { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+        
+        @keyframes slideInRight {
+            from { 
+                opacity: 0; 
+                transform: translateX(100%); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateX(0); 
+            }
+        }
+        
+        /* Notification Popup Styles */
+        .notification-popup {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        /* Enhanced Schedule Display */
+        .schedule-info {
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+    """) as demo:
         gr.Markdown("# FiFTO WEEKLY SELLING")
+        
+        # === Global Notification System ===
+        with gr.Row():
+            notification_display = gr.Markdown(value="", visible=True, elem_id="global_notifications",
+                                             elem_classes=["notification-popup"])
+        
         analysis_data_state, summary_filepath_state, hedge_filepath_state, payoff_filepath_state = gr.State(), gr.State(), gr.State(), gr.State()
 
         with gr.Tabs():
@@ -2854,13 +3292,94 @@ def build_ui():
                     clear_old_trades_button, clear_all_trades_button = gr.Button("Clear Old Trades"), gr.Button("Clear ALL Trades", variant="stop")
 
                 dummy_trigger = gr.Number(value=0, visible=False)
+                analysis_timer = gr.Number(value=0, visible=False)
+                notification_display = gr.Markdown(value="", visible=False, elem_id="notification_popup")
+                
+                def enhanced_timer_loop():
+                    """Enhanced timer with seconds precision and notifications"""
+                    while True:
+                        time.sleep(1)  # Update every second for precision
+                        yield time.time()
+                
+                def update_schedule_info():
+                    """Update next schedule information"""
+                    try:
+                        # Calculate next schedule
+                        next_schedule_info = get_next_schedule_info()
+                        
+                        return next_schedule_info
+                    except Exception as e:
+                        return "⏳ **Next Schedule:** Error calculating schedule"
+                
+                def get_next_schedule_info():
+                    """Get information about the next scheduled run"""
+                    try:
+                        jobs = scheduler.get_jobs()
+                        auto_jobs = [job for job in jobs if job.id.startswith('auto_generate_job_')]
+                        
+                        if not auto_jobs:
+                            return "⏳ **Next Schedule:** No schedules configured"
+                        
+                        ist_tz = pytz.timezone('Asia/Kolkata')
+                        current_time = datetime.now(ist_tz)
+                        
+                        # Find the next scheduled job
+                        next_runs = []
+                        for job in auto_jobs:
+                            next_run = job.next_run_time
+                            if next_run:
+                                next_runs.append((next_run, job))
+                        
+                        if not next_runs:
+                            return "⏳ **Next Schedule:** No upcoming schedules"
+                        
+                        # Sort by next run time
+                        next_runs.sort(key=lambda x: x[0])
+                        next_run_time, next_job = next_runs[0]
+                        
+                        # Calculate time difference
+                        time_diff = next_run_time - current_time
+                        
+                        if time_diff.total_seconds() < 0:
+                            return "⏳ **Next Schedule:** Calculating next run..."
+                        
+                        # Format time difference with seconds
+                        total_seconds = int(time_diff.total_seconds())
+                        days = total_seconds // 86400
+                        hours = (total_seconds % 86400) // 3600
+                        minutes = (total_seconds % 3600) // 60
+                        seconds = total_seconds % 60
+                        
+                        # Get schedule details from job args
+                        schedule_details = ""
+                        if hasattr(next_job, 'args') and len(next_job.args) >= 2:
+                            index = next_job.args[1]
+                            calc_type = next_job.args[2] if len(next_job.args) > 2 else "Weekly"
+                            schedule_details = f" ({index} {calc_type})"
+                        
+                        # Format countdown
+                        if days > 0:
+                            countdown = f"{days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
+                        elif hours > 0:
+                            countdown = f"{hours:02d}h {minutes:02d}m {seconds:02d}s"
+                        elif minutes > 0:
+                            countdown = f"{minutes:02d}m {seconds:02d}s"
+                        else:
+                            countdown = f"{seconds:02d}s"
+                        
+                        next_time_str = next_run_time.strftime("%H:%M:%S on %A, %d %B")
+                        
+                        return f"⏳ **Next Schedule:** {next_time_str}{schedule_details} | ⏰ **Countdown:** {countdown}"
+                    
+                    except Exception as e:
+                        return f"⏳ **Next Schedule:** Error - {str(e)}"
+                
                 def sixty_second_timer_loop():
                     while True:
                         time.sleep(60)
                         yield time.time()
-                dummy_trigger.change(fn=update_active_analysis_tab, inputs=None, outputs=[analysis_df, group_close_dropdown])
-                demo.load(fn=update_active_analysis_tab, inputs=None, outputs=[analysis_df, group_close_dropdown])
-                demo.load(fn=sixty_second_timer_loop, inputs=None, outputs=[dummy_trigger])
+                        
+                # Note: Timer connections will be set up after all UI components are defined
 
                 group_close_button.click(fn=close_trade_group_by_tag, inputs=[group_close_dropdown, analysis_df], outputs=[analysis_df, status_active_analysis]).then(fn=update_active_analysis_tab, outputs=[analysis_df, group_close_dropdown])
                 clear_old_trades_button.click(fn=clear_old_trades, outputs=[analysis_df, status_active_analysis]).then(fn=update_active_analysis_tab, outputs=[analysis_df, group_close_dropdown])
@@ -3098,12 +3617,17 @@ def build_ui():
                         settings_interval = gr.Radio(['15 Mins', '30 Mins', '1 Hour', 'Disable'], label="P/L Summary Frequency", value=lambda: load_settings()['update_interval'])
                         save_monitoring_button = gr.Button("Save P/L Settings", variant="primary")
                     with gr.Column(scale=2):
-                        gr.Markdown("### Auto-Generation Schedules")
-                        schedules_df = gr.DataFrame(load_schedules_for_display, label="Saved Schedules", interactive=True)
+                        # === Enhanced Timer Display ===
+                        gr.Markdown("### ⏰ Auto-Generation Schedules")
+                        
+                        # === Next Schedule Timer Display ===
+                        next_schedule_timer = gr.Markdown(value="⏳ **Next Schedule:** Calculating...", elem_id="next_schedule_timer")
+                        
+                        schedules_df = gr.DataFrame(load_schedules_for_display, label="📅 Saved Schedules", interactive=True)
                         with gr.Accordion("Add New Schedule", open=False):
                             with gr.Row():
                                 new_schedule_days = gr.CheckboxGroup(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], label="Run on Days")
-                                new_schedule_time = gr.Textbox(label="Run at Time (24H format, e.g., 09:20)", value="09:20")
+                                new_schedule_time = gr.Textbox(label="Run at Time (24H format with seconds, e.g., 09:20:00)", value="09:20:00")
                             with gr.Row():
                                 new_schedule_index = gr.Dropdown(["NIFTY", "BANKNIFTY"], label="Index", value="NIFTY")
                                 new_schedule_calc = gr.Dropdown(["Weekly", "Monthly"], label="Calculation", value="Weekly")
@@ -3313,6 +3837,37 @@ def build_ui():
         demo.load(fn=load_angelone_settings_for_ui, outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_redirect_url, angelone_status, angelone_auth_status])
         demo.load(fn=lambda: load_broker_settings_for_ui("zerodha"), outputs=[zerodha_enabled, zerodha_client_id, zerodha_api_key, zerodha_secret_key, zerodha_status])
         demo.load(fn=get_broker_status_summary, outputs=[broker_status_display])
+        
+        # === Enhanced Timer System Setup ===
+        # Set up timer connections separately to avoid conflicts
+        
+        # Timer for schedule updates only
+        dummy_trigger.change(
+            fn=update_schedule_info,
+            inputs=None,
+            outputs=[next_schedule_timer]
+        )
+        
+        # Separate timer for analysis updates (less frequent)
+        analysis_timer = gr.Number(value=0, visible=False)
+        
+        def analysis_timer_loop():
+            """Timer for analysis updates every 5 seconds"""
+            while True:
+                time.sleep(5)  # Update every 5 seconds
+                yield time.time()
+        
+        analysis_timer.change(
+            fn=update_active_analysis_tab,
+            inputs=None,
+            outputs=[analysis_df, group_close_dropdown]
+        )
+        
+        # Initial load events
+        demo.load(fn=update_active_analysis_tab, inputs=None, outputs=[analysis_df, group_close_dropdown])
+        demo.load(fn=update_schedule_info, inputs=None, outputs=[next_schedule_timer])
+        demo.load(fn=enhanced_timer_loop, inputs=None, outputs=[dummy_trigger])
+        demo.load(fn=analysis_timer_loop, inputs=None, outputs=[analysis_timer])
 
     return demo
 
