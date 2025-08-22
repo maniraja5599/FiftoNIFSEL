@@ -50,6 +50,21 @@ scheduler = BackgroundScheduler(timezone=pytz.timezone('Asia/Kolkata'))
 # In-memory store for 5-minute P/L tracking for the daily graph
 daily_pnl_tracker = defaultdict(list)
 
+def is_market_hours():
+    """Check if current time is within Indian stock market hours"""
+    ist_tz = pytz.timezone('Asia/Kolkata')
+    now = datetime.now(ist_tz)
+    
+    # Check if it's a weekday (Monday=0, Sunday=6)
+    if now.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    
+    # Market hours: 9:15 AM to 3:30 PM IST
+    market_open = now.replace(hour=9, minute=15, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    
+    return market_open <= now <= market_close
+
 # --- Initialize Live Auto Trading ---
 live_trade_manager = initialize_live_trading(DATA_DIR)
 
@@ -63,6 +78,9 @@ def load_settings():
         "telegram_enabled": True,
         "telegram_bot_token": DEFAULT_BOT_TOKEN,
         "telegram_chat_id": DEFAULT_CHAT_ID,
+        "respect_market_hours": True,  # New setting to control market hours behavior
+        "enable_after_hours_notifications": False,  # Allow after-hours telegram notifications
+        "enable_after_hours_pnl_tracking": False,  # Allow after-hours P&L tracking
         "brokers": {
             "flattrade": {
                 "enabled": False,
@@ -125,6 +143,34 @@ def update_telegram_settings(enabled, bot_token, chat_id):
     except Exception as e:
         return f"Error updating Telegram settings: {e}", "**Status:** ❌ **Error** - Failed to update settings"
 
+def update_market_hours_settings(respect_market_hours, enable_after_hours_notifications, enable_after_hours_pnl_tracking):
+    """Update market hours configuration settings"""
+    try:
+        settings = load_settings()
+        settings['respect_market_hours'] = respect_market_hours
+        settings['enable_after_hours_notifications'] = enable_after_hours_notifications
+        settings['enable_after_hours_pnl_tracking'] = enable_after_hours_pnl_tracking
+        save_settings(settings)
+        
+        # Create status message
+        if respect_market_hours:
+            status_parts = []
+            if not enable_after_hours_notifications:
+                status_parts.append("📵 After-hours notifications disabled")
+            if not enable_after_hours_pnl_tracking:
+                status_parts.append("📊 After-hours P&L tracking disabled")
+            
+            if status_parts:
+                status_msg = " | ".join(status_parts)
+            else:
+                status_msg = "All systems active during and after market hours"
+        else:
+            status_msg = "Market hours restrictions disabled - all systems always active"
+            
+        return f"Market hours settings updated successfully.", status_msg
+    except Exception as e:
+        return f"Error updating market hours settings: {e}", "Failed to update settings"
+
 def test_telegram_connection():
     """Test Telegram connection with current settings"""
     try:
@@ -161,6 +207,15 @@ def load_telegram_settings_for_ui():
         status = "**Status:** ❌ **Disabled** - Telegram notifications are turned off"
     
     return enabled, bot_token, chat_id, status
+
+def load_market_hours_settings_for_ui():
+    """Load current market hours settings for UI components"""
+    settings = load_settings()
+    respect_market_hours = settings.get('respect_market_hours', True)
+    enable_after_hours_notifications = settings.get('enable_after_hours_notifications', False)
+    enable_after_hours_pnl_tracking = settings.get('enable_after_hours_pnl_tracking', False)
+    
+    return respect_market_hours, enable_after_hours_notifications, enable_after_hours_pnl_tracking
 
 # --- Flattrade API Integration ---
 
@@ -465,15 +520,22 @@ ANGELONE_LOGIN_URL = 'https://smartapi.angelone.in/publisher-login'
 class AngelOneAPI:
     """Angel One SmartAPI client for authentication and trading operations"""
     
-    def __init__(self, api_key, client_id, client_pin, totp_key):
-        self.api_key = api_key
-        self.client_id = client_id
-        self.client_pin = client_pin
+    def __init__(self, api_key, client_code, login_pin, totp_key, client_local_ip='127.0.0.1', client_public_ip='127.0.0.1', mac_address='00:00:00:00:00:00'):
+        self.api_key = api_key  # Private Key for X-PrivateKey header
+        self.client_code = client_code  # Updated from client_id to match API docs
+        self.login_pin = login_pin  # Updated from client_pin to be clearer
         self.totp_key = totp_key
-        self.access_token = None
-        self.jwt_token = None
-        self.refresh_token = None
-        self.feed_token = None
+        
+        # Network configuration for required headers
+        self.client_local_ip = client_local_ip
+        self.client_public_ip = client_public_ip 
+        self.mac_address = mac_address
+        
+        # Token storage
+        self.jwt_token = None  # Main authentication token
+        self.refresh_token = None  # For token refresh
+        self.feed_token = None  # For WebSocket feeds
+        self.access_token = None  # Alias for jwt_token for compatibility
         self.session_data = {}
     
     def generate_totp(self):
@@ -502,23 +564,23 @@ class AngelOneAPI:
             # Generate TOTP
             totp_code = self.generate_totp()
             
-            # Login request data
+            # Login request data (as per SmartAPI documentation)
             login_data = {
-                'clientcode': self.client_id,
-                'password': self.client_pin,
+                'clientcode': self.client_code,  # Updated field name
+                'password': self.login_pin,  # Updated field name
                 'totp': totp_code
             }
             
-            # Required headers for Angel One API
+            # Required headers for Angel One API (as per documentation)
             headers = {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
                 'X-UserType': 'USER',
                 'X-SourceID': 'WEB',
-                'X-ClientLocalIP': '127.0.0.1',
-                'X-ClientPublicIP': '127.0.0.1',
-                'X-MACAddress': '00:00:00:00:00:00',
-                'X-PrivateKey': self.api_key
+                'X-ClientLocalIP': self.client_local_ip,
+                'X-ClientPublicIP': self.client_public_ip,
+                'X-MACAddress': self.mac_address,
+                'X-PrivateKey': self.api_key  # API Key goes in X-PrivateKey header
             }
             
             # Make login request
@@ -538,7 +600,7 @@ class AngelOneAPI:
                 self.access_token = self.jwt_token  # Use JWT token as access token
                 
                 self.session_data = {
-                    'clientId': self.client_id,
+                    'clientCode': self.client_code,  # Updated field name
                     'jwtToken': self.jwt_token,
                     'refreshToken': self.refresh_token,
                     'feedToken': self.feed_token,
@@ -564,15 +626,16 @@ class AngelOneAPI:
                 'refreshToken': self.refresh_token
             }
             
+            # Updated headers with configurable network info
             headers = {
                 'Authorization': f'Bearer {self.jwt_token}',
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
                 'X-UserType': 'USER',
                 'X-SourceID': 'WEB',
-                'X-ClientLocalIP': '127.0.0.1',
-                'X-ClientPublicIP': '127.0.0.1', 
-                'X-MACAddress': '00:00:00:00:00:00',
+                'X-ClientLocalIP': self.client_local_ip,
+                'X-ClientPublicIP': self.client_public_ip,
+                'X-MACAddress': self.mac_address,
                 'X-PrivateKey': self.api_key
             }
             
@@ -760,10 +823,10 @@ class AngelOneAPI:
 # Global Angel One API instance
 angelone_api = None
 
-def initialize_angelone_api(api_key, client_id, client_pin, totp_key):
+def initialize_angelone_api(api_key, client_code, login_pin, totp_key, client_local_ip='127.0.0.1', client_public_ip='127.0.0.1', mac_address='00:00:00:00:00:00'):
     """Initialize Angel One API client"""
     global angelone_api
-    angelone_api = AngelOneAPI(api_key, client_id, client_pin, totp_key)
+    angelone_api = AngelOneAPI(api_key, client_code, login_pin, totp_key, client_local_ip, client_public_ip, mac_address)
     return angelone_api
 
 def authenticate_angelone():
@@ -817,38 +880,42 @@ def initialize_angelone_for_trading():
         if not angelone_config.get('enabled', False):
             return False, "Angel One broker not enabled"
         
-        # Get credentials
+        # Get credentials with updated field names
         api_key = angelone_config.get('api_key', '').strip()
-        client_id = angelone_config.get('client_id', '').strip()
-        client_pin = angelone_config.get('client_pin', '').strip()
+        client_code = angelone_config.get('client_code', '').strip()  # Updated field name
+        login_pin = angelone_config.get('login_pin', '').strip()  # Updated field name
         totp_key = angelone_config.get('totp_key', '').strip()
         
-        if not all([api_key, client_id, client_pin, totp_key]):
-            return False, "Missing Angel One credentials (API Key, Client ID, PIN, TOTP Key required)"
+        # Get network configuration
+        client_local_ip = angelone_config.get('client_local_ip', '127.0.0.1')
+        client_public_ip = angelone_config.get('client_public_ip', '127.0.0.1')
+        mac_address = angelone_config.get('mac_address', '00:00:00:00:00:00')
+        
+        if not all([api_key, client_code, login_pin, totp_key]):
+            return False, "Missing Angel One credentials (API Key, Client Code, Login PIN, TOTP Key required)"
         
         # Initialize API if not already done
         if not angelone_api:
-            angelone_api = AngelOneAPI(api_key, client_id, client_pin, totp_key)
+            angelone_api = AngelOneAPI(api_key, client_code, login_pin, totp_key, client_local_ip, client_public_ip, mac_address)
         
         # Check if we have saved tokens
-        access_token = angelone_config.get('access_token', '').strip()
         jwt_token = angelone_config.get('jwt_token', '').strip()
         refresh_token = angelone_config.get('refresh_token', '').strip()
         
-        if access_token and jwt_token:
+        if jwt_token and refresh_token:
             # Use the saved tokens
-            angelone_api.access_token = access_token
             angelone_api.jwt_token = jwt_token
             angelone_api.refresh_token = refresh_token
+            angelone_api.access_token = jwt_token  # JWT token is the access token
             print(f"✅ Loaded saved Angel One tokens from settings")
             
             # Try to refresh the token to ensure it's still valid
             refresh_success, refresh_msg = angelone_api.refresh_access_token()
             if refresh_success:
                 # Save the refreshed tokens
-                angelone_config['access_token'] = angelone_api.access_token
                 angelone_config['jwt_token'] = angelone_api.jwt_token
                 angelone_config['refresh_token'] = angelone_api.refresh_token
+                angelone_config['feed_token'] = angelone_api.feed_token
                 settings['brokers']['angelone'] = angelone_config
                 save_settings(settings)
                 print(f"✅ Angel One tokens refreshed successfully")
@@ -859,7 +926,7 @@ def initialize_angelone_for_trading():
         success, message = angelone_api.authenticate()
         if success:
             # Save the new tokens to settings
-            angelone_config['access_token'] = angelone_api.access_token
+            angelone_config['jwt_token'] = angelone_api.jwt_token
             angelone_config['jwt_token'] = angelone_api.jwt_token
             angelone_config['refresh_token'] = angelone_api.refresh_token
             angelone_config['feed_token'] = angelone_api.feed_token
@@ -920,7 +987,7 @@ def load_broker_settings_for_ui(broker_name):
     
     return enabled, client_id, api_key, secret_key, status
 
-def update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key, redirect_url=None):
+def update_angelone_settings(enabled, client_code, api_key, login_pin, totp_key, client_local_ip=None, client_public_ip=None, mac_address=None):
     """Update Angel One specific configuration settings"""
     try:
         settings = load_settings()
@@ -930,14 +997,15 @@ def update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key, 
             settings['brokers']['angelone'] = {}
             
         settings['brokers']['angelone']['enabled'] = enabled
-        settings['brokers']['angelone']['client_id'] = client_id.strip() if client_id else ""
+        settings['brokers']['angelone']['client_code'] = client_code.strip() if client_code else ""  # Updated field name
         settings['brokers']['angelone']['api_key'] = api_key.strip() if api_key else ""
-        settings['brokers']['angelone']['client_pin'] = client_pin.strip() if client_pin else ""
+        settings['brokers']['angelone']['login_pin'] = login_pin.strip() if login_pin else ""  # Updated field name
         settings['brokers']['angelone']['totp_key'] = totp_key.strip() if totp_key else ""
         
-        # Add redirect URL for web authentication (optional)
-        if redirect_url is not None:
-            settings['brokers']['angelone']['redirect_url'] = redirect_url.strip() if redirect_url else "http://localhost:3001/callback"
+        # Add required headers for API calls
+        settings['brokers']['angelone']['client_local_ip'] = client_local_ip.strip() if client_local_ip else "127.0.0.1"
+        settings['brokers']['angelone']['client_public_ip'] = client_public_ip.strip() if client_public_ip else "127.0.0.1"  
+        settings['brokers']['angelone']['mac_address'] = mac_address.strip() if mac_address else "00:00:00:00:00:00"
         
         save_settings(settings)
         return f"AngelOne settings updated successfully. {'Enabled' if enabled else 'Disabled'}."
@@ -950,37 +1018,48 @@ def load_angelone_settings_for_ui():
     angelone_config = settings.get('brokers', {}).get('angelone', {})
     
     enabled = angelone_config.get('enabled', False)
-    client_id = angelone_config.get('client_id', '')
+    client_code = angelone_config.get('client_code', '')  # Updated field name
     api_key = angelone_config.get('api_key', '')
-    client_pin = angelone_config.get('client_pin', '')
+    login_pin = angelone_config.get('login_pin', '')  # Updated field name
     totp_key = angelone_config.get('totp_key', '')
-    redirect_url = angelone_config.get('redirect_url', 'http://localhost:3001/callback')
-    access_token = angelone_config.get('access_token', '')
+    client_local_ip = angelone_config.get('client_local_ip', '127.0.0.1')
+    client_public_ip = angelone_config.get('client_public_ip', '127.0.0.1') 
+    mac_address = angelone_config.get('mac_address', '00:00:00:00:00:00')
+    
+    # Token information
+    jwt_token = angelone_config.get('jwt_token', '')
+    refresh_token = angelone_config.get('refresh_token', '')
+    feed_token = angelone_config.get('feed_token', '')
     
     # Create status message
     if enabled:
-        required_fields = [client_id, api_key, client_pin, totp_key]
+        required_fields = [client_code, api_key, login_pin, totp_key]
         if all(required_fields):
-            if access_token:
+            if jwt_token:
                 status = f"**Status:** ✅ **Connected** - AngelOne is authenticated and ready"
             else:
                 status = f"**Status:** ⚠️ **Configured but not authenticated** - Please test connection"
         else:
             missing_fields = []
-            if not client_id: missing_fields.append("Client ID")
-            if not api_key: missing_fields.append("API Key")
-            if not client_pin: missing_fields.append("Login PIN")
+            if not client_code: missing_fields.append("Client Code")
+            if not api_key: missing_fields.append("API Key") 
+            if not login_pin: missing_fields.append("Login PIN")
             if not totp_key: missing_fields.append("TOTP Key")
             status = f"**Status:** ⚠️ **Missing fields:** {', '.join(missing_fields)}"
     else:
         status = f"**Status:** ❌ **Disabled** - AngelOne integration is turned off"
     
-    # Auth status
+    # Auth status with token information
     auth_status = "**Authentication Status:** Not authenticated"
-    if access_token:
-        auth_status = "**Authentication Status:** ✅ Authenticated and ready for trading"
+    if jwt_token:
+        token_preview = jwt_token[:20] + "..." if len(jwt_token) > 20 else jwt_token
+        refresh_preview = refresh_token[:20] + "..." if len(refresh_token) > 20 else refresh_token
+        auth_status = f"""**Authentication Status:** ✅ Authenticated and ready for trading
+**JWT Token:** `{token_preview}`
+**Refresh Token:** `{refresh_preview}` 
+**Feed Token:** `{feed_token[:20] + '...' if len(feed_token) > 20 else feed_token}`"""
     
-    return enabled, client_id, api_key, client_pin, totp_key, redirect_url, status, auth_status
+    return enabled, client_code, api_key, login_pin, totp_key, client_local_ip, client_public_ip, mac_address, status, auth_status
 
 def test_angelone_connection():
     """Test Angel One connection and authenticate"""
@@ -991,17 +1070,22 @@ def test_angelone_connection():
         if not angelone_config.get('enabled', False):
             return "❌ AngelOne integration is disabled. Please enable it first."
         
-        # Get credentials
+        # Get credentials with updated field names
         api_key = angelone_config.get('api_key', '').strip()
-        client_id = angelone_config.get('client_id', '').strip()
-        client_pin = angelone_config.get('client_pin', '').strip()
+        client_code = angelone_config.get('client_code', '').strip()  # Updated
+        login_pin = angelone_config.get('login_pin', '').strip()  # Updated
         totp_key = angelone_config.get('totp_key', '').strip()
         
-        if not all([api_key, client_id, client_pin, totp_key]):
-            return "❌ Missing required credentials. Please fill all fields (Client ID, API Key, PIN, TOTP Key)."
+        # Get network configuration
+        client_local_ip = angelone_config.get('client_local_ip', '127.0.0.1')
+        client_public_ip = angelone_config.get('client_public_ip', '127.0.0.1')
+        mac_address = angelone_config.get('mac_address', '00:00:00:00:00:00')
         
-        # Initialize Angel One API
-        initialize_angelone_api(api_key, client_id, client_pin, totp_key)
+        if not all([api_key, client_code, login_pin, totp_key]):
+            return "❌ Missing required credentials. Please fill all fields (Client Code, API Key, Login PIN, TOTP Key)."
+        
+        # Initialize Angel One API with updated parameters
+        initialize_angelone_api(api_key, client_code, login_pin, totp_key, client_local_ip, client_public_ip, mac_address)
         
         # Attempt authentication
         success, message = authenticate_angelone()
@@ -1013,6 +1097,87 @@ def test_angelone_connection():
             
     except Exception as e:
         return f"❌ Error testing AngelOne connection: {str(e)}"
+
+def refresh_angelone_token():
+    """Refresh AngelOne JWT token using refresh token"""
+    try:
+        settings = load_settings()
+        angelone_config = settings.get('brokers', {}).get('angelone', {})
+        
+        if not angelone_config.get('enabled', False):
+            return "❌ AngelOne integration is disabled. Please enable it first."
+        
+        refresh_token = angelone_config.get('refresh_token', '').strip()
+        api_key = angelone_config.get('api_key', '').strip()
+        
+        if not refresh_token:
+            return "❌ No refresh token found. Please authenticate first using 'Test Connection & Authenticate'."
+        
+        if not api_key:
+            return "❌ API Key is required for token refresh."
+        
+        # Prepare refresh request
+        import requests
+        import json
+        
+        url = "https://apiconnect.angelone.in/rest/auth/angelbroking/jwt/v1/generateTokens"
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-UserType': 'USER',
+            'X-SourceID': 'WEB',
+            'X-ClientLocalIP': angelone_config.get('client_local_ip', '127.0.0.1'),
+            'X-ClientPublicIP': angelone_config.get('client_public_ip', '127.0.0.1'),
+            'X-MACAddress': angelone_config.get('mac_address', '00:00:00:00:00:00'),
+            'X-PrivateKey': api_key
+        }
+        
+        payload = {
+            "refreshToken": refresh_token
+        }
+        
+        response = requests.post(url, headers=headers, data=json.dumps(payload), timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if data.get('status') and data.get('data'):
+                token_data = data['data']
+                new_jwt_token = token_data.get('jwtToken', '')
+                new_refresh_token = token_data.get('refreshToken', '')
+                new_feed_token = token_data.get('feedToken', '')
+                
+                # Update stored tokens
+                if 'angelone' not in settings['brokers']:
+                    settings['brokers']['angelone'] = {}
+                    
+                settings['brokers']['angelone']['jwt_token'] = new_jwt_token
+                settings['brokers']['angelone']['refresh_token'] = new_refresh_token 
+                settings['brokers']['angelone']['feed_token'] = new_feed_token
+                settings['brokers']['angelone']['last_token_refresh'] = datetime.now().isoformat()
+                
+                save_settings(settings)
+                
+                return f"""✅ **AngelOne Token Refresh Successful!**
+
+**📊 New Token Details:**
+- **JWT Token:** `{new_jwt_token[:30]}...`
+- **Refresh Token:** `{new_refresh_token[:30]}...`
+- **Feed Token:** `{new_feed_token[:30] if new_feed_token else 'N/A'}...`
+- **Refreshed At:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+**✅ Status:** Ready for API operations with fresh tokens."""
+            else:
+                error_msg = data.get('message', 'Unknown error')
+                return f"❌ Token refresh failed: {error_msg}"
+        else:
+            return f"❌ Token refresh failed with HTTP {response.status_code}: {response.text[:200]}"
+            
+    except requests.exceptions.RequestException as e:
+        return f"❌ Network error during token refresh: {str(e)}"
+    except Exception as e:
+        return f"❌ Error refreshing AngelOne token: {str(e)}"
 
 def authenticate_angelone_manual():
     """Manual Angel One authentication"""
@@ -1580,6 +1745,11 @@ def send_telegram_message(message, image_paths=None):
     # Check if Telegram is enabled
     if not settings.get('telegram_enabled', True):
         return "Telegram notifications are disabled in settings."
+    
+    # Check market hours setting
+    if settings.get('respect_market_hours', True) and not settings.get('enable_after_hours_notifications', False):
+        if not is_market_hours():
+            return "Telegram notification skipped - outside market hours."
     
     BOT_TOKEN = settings.get('telegram_bot_token', DEFAULT_BOT_TOKEN)
     CHAT_ID = settings.get('telegram_chat_id', DEFAULT_CHAT_ID)
@@ -2403,6 +2573,14 @@ def send_pl_summary(is_eod_report=False):
 
 def track_pnl_history():
     """Scheduled to run every 5 mins to record P/L for the EOD graph."""
+    settings = load_settings()
+    
+    # Check market hours setting for P&L tracking
+    if settings.get('respect_market_hours', True) and not settings.get('enable_after_hours_pnl_tracking', False):
+        if not is_market_hours():
+            print("P&L tracking skipped - outside market hours.")
+            return
+    
     global daily_pnl_tracker
     active_trades = [t for t in load_trades() if t.get('status') == 'Running']
     if not active_trades:
@@ -3472,85 +3650,109 @@ def build_ui():
                         1. Login to your AngelOne account and go to [SmartAPI Portal](https://smartapi.angelbroking.com/)
                         2. Create a new app to get API credentials
                         3. Setup TOTP (Google Authenticator) in your AngelOne account
-                        4. Get your Client ID, API Key, Login PIN, and TOTP Secret Key
+                        4. Get your Client Code, API Key, Login PIN, and TOTP Secret Key
                         
-                        **Required Fields:**
-                        - **Client ID**: Your AngelOne trading account ID
-                        - **API Key**: From SmartAPI app registration  
-                        - **Login PIN**: Your AngelOne account PIN (4 or 6 digits)
-                        - **TOTP Secret**: Secret key from TOTP setup (for 2FA)
+                        **📋 Required Fields (as per SmartAPI Documentation):**
+                        - **Client Code**: Your AngelOne trading client code (not Client ID)
+                        - **API Key**: Private Key from SmartAPI app registration  
+                        - **Login PIN**: Your AngelOne account PIN/password
+                        - **TOTP Secret**: Secret key from TOTP setup (for 2FA authentication)
                         """)
                         
                         angelone_enabled = gr.Checkbox(label="Enable AngelOne Integration", value=False)
-                        angelone_client_id = gr.Textbox(
-                            label="Client ID", 
-                            placeholder="Enter your AngelOne Client ID (e.g., A123456)",
-                            info="Your AngelOne trading account ID"
+                        
+                        # Updated field names to match API documentation
+                        angelone_client_code = gr.Textbox(
+                            label="Client Code", 
+                            placeholder="Enter your AngelOne Client Code (e.g., A123456)",
+                            info="Your AngelOne trading client code (required for API authentication)"
                         )
                         angelone_api_key = gr.Textbox(
-                            label="API Key", 
+                            label="API Key (Private Key)", 
                             placeholder="Enter your AngelOne API Key", 
                             type="password",
-                            info="API Key from SmartAPI app registration"
+                            info="Private Key from SmartAPI app registration (used in X-PrivateKey header)"
                         )
-                        angelone_client_pin = gr.Textbox(
-                            label="Login PIN", 
-                            placeholder="Enter your AngelOne login PIN", 
+                        angelone_login_pin = gr.Textbox(
+                            label="Login PIN/Password", 
+                            placeholder="Enter your AngelOne login PIN/password", 
                             type="password",
-                            info="Your AngelOne account PIN (4 or 6 digits)"
+                            info="Your AngelOne account PIN or password"
                         )
                         angelone_totp_key = gr.Textbox(
                             label="TOTP Secret Key", 
                             placeholder="Enter your TOTP secret key", 
                             type="password",
-                            info="Secret key from TOTP setup (Google Authenticator)"
+                            info="Secret key from TOTP setup (Google Authenticator) - generates 6-digit codes"
                         )
                         
-                        with gr.Accordion("Web Authentication (Optional)", open=False):
+                        with gr.Accordion("Network Configuration (Optional)", open=False):
                             gr.Markdown("""
-                            **Alternative Web-based Authentication:**
-                            For users who prefer web-based login similar to Flattrade OAuth flow.
-                            This is optional - you can use either direct API login or web authentication.
+                            **Network Headers Required by SmartAPI:**
+                            These are automatically detected but can be overridden if needed.
                             """)
-                            angelone_redirect_url = gr.Textbox(
-                                label="Redirect URL", 
-                                value="http://localhost:3001/callback",
-                                info="URL for web-based authentication callback"
+                            angelone_client_local_ip = gr.Textbox(
+                                label="Client Local IP", 
+                                value="127.0.0.1",
+                                info="Local IP address (X-ClientLocalIP header)"
                             )
-                            with gr.Row():
-                                generate_angelone_oauth_btn = gr.Button("Generate Publisher Login URL", variant="secondary")
-                                check_angelone_callback_btn = gr.Button("Check Callback Status", variant="secondary")
-                            
-                            angelone_oauth_url_display = gr.Markdown(value="**Publisher Login URL will appear here**")
-                            angelone_callback_status = gr.Markdown(value="**Callback status will appear here**")
+                            angelone_client_public_ip = gr.Textbox(
+                                label="Client Public IP", 
+                                value="127.0.0.1",
+                                info="Public IP address (X-ClientPublicIP header)"
+                            )
+                            angelone_mac_address = gr.Textbox(
+                                label="MAC Address", 
+                                value="00:00:00:00:00:00",
+                                info="System MAC address (X-MACAddress header)"
+                            )
                         
                         with gr.Row():
                             save_angelone_btn = gr.Button("Save AngelOne Settings", variant="primary")
                             test_angelone_btn = gr.Button("Test Connection & Authenticate", variant="secondary")
-                            authenticate_angelone_btn = gr.Button("Manual Authentication", variant="secondary")
+                            refresh_angelone_token_btn = gr.Button("🔄 Refresh Token", variant="secondary")
+                        
+                        gr.Markdown("### 🔄 Token Management")
+                        gr.Markdown("""
+                        **One-Click Token Refresh:** Use the Refresh Token button to get new JWT tokens without re-entering credentials.
+                        This uses the stored refresh token from your last successful authentication.
+                        """)
                         
                         gr.Markdown("### Authentication Status")
                         angelone_auth_status = gr.Markdown(value="**Authentication Status:** Not authenticated")
                         
-                        with gr.Accordion("AngelOne API Information", open=False):
+                        with gr.Accordion("AngelOne SmartAPI Information", open=False):
                             gr.Markdown("""
                             **AngelOne SmartAPI Features:**
                             - ✅ Market Orders & Limit Orders
-                            - ✅ Real-time market data
+                            - ✅ Real-time market data via WebSocket
                             - ✅ Portfolio & positions tracking
                             - ✅ NIFTY/BANKNIFTY options trading
-                            - ✅ Automated TOTP authentication
-                            - ✅ Session management with token refresh
+                            - ✅ JWT token-based authentication
+                            - ✅ Refresh token support (28-hour sessions)
+                            
+                            **Authentication Flow:**
+                            1. **Login API**: Uses clientcode, password, totp → Returns JWT + Refresh + Feed tokens
+                            2. **Generate Token API**: Uses refresh token → Returns new JWT + Refresh tokens
+                            3. **Session Duration**: Up to 28 hours unless manually logged out
+                            
+                            **API Headers Required:**
+                            - `X-PrivateKey`: Your API Key
+                            - `X-ClientLocalIP`: Local IP address
+                            - `X-ClientPublicIP`: Public IP address  
+                            - `X-MACAddress`: System MAC address
+                            - `X-UserType`: USER (fixed)
+                            - `X-SourceID`: WEB (fixed)
                             
                             **Symbol Format Examples:**
                             - Equity: `RELIANCE-EQ`, `SBIN-EQ`
-                            - F&O: `NIFTY25AUG25F`, `NIFTY25AUG25100CE`
-                            - Currency: `USDINR25AUGFUT`
+                            - F&O: `NIFTY28AUG25F`, `NIFTY28AUG2525000CE`, `NIFTY28AUG2525000PE`
+                            - Currency: `USDINR28AUGFUT`
                             
                             **Product Types:**
-                            - INTRADAY (MIS) - Intraday trading
-                            - DELIVERY (CNC) - Cash & Carry  
-                            - CARRYFORWARD (NRML) - Normal (F&O)
+                            - INTRADAY (MIS) - Intraday/Margin trading
+                            - DELIVERY (CNC) - Cash & Carry delivery
+                            - CARRYFORWARD (NRML) - Normal (F&O positions)
                             """)
                         
                         angelone_status = gr.Markdown(value="**Status:** Loading...")
@@ -3596,6 +3798,26 @@ def build_ui():
                             value=True,
                             info="Master switch for all Telegram alerts"
                         )
+                        
+                        with gr.Column():
+                            gr.Markdown("### Market Hours Controls")
+                            respect_market_hours = gr.Checkbox(
+                                label="Respect Market Hours", 
+                                value=True,
+                                info="Enable market hours restrictions for notifications and P&L tracking"
+                            )
+                            enable_after_hours_notifications = gr.Checkbox(
+                                label="Allow After-Hours Notifications", 
+                                value=False,
+                                info="Send Telegram notifications outside market hours (9:15 AM - 3:30 PM IST)"
+                            )
+                            enable_after_hours_pnl_tracking = gr.Checkbox(
+                                label="Allow After-Hours P&L Tracking", 
+                                value=False,
+                                info="Continue P&L tracking outside market hours"
+                            )
+                            save_market_hours_button = gr.Button("Save Market Hours Settings", variant="secondary")
+                            market_hours_status_display = gr.Markdown(value="**Status:** Loading...", visible=True)
                         telegram_bot_token = gr.Textbox(
                             label="Bot Token", 
                             value="",
@@ -3727,6 +3949,7 @@ def build_ui():
         save_telegram_button.click(fn=update_telegram_settings, inputs=[telegram_enabled, telegram_bot_token, telegram_chat_id], outputs=[settings_status_box, telegram_status_display])
         test_telegram_button.click(fn=test_telegram_connection, outputs=[settings_status_box])
         telegram_enabled.change(fn=update_telegram_status_on_toggle, inputs=[telegram_enabled, telegram_bot_token, telegram_chat_id], outputs=[telegram_status_display])
+        save_market_hours_button.click(fn=update_market_hours_settings, inputs=[respect_market_hours, enable_after_hours_notifications, enable_after_hours_pnl_tracking], outputs=[settings_status_box, market_hours_status_display])
         add_schedule_button.click(fn=add_new_schedule, inputs=[new_schedule_days, new_schedule_time, new_schedule_index, new_schedule_calc], outputs=[schedules_df, settings_status_box])
         schedules_df.select(fn=handle_schedule_select, inputs=[schedules_df], outputs=[selected_schedule_id_hidden, delete_schedule_button])
         delete_schedule_button.click(fn=delete_schedule_by_id, inputs=[selected_schedule_id_hidden], outputs=[schedules_df, settings_status_box]).then(lambda: ("", gr.Button(interactive=False)), outputs=[selected_schedule_id_hidden, delete_schedule_button])
@@ -3785,12 +4008,12 @@ def build_ui():
         )
         
         save_angelone_btn.click(
-            fn=lambda enabled, client_id, api_key, client_pin, totp_key, redirect_url: update_angelone_settings(enabled, client_id, api_key, client_pin, totp_key, redirect_url),
-            inputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_redirect_url],
+            fn=lambda enabled, client_code, api_key, login_pin, totp_key, client_local_ip, client_public_ip, mac_address: update_angelone_settings(enabled, client_code, api_key, login_pin, totp_key, client_local_ip, client_public_ip, mac_address),
+            inputs=[angelone_enabled, angelone_client_code, angelone_api_key, angelone_login_pin, angelone_totp_key, angelone_client_local_ip, angelone_client_public_ip, angelone_mac_address],
             outputs=[settings_status_box]
         ).then(
             fn=load_angelone_settings_for_ui,
-            outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_redirect_url, angelone_status, angelone_auth_status]
+            outputs=[angelone_enabled, angelone_client_code, angelone_api_key, angelone_login_pin, angelone_totp_key, angelone_client_local_ip, angelone_client_public_ip, angelone_mac_address, angelone_status, angelone_auth_status]
         )
         
         test_angelone_btn.click(
@@ -3798,20 +4021,12 @@ def build_ui():
             outputs=[settings_status_box]
         )
         
-        generate_angelone_oauth_btn.click(
-            fn=lambda client_id, api_key, redirect_url: generate_angelone_oauth_url(api_key),
-            inputs=[angelone_client_id, angelone_api_key, angelone_redirect_url],
-            outputs=[angelone_oauth_url_display]
-        )
-        
-        check_angelone_callback_btn.click(
-            fn=check_angelone_callback_status,
-            outputs=[angelone_callback_status]
-        )
-        
-        authenticate_angelone_btn.click(
-            fn=authenticate_angelone_manual,
-            outputs=[angelone_auth_status]
+        refresh_angelone_token_btn.click(
+            fn=refresh_angelone_token,
+            outputs=[settings_status_box]
+        ).then(
+            fn=load_angelone_settings_for_ui,
+            outputs=[angelone_enabled, angelone_client_code, angelone_api_key, angelone_login_pin, angelone_totp_key, angelone_client_local_ip, angelone_client_public_ip, angelone_mac_address, angelone_status, angelone_auth_status]
         )
         
         save_zerodha_btn.click(
@@ -3831,10 +4046,11 @@ def build_ui():
         demo.load(fn=update_expiry_dates, inputs=index_dropdown, outputs=expiry_dropdown)
         demo.load(fn=update_expiry_dates, inputs=manual_instrument, outputs=manual_expiry)
         demo.load(fn=load_telegram_settings_for_ui, outputs=[telegram_enabled, telegram_bot_token, telegram_chat_id, telegram_status_display])
+        demo.load(fn=load_market_hours_settings_for_ui, outputs=[respect_market_hours, enable_after_hours_notifications, enable_after_hours_pnl_tracking])
         
         # Load broker settings on demo start
         demo.load(fn=lambda: load_broker_settings_for_ui("flattrade"), outputs=[flattrade_enabled, flattrade_client_id, flattrade_api_key, flattrade_secret_key, flattrade_status])
-        demo.load(fn=load_angelone_settings_for_ui, outputs=[angelone_enabled, angelone_client_id, angelone_api_key, angelone_client_pin, angelone_totp_key, angelone_redirect_url, angelone_status, angelone_auth_status])
+        demo.load(fn=load_angelone_settings_for_ui, outputs=[angelone_enabled, angelone_client_code, angelone_api_key, angelone_login_pin, angelone_totp_key, angelone_client_local_ip, angelone_client_public_ip, angelone_mac_address, angelone_status, angelone_auth_status])
         demo.load(fn=lambda: load_broker_settings_for_ui("zerodha"), outputs=[zerodha_enabled, zerodha_client_id, zerodha_api_key, zerodha_secret_key, zerodha_status])
         demo.load(fn=get_broker_status_summary, outputs=[broker_status_display])
         
