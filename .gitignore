@@ -1,0 +1,60 @@
+# FIFTO AI Trading - Git Ignore
+
+# Environment variables (contains secrets)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.venv-1/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project specific
+logs/
+logs/*/
+*.log
+server.err.log
+server.log
+server_new.log
+trades.json
+$1
+
+# Credentials (NEVER commit these)
+gsheet_creds.json
+
+# Claude internal
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files (optional, keep if needed)
+# test_*.py
+
+# Backup files
+*.bak
+*.backup

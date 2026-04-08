@@ -1,0 +1,2715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIFTO AI Trading</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── DARK theme (default) ── */
+:root {
+  --bg:       #0c0c0f;
+  --surface:  #111116;
+  --surface2: #17171e;
+  --surface3: #1e1e28;
+  --line:     rgba(255,255,255,0.07);
+  --line2:    rgba(255,255,255,0.12);
+
+  --blue:     #4f8ef7;
+  --blue-bg:  rgba(79,142,247,0.10);
+  --green:    #2dd698;
+  --green-bg: rgba(45,214,152,0.10);
+  --red:      #f75252;
+  --red-bg:   rgba(247,82,82,0.10);
+  --amber:    #f5a623;
+  --amber-bg: rgba(245,166,35,0.10);
+  --purple:   #9b72f5;
+
+  --t1: #f0f0f8;
+  --t2: #8a8aa8;
+  --t3: #44445a;
+
+  --ui:   'Inter', sans-serif;
+  --mono: 'IBM Plex Mono', monospace;
+  --r:    8px;
+}
+
+/* ── LIGHT theme ── */
+html.light {
+  --bg:       #f4f5f7;
+  --surface:  #ffffff;
+  --surface2: #f0f1f4;
+  --surface3: #e4e6eb;
+  --line:     rgba(0,0,0,0.08);
+  --line2:    rgba(0,0,0,0.14);
+
+  --blue:     #2563eb;
+  --blue-bg:  rgba(37,99,235,0.08);
+  --green:    #059669;
+  --green-bg: rgba(5,150,105,0.08);
+  --red:      #dc2626;
+  --red-bg:   rgba(220,38,38,0.08);
+  --amber:    #d97706;
+  --amber-bg: rgba(217,119,6,0.08);
+  --purple:   #7c3aed;
+
+  --t1: #111827;
+  --t2: #4b5563;
+  --t3: #9ca3af;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--t1);
+  font-family: var(--ui);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ══════════════ TOPBAR ══════════════ */
+.topbar {
+  height: 52px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.brand-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+.brand-logo-text {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1;
+}
+.brand-logo-text .g { color: #1e7a34; }
+.brand-logo-text .r { color: #cc2200; }
+.brand-sub-text {
+  font-size: 9px;
+  color: var(--t3);
+  font-weight: 400;
+  letter-spacing: .02em;
+  margin-top: 1px;
+}
+
+.topbar-middle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+}
+.nav-tab {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--t2);
+  cursor: pointer;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+  border-radius: 0;
+}
+.nav-tab:hover  { color: var(--t1); }
+.nav-tab.active { color: var(--t1); border-bottom-color: var(--blue); }
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+.index-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.index-chip-label { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; line-height: 1; }
+.index-chip-val   { font-family: var(--mono); font-size: 13px; font-weight: 500; line-height: 1.4; }
+
+.divider-v { width: 1px; height: 20px; background: var(--line2); }
+
+.clock {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t2);
+  letter-spacing: .04em;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.pill-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pill.paper   { background: var(--amber-bg); color: var(--amber); }
+.pill.live    { background: var(--green-bg); color: var(--green); }
+.pill.off     { background: var(--red-bg);   color: var(--red); }
+.pill.mkt-open   { background: var(--green-bg); color: var(--green); font-size: 10px; }
+.pill.mkt-closed { background: rgba(120,120,140,.15); color: var(--t3); font-size: 10px; }
+
+/* ══════════════ BODY ══════════════ */
+.body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ══════════════ SIDEBAR ══════════════ */
+.sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+  gap: 2px;
+  overflow-y: auto;
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--t2);
+  cursor: pointer;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  transition: all .12s;
+}
+.sidebar-item:hover  { color: var(--t1); background: var(--surface2); border-left-color: var(--t3); }
+.sidebar-item.active { color: var(--t1); background: var(--surface2); border-left-color: var(--blue); }
+.sidebar-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+
+.sidebar-group-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--t3);
+  font-weight: 600;
+  padding: 12px 10px 4px;
+}
+
+/* ══════════════ CONTENT AREA ══════════════ */
+.content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* PAGE */
+.page { display: none; height: 100%; overflow-y: auto; }
+.page.active { display: block; }
+
+/* ══════════════ DASHBOARD PAGE ══════════════ */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  grid-template-rows: auto auto auto auto;
+  gap: 14px;
+  padding: 18px;
+  min-height: 100%;
+}
+
+/* ── CARDS ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.card-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--t3);
+  font-weight: 600;
+}
+
+/* KPI row */
+.kpi-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.kpi-label { font-size: 10px; color: var(--t2); margin-bottom: 6px; }
+.kpi-val {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  line-height: 1;
+}
+.kpi-sub { font-size: 10px; color: var(--t3); margin-top: 4px; }
+
+/* colors */
+.c-green  { color: var(--green); }
+.c-red    { color: var(--red); }
+.c-amber  { color: var(--amber); }
+.c-blue   { color: var(--blue); }
+.c-purple { color: var(--purple); }
+.c-muted  { color: var(--t2); }
+
+/* regime badge */
+.regime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 7px;
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 15px;
+  border: 1px solid transparent;
+}
+.regime-badge.A { background: var(--green-bg); color: var(--green); border-color: rgba(45,214,152,.2); }
+.regime-badge.B { background: var(--amber-bg); color: var(--amber); border-color: rgba(245,166,35,.2); }
+.regime-badge.C { background: var(--red-bg);   color: var(--red);   border-color: rgba(247,82,82,.2); }
+.regime-badge.X { background: var(--surface3); color: var(--t2);    border-color: var(--line); }
+
+/* position */
+.pnl-display {
+  font-family: var(--mono);
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: -.03em;
+  line-height: 1;
+  margin: 2px 0 4px;
+}
+.pos-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.pos-field-label { font-size: 10px; color: var(--t2); margin-bottom: 3px; }
+.pos-field-val   { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+
+/* signal */
+.signal-card {
+  border-radius: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  transition: all .3s;
+}
+.signal-card.buy  { border-color: rgba(45,214,152,.3);  background: var(--green-bg); }
+.signal-card.sell { border-color: rgba(247,82,82,.3);   background: var(--red-bg); }
+.signal-name { font-family: var(--mono); font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+.signal-conf-val { font-family: var(--mono); font-size: 22px; font-weight: 600; }
+.conf-bar { height: 3px; background: var(--surface3); border-radius: 99px; margin: 10px 0; overflow: hidden; }
+.conf-bar-fill { height: 100%; border-radius: 99px; transition: width .5s; }
+.signal-meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 11px; }
+.sm-label { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 2px; }
+
+/* right col */
+.right-col { display: flex; flex-direction: column; gap: 14px; }
+
+/* checks */
+.ck { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.ck:last-child { border-bottom: none; }
+.ck-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.ck-dot.pass { background: var(--green); }
+.ck-dot.fail { background: var(--red); }
+.ck-dot.wait { background: var(--t3); }
+.ck-name { flex: 1; color: var(--t2); }
+.ck-val  { font-family: var(--mono); font-size: 10px; color: var(--t1); }
+
+/* risk bars */
+.rb { margin-bottom: 11px; }
+.rb:last-child { margin-bottom: 0; }
+.rb-top { display: flex; justify-content: space-between; font-size: 10px; color: var(--t2); margin-bottom: 4px; }
+.rb-pct { font-family: var(--mono); font-weight: 500; color: var(--t1); }
+.rb-track { height: 3px; background: var(--surface3); border-radius: 99px; overflow: hidden; }
+.rb-fill  { height: 100%; border-radius: 99px; transition: width .5s; background: var(--green); }
+
+/* mdata */
+.mdata-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
+.mdata-row:last-child { border-bottom: none; }
+.mdata-key { color: var(--t2); }
+.mdata-val { font-family: var(--mono); font-weight: 500; }
+
+/* log */
+.log-box {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.8;
+  height: 130px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 9px 11px;
+}
+.ll      { color: var(--t3); }
+.ll.I    { color: var(--blue); }
+.ll.W    { color: var(--amber); }
+.ll.E    { color: var(--red); }
+.ll.T    { color: var(--green); }
+
+/* trade table */
+.trade-tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+.trade-tbl th { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; color: var(--t3); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.trade-tbl td { padding: 7px 8px; border-bottom: 1px solid var(--line); font-family: var(--mono); color: var(--t1); }
+.trade-tbl tr:last-child td { border-bottom: none; }
+.trade-tbl tbody tr:hover td { background: var(--surface2); }
+
+/* controls */
+.ctrl-group { display: flex; flex-direction: column; gap: 6px; }
+.ctrl-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  font-family: var(--ui);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  letter-spacing: .02em;
+  transition: filter .12s, transform .08s;
+}
+.ctrl-btn:active { transform: scale(.97); }
+.mode-btn {
+  font-size: 10px; font-weight: 600; font-family: var(--font-ui);
+  padding: 3px 10px; border-radius: 10px;
+  border: 1px solid var(--line2); background: transparent;
+  color: var(--t3); cursor: pointer; letter-spacing: .04em;
+  transition: all .15s;
+}
+.mode-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.mode-btn:hover:not(.active) { color: var(--t1); border-color: var(--t2); }
+.ctrl-btn.ok {
+  background: var(--green);
+  color: #0a150f;
+}
+.ctrl-btn.ok:hover { filter: brightness(1.1); }
+.ctrl-btn.ok:disabled {
+  background: var(--surface3);
+  color: var(--t3);
+  cursor: not-allowed;
+  filter: none;
+}
+.ctrl-btn.danger {
+  background: var(--red);
+  color: #fff;
+}
+.ctrl-btn.danger:hover { filter: brightness(1.1); }
+.ctrl-btn.danger:disabled {
+  background: var(--surface3);
+  color: var(--t3);
+  cursor: not-allowed;
+  filter: none;
+}
+.ctrl-btn.neutral {
+  background: var(--surface3);
+  color: var(--t2);
+  border: 1px solid var(--line2);
+}
+.ctrl-btn.neutral:hover { color: var(--t1); background: var(--surface2); }
+.ctrl-btn.processing {
+  animation: btn-pulse 1s infinite;
+}
+@keyframes btn-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* AngelOne connection widget */
+.conn-widget {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0 10px 10px;
+}
+.conn-header { display: flex; align-items: center; justify-content: space-between; }
+.conn-label  { font-size: 9px; text-transform: uppercase; letter-spacing: .1em; color: var(--t3); font-weight: 600; }
+.conn-status { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; }
+.conn-dot    { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.conn-dot.connected     { background: var(--green); box-shadow: 0 0 5px var(--green); animation: pulse-conn 2s infinite; }
+.conn-dot.disconnected  { background: var(--red); }
+.conn-dot.reconnecting  { background: var(--amber); animation: pulse-conn .8s infinite; }
+@keyframes pulse-conn { 0%,100%{opacity:1} 50%{opacity:.4} }
+.conn-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.conn-meta-item { font-size: 10px; color: var(--t2); }
+.conn-meta-val  { font-family: var(--mono); font-size: 10px; color: var(--t1); font-weight: 500; }
+.conn-reconnect-btn {
+  width: 100%;
+  padding: 5px;
+  border-radius: 5px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--t2);
+  font-family: var(--ui);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .12s;
+}
+.conn-reconnect-btn:hover { color: var(--t1); background: var(--surface3); }
+
+/* ══════════════ SETTINGS PAGE ══════════════ */
+.settings-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  height: 100%;
+}
+.settings-nav {
+  border-right: 1px solid var(--line);
+  padding: 18px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-nav-item {
+  padding: 8px 12px;
+  border-radius: 0;
+  border-left: 2px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--t2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  transition: all .12s;
+}
+.settings-nav-item:hover  { color: var(--t1); background: var(--surface2); border-left-color: var(--t3); }
+.settings-nav-item.active { color: var(--t1); background: var(--surface2); border-left-color: var(--blue); }
+
+.settings-body { padding: 24px; overflow-y: auto; }
+.settings-panel { display: none; }
+.settings-panel.active { display: block; }
+
+.settings-section { margin-bottom: 32px; }
+.settings-section:last-child { margin-bottom: 0; }
+.settings-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t1);
+  margin-bottom: 4px;
+}
+.settings-section-desc {
+  font-size: 11px;
+  color: var(--t2);
+  margin-bottom: 16px;
+}
+
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+.field-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--t2);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.field-hint { font-size: 10px; color: var(--t3); font-weight: 400; }
+
+.input {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  padding: 8px 11px;
+  color: var(--t1);
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+.input:focus { border-color: var(--blue); }
+.input::placeholder { color: var(--t3); }
+.input.secret { letter-spacing: .15em; }
+
+.input-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.input-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+.toggle-row:last-child { margin-bottom: 0; }
+.toggle-info { }
+.toggle-name { font-size: 12px; font-weight: 500; color: var(--t1); }
+.toggle-desc { font-size: 10px; color: var(--t2); margin-top: 2px; }
+
+.toggle {
+  position: relative;
+  width: 36px; height: 20px;
+  flex-shrink: 0;
+}
+.toggle input { display: none; }
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--surface3);
+  border: 1px solid var(--line2);
+  border-radius: 99px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--t3);
+  top: 2px; left: 2px;
+  transition: all .2s;
+}
+.toggle input:checked + .toggle-slider { background: var(--blue-bg); border-color: var(--blue); }
+.toggle input:checked + .toggle-slider::before { background: var(--blue); transform: translateX(16px); }
+
+.save-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.btn-primary {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: none;
+  background: var(--blue);
+  color: #fff;
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: .01em;
+  transition: filter .12s, transform .08s;
+}
+.btn-primary:hover  { filter: brightness(1.12); }
+.btn-primary:active { transform: scale(.97); }
+.btn-ghost {
+  padding: 8px 18px;
+  border-radius: 6px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  color: var(--t2);
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .12s;
+}
+.btn-ghost:hover  { color: var(--t1); border-color: var(--t3); }
+.btn-ghost:active { transform: scale(.97); }
+.save-msg { font-size: 11px; color: var(--green); display: none; }
+
+/* ══════════════ LIGHT MODE FIXES ══════════════ */
+html.light .log-box          { background: #f8f9fb; }
+html.light .ll               { color: #6b7280; }
+html.light .ll.I             { color: #1d4ed8; }
+html.light .ll.W             { color: #b45309; }
+html.light .ll.E             { color: #dc2626; }
+html.light .ll.T             { color: #059669; }
+html.light .ctrl-btn.ok      { color: #065f46; }
+html.light .ctrl-btn.danger  { color: #fff; }
+html.light .kpi-val          { color: #111827; }
+html.light .trade-tbl td     { color: #111827; }
+html.light .trade-tbl th     { color: #6b7280; }
+html.light .mdata-val        { color: #111827; }
+html.light .ck-val           { color: #111827; }
+html.light .pos-field-val    { color: #111827; }
+html.light .signal-name      { color: #111827; }
+html.light .signal-conf-val  { color: #111827; }
+html.light .regime-letter    { color: #111827; }
+html.light .conn-meta-val    { color: #111827; }
+html.light .conn-status [id="conn-status-label"] { }
+html.light .metric-val       { color: #111827; }
+html.light .pnl-display      { color: #111827; }
+html.light .sidebar-group-label { color: #9ca3af; }
+html.light .index-chip-val   { color: #111827; }
+html.light .clock            { color: #4b5563; }
+html.light .brand-logo-text .g { color: #1a6b2a; }
+html.light .brand-logo-text .r { color: #b91c1c; }
+html.light .settings-section-title { color: #111827; }
+html.light .toggle-name      { color: #111827; }
+
+/* theme toggle button */
+.theme-btn {
+  width: 34px; height: 34px;
+  border-radius: 7px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--t2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.theme-btn:hover { color: var(--t1); background: var(--surface3); }
+
+/* ══════════════ SCROLLBAR ══════════════ */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 99px; }
+
+/* ══════════════ DTE RING KPI ══════════════ */
+.dte-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  position: relative;
+}
+.dte-ring-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+}
+.dte-ring-wrap svg {
+  transform: rotate(-90deg);
+  width: 64px;
+  height: 64px;
+}
+.dte-ring-bg { fill: none; stroke: var(--line2); stroke-width: 5; }
+.dte-ring-fg {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset .6s cubic-bezier(.4,0,.2,1), stroke .4s;
+}
+.dte-num {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  font-size: 20px;
+  font-weight: 800;
+  font-family: var(--mono);
+  line-height: 1;
+  transition: color .4s;
+}
+.dte-label-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.dte-day-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--t3);
+  font-weight: 700;
+}
+.dte-expiry-str {
+  font-size: 10px;
+  color: var(--t2);
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.dte-trades-sub {
+  font-size: 9px;
+  color: var(--t3);
+  margin-top: 2px;
+}
+/* Urgency colours */
+.dte-num.dte-safe   { color: var(--green); }
+.dte-num.dte-warn   { color: var(--amber); }
+.dte-num.dte-crit   { color: var(--red); }
+.dte-ring-fg.dte-safe { stroke: var(--green); }
+.dte-ring-fg.dte-warn { stroke: var(--amber); }
+.dte-ring-fg.dte-crit { stroke: var(--red); }
+
+/* ══════════════ EMPTY / OTHER PAGES ══════════════ */
+.placeholder-page {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--t3);
+}
+.placeholder-page .big { font-size: 32px; }
+
+/* ══════════════════════════════════════════════
+   MOBILE NAV & CTRL BAR — hidden on desktop
+══════════════════════════════════════════════ */
+.mobile-nav, .mobile-ctrl-bar { display: none; }
+
+/* ══════════════ TOAST NOTIFICATIONS ══════════════ */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 300px;
+  max-width: 400px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  pointer-events: all;
+  animation: toast-in .3s ease;
+  transition: opacity .4s, transform .4s;
+}
+.toast.removing { opacity: 0; transform: translateX(30px); }
+.toast-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.toast-body  { flex: 1; }
+.toast-title { font-size: 12px; font-weight: 700; color: var(--t1); margin-bottom: 3px; }
+.toast-msg   { font-size: 11px; color: var(--t2); line-height: 1.5; white-space: pre-line; }
+.toast-close { font-size: 14px; color: var(--t3); cursor: pointer; flex-shrink: 0; background: none; border: none; padding: 0; }
+.toast-close:hover { color: var(--t1); }
+.toast.success { border-left: 3px solid var(--green); }
+.toast.danger  { border-left: 3px solid var(--red); }
+.toast.warning { border-left: 3px solid var(--amber); }
+.toast.info    { border-left: 3px solid var(--blue); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.mobile-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--t3);
+  font-family: var(--ui);
+  font-size: 9px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  transition: color .15s;
+  flex-shrink: 0;
+}
+.mobile-nav-item.active { color: var(--blue); }
+.mobile-nav-icon { font-size: 18px; line-height: 1; }
+
+/* ══════════════════════════════════════════════
+   TABLET (≤ 1100px)
+══════════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  .dash-grid { grid-template-columns: 1fr; }
+  .kpi-row   { grid-template-columns: repeat(2, 1fr); }
+  .right-col { flex-direction: row; flex-wrap: wrap; }
+  .right-col > .card { flex: 1 1 220px; }
+}
+
+/* ══════════════════════════════════════════════
+   MOBILE (≤ 768px)
+══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Topbar ── */
+  .topbar        { padding: 0 12px; gap: 8px; height: 50px; min-height: 50px; }
+  .topbar-middle { display: none; }
+  .clock         { display: none; }
+  #mkt-pill      { display: none; }
+  .divider-v     { display: none; }
+  .topbar-right  { gap: 8px; }
+  .index-chip    { flex-direction: row; align-items: center; gap: 5px; }
+  .index-chip-label { display: none; }
+  .index-chip-val   { font-size: 12px; }
+  .theme-btn     { width: 30px; height: 30px; font-size: 14px; }
+  #status-pill   { font-size: 9px; padding: 2px 7px; }
+
+  /* ── Layout ── */
+  .body    { overflow: visible; flex-direction: column; }
+  .sidebar { display: none; }
+  .content { height: auto; overflow: visible; padding-bottom: 116px; }
+  .page    { height: auto; overflow: visible; }
+
+  /* ── Dashboard grid ── */
+  .dash-grid {
+    grid-template-columns: 1fr;
+    padding: 10px;
+    gap: 10px;
+    min-height: unset;
+  }
+  .kpi-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .kpi         { padding: 11px 12px; }
+  .kpi-val     { font-size: 20px; }
+  .kpi-label   { font-size: 9px; }
+  .kpi-sub     { font-size: 9px; }
+  .card        { padding: 13px 14px; }
+  .card-head   { margin-bottom: 10px; }
+
+  /* ── Position ── */
+  .pnl-display { font-size: 28px; }
+  .pos-fields  { grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── Signal ── */
+  .signal-name     { font-size: 18px; }
+  .signal-conf-val { font-size: 18px; }
+  .signal-meta     { grid-template-columns: 1fr 1fr; gap: 6px; font-size: 10px; }
+
+  /* ── Log ── */
+  .log-box { height: 100px; }
+
+  /* ── Right col stacks ── */
+  .right-col { flex-direction: column; }
+
+  /* ── Settings ── */
+  .settings-layout { grid-template-columns: 1fr; height: auto; }
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 6px 10px;
+    gap: 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .settings-nav::-webkit-scrollbar { display: none; }
+  .settings-nav-item {
+    white-space: nowrap;
+    border-left: none !important;
+    border-bottom: 2px solid transparent;
+    padding: 7px 14px;
+    border-radius: 0;
+    flex-shrink: 0;
+  }
+  .settings-nav-item.active {
+    background: transparent;
+    border-left-color: transparent !important;
+    border-bottom-color: var(--blue);
+  }
+  .settings-body { padding: 14px; }
+  .input-row, .input-row-3 { grid-template-columns: 1fr; }
+
+  /* ── Mobile bottom nav ── */
+  .mobile-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 56px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    z-index: 200;
+    safe-area-inset-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* ── Mobile control bar (above nav) ── */
+  .mobile-ctrl-bar {
+    display: flex;
+    position: fixed;
+    bottom: 56px; left: 0; right: 0;
+    padding: 6px 10px;
+    gap: 6px;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    z-index: 199;
+  }
+  .mobile-ctrl-bar .ctrl-btn {
+    flex: 1;
+    padding: 7px 8px;
+    font-size: 10px;
+    gap: 4px;
+  }
+
+  /* ── Connection widget: compact ── */
+  .conn-widget    { margin: 0 0 8px; }
+}
+
+/* ══════════════════════════════════════════════
+   SMALL MOBILE (≤ 380px)
+══════════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .kpi-row    { grid-template-columns: 1fr 1fr; }
+  .kpi-val    { font-size: 17px; }
+  .dash-grid  { padding: 8px; gap: 8px; }
+  .signal-meta { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ TOPBAR ══════════ -->
+<header class="topbar">
+  <div class="brand" id="brand-wrap">
+    <!-- If logo file exists, img shows; else styled text fallback -->
+    <img src="/fifto_logo.png" class="brand-logo" alt="FIFTO"
+         onerror="this.style.display='none'; document.getElementById('brand-text-fallback').style.display='flex'">
+    <div id="brand-text-fallback" style="display:none; flex-direction:column;">
+      <div class="brand-logo-text">
+        <span class="g">F</span><span class="g" style="position:relative">i<span style="position:absolute;top:-3px;left:50%;transform:translateX(-50%);width:5px;height:5px;background:#cc2200;border-radius:50%;display:block"></span></span><span class="g">FT</span><span class="r">O</span>
+      </div>
+      <div class="brand-sub-text">AI Trading</div>
+    </div>
+  </div>
+
+  <nav class="topbar-middle">
+    <button class="nav-tab active" onclick="showPage('dashboard', this)">Dashboard</button>
+    <button class="nav-tab" onclick="showPage('positions', this)">Positions</button>
+    <button class="nav-tab" onclick="showPage('trades', this)">Trade Log</button>
+    <button class="nav-tab" onclick="showPage('settings', this)">Settings</button>
+  </nav>
+
+  <div class="topbar-right">
+    <div class="index-chip">
+      <span class="index-chip-label">Nifty</span>
+      <span class="index-chip-val" id="nifty-spot">—</span>
+    </div>
+    <div class="divider-v"></div>
+    <div class="index-chip">
+      <span class="index-chip-label">VIX</span>
+      <span class="index-chip-val c-amber" id="vix-val">—</span>
+    </div>
+    <div class="divider-v"></div>
+    <span class="pill mkt-closed" id="mkt-pill">
+      <span class="pill-dot"></span>
+      <span id="mkt-text">MARKET —</span>
+    </span>
+    <div class="divider-v"></div>
+    <span class="clock" id="clock">--:--:--</span>
+    <span class="pill live" id="status-pill">
+      <span class="pill-dot"></span>
+      <span id="status-text">LIVE</span>
+    </span>
+    <button class="theme-btn" id="theme-btn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+  </div>
+</header>
+
+<!-- ══════════ BODY ══════════ -->
+<div class="body">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-group-label">Overview</div>
+    <button class="sidebar-item active" onclick="showPage('dashboard', null, this)">
+      <span class="sidebar-icon">◈</span> Dashboard
+    </button>
+    <button class="sidebar-item" onclick="showPage('positions', null, this)">
+      <span class="sidebar-icon">◧</span> Positions
+    </button>
+    <button class="sidebar-item" onclick="showPage('trades', null, this)">
+      <span class="sidebar-icon">≡</span> Trade Log
+    </button>
+
+    <div class="sidebar-group-label">System</div>
+    <button class="sidebar-item" onclick="showPage('settings', null, this)">
+      <span class="sidebar-icon">⚙</span> Settings
+    </button>
+
+    <div style="flex:1"></div>
+
+    <!-- AngelOne connection status -->
+    <div class="conn-widget" id="conn-widget">
+      <div class="conn-header">
+        <span class="conn-label">AngelOne</span>
+        <span class="conn-status">
+          <span class="conn-dot disconnected" id="conn-dot"></span>
+          <span id="conn-status-label" style="color:var(--red)">Connecting...</span>
+        </span>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--t1);margin-bottom:6px" id="conn-name">—</div>
+      <div class="conn-meta">
+        <div>
+          <div class="conn-meta-item">Client ID</div>
+          <div class="conn-meta-val" id="conn-client">—</div>
+        </div>
+        <div>
+          <div class="conn-meta-item">Ping</div>
+          <div class="conn-meta-val" id="conn-ping">—</div>
+        </div>
+        <div>
+          <div class="conn-meta-item">Since</div>
+          <div class="conn-meta-val" id="conn-time">—</div>
+        </div>
+        <div>
+          <div class="conn-meta-item">Last ping</div>
+          <div class="conn-meta-val" id="conn-last-ping">—</div>
+        </div>
+      </div>
+      <!-- Margin details -->
+      <div style="margin-top:8px;padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--line)">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:5px;font-weight:600">Margin</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:10px;color:var(--t2)">Available</span>
+          <span style="font-size:12px;font-weight:600;color:var(--green);font-family:var(--mono)" id="conn-avail-margin">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+          <span style="font-size:10px;color:var(--t2)">Used</span>
+          <span style="font-size:12px;font-weight:600;color:var(--amber);font-family:var(--mono)" id="conn-used-margin">—</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:10px;color:var(--t2)">Total</span>
+          <span style="font-size:12px;font-weight:600;color:var(--t1);font-family:var(--mono)" id="conn-total-margin">—</span>
+        </div>
+      </div>
+      <div id="conn-error" style="font-size:10px;color:var(--red);margin-top:4px;display:none"></div>
+      <button class="conn-reconnect-btn" onclick="reconnect()" style="margin-top:6px">↺ Reconnect</button>
+    </div>
+
+    <div style="padding: 0 10px 10px; display:flex; flex-direction:column; gap:6px; border-top: 1px solid var(--line); padding-top:10px;">
+      <button class="ctrl-btn ok" id="btn-approve-buy" onclick="approveBuy()">▶ Approve Buy</button>
+      <button class="ctrl-btn danger" id="btn-emergency-exit" onclick="emergencyExit()">⚠ Emergency Exit</button>
+      <button class="ctrl-btn danger" id="btn-stop-agent" onclick="stopAgent()">■ Stop Agent</button>
+      <button class="ctrl-btn ok" id="btn-start-agent" onclick="startAgent()" style="display:none;">▶ Start Agent</button>
+    </div>
+  </nav>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- ═══ DASHBOARD PAGE ═══ -->
+    <div class="page active" id="page-dashboard">
+      <div class="dash-grid">
+
+        <!-- KPI row -->
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="kpi-label">Daily P&amp;L</div>
+            <div class="kpi-val" id="kpi-pnl">₹ 0</div>
+            <div class="kpi-sub">unrealised</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Available Margin</div>
+            <div class="kpi-val c-green" id="kpi-margin">₹ —</div>
+            <div class="kpi-sub" id="kpi-margin-sub">—</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Regime</div>
+            <div style="margin-top:4px">
+              <span class="regime-badge X" id="regime-badge">—</span>
+            </div>
+          </div>
+          <!-- DTE countdown ring -->
+          <div class="kpi dte-kpi" id="kpi-dte-card">
+            <div class="kpi-label">Days to Expiry</div>
+            <div class="dte-ring-wrap">
+              <svg viewBox="0 0 64 64">
+                <circle class="dte-ring-bg" cx="32" cy="32" r="27"/>
+                <circle class="dte-ring-fg dte-safe" id="dte-ring" cx="32" cy="32" r="27"
+                  stroke-dasharray="169.6" stroke-dashoffset="0"/>
+              </svg>
+              <div class="dte-num dte-safe" id="dte-num">—</div>
+            </div>
+            <div class="dte-label-row">
+              <div class="dte-day-label" id="dte-day-label">DTE</div>
+              <div class="dte-expiry-str" id="dte-expiry-str">—</div>
+            </div>
+            <div class="dte-trades-sub" id="dte-trades-sub">0 / 3 trades today</div>
+          </div>
+        </div>
+
+        <!-- Left col -->
+        <div style="display:flex; flex-direction:column; gap:14px;">
+
+          <!-- Active position -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-label">Active Position</span>
+              <span id="pos-pill" style="font-size:10px; color:var(--t3)">No position</span>
+            </div>
+            <div id="no-pos" style="color:var(--t2); font-size:12px; padding:4px 0">
+              Waiting for a valid setup...
+            </div>
+            <div id="has-pos" style="display:none">
+              <div class="pnl-display" id="pnl-big">₹ 0</div>
+              <div style="font-size:10px; color:var(--t2)">unrealised P&amp;L</div>
+              <div class="pos-fields">
+                <div>
+                  <div class="pos-field-label">CE Strike (sold)</div>
+                  <div class="pos-field-val c-red" id="ce-strike">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">PE Strike (sold)</div>
+                  <div class="pos-field-val c-green" id="pe-strike">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">Premium</div>
+                  <div class="pos-field-val" id="premium">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">Target</div>
+                  <div class="pos-field-val c-green" id="target">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">Stop Loss</div>
+                  <div class="pos-field-val c-red" id="stop-loss">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">Risk/Reward</div>
+                  <div class="pos-field-val" id="rr-ratio">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">Entry Time</div>
+                  <div class="pos-field-val" id="entry-time">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Trading Signal -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-label">Trading Signal</span>
+              <div style="display:flex;gap:4px">
+                <button class="mode-btn" id="mode-manual" onclick="setMode('MANUAL')">Manual</button>
+                <button class="mode-btn" id="mode-auto"   onclick="setMode('AUTO')">Auto</button>
+              </div>
+            </div>
+            <div class="signal-card wait" id="signal-card">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start">
+                <div>
+                  <div class="signal-name" id="sig-name">WAIT</div>
+                  <div style="font-size:11px; color:var(--t2); margin-top:5px" id="sig-reason">Scanning for setup...</div>
+                </div>
+                <div style="text-align:right">
+                  <div class="signal-conf-val" id="sig-conf">—</div>
+                  <div style="font-size:9px; color:var(--t3); text-transform:uppercase; letter-spacing:.08em">confidence</div>
+                </div>
+              </div>
+              <div class="conf-bar">
+                <div class="conf-bar-fill" id="conf-fill" style="width:0%; background:var(--t3)"></div>
+              </div>
+              <div class="signal-meta">
+                <div><div class="sm-label">Setup</div><div id="sig-setup">—</div></div>
+                <div><div class="sm-label">CE Strike</div><div id="sig-ce">—</div></div>
+                <div><div class="sm-label">PE Strike</div><div id="sig-pe">—</div></div>
+                <div><div class="sm-label">Premium</div><div id="sig-entry">—</div></div>
+                <div><div class="sm-label">SL</div><div id="sig-sl">—</div></div>
+              </div>
+              <div id="execute-zone" style="display:none; margin-top:12px">
+                <button class="ctrl-btn ok" id="btn-execute" onclick="executeTrade()" style="width:100%;justify-content:center">
+                  ⚡ Execute Trade
+                </button>
+              </div>
+              <div style="margin-top:10px">
+                <button class="ctrl-btn warn" id="btn-test-live" onclick="testLiveTrade()" style="width:100%;justify-content:center">
+                  Test Live ATM Sell
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Log -->
+          <div class="card">
+            <div class="card-head">
+              <span class="card-label">Agent Log</span>
+              <span style="font-size:10px; color:var(--blue)">● live</span>
+            </div>
+            <div class="log-box" id="log-area">
+              <div class="ll I">[09:15:00] Agent initialized. Paper trade mode.</div>
+              <div class="ll">[09:15:01] AngelOne login successful.</div>
+              <div class="ll">[09:15:02] Scrip master loaded — 47 NIFTY expiries found.</div>
+              <div class="ll I">[09:15:03] Dashboard running at http://localhost:8080</div>
+              <div class="ll">[09:15:04] Waiting for morning scan...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right col -->
+        <div class="right-col">
+
+          <!-- Setup checks -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Setup Checks</span></div>
+            <div>
+              <div class="ck">
+                <div class="ck-dot wait"></div>
+                <div class="ck-name">VIX range (13–28)</div>
+                <div class="ck-val" id="chk-vix">—</div>
+                <div class="ck-real" id="val-vix" style="font-size:11px;color:var(--t2);margin-left:8px;font-family:var(--mono)">—</div>
+              </div>
+              <div class="ck">
+                <div class="ck-dot wait"></div>
+                <div class="ck-name">IV percentile &gt;40</div>
+                <div class="ck-val" id="chk-iv">—</div>
+                <div class="ck-real" id="val-iv" style="font-size:11px;color:var(--t2);margin-left:8px;font-family:var(--mono)">—</div>
+              </div>
+              <div class="ck">
+                <div class="ck-dot wait"></div>
+                <div class="ck-name">EMA trend flat</div>
+                <div class="ck-val" id="chk-ema">—</div>
+                <div class="ck-real" id="val-ema" style="font-size:11px;color:var(--t2);margin-left:8px;font-family:var(--mono)">—</div>
+              </div>
+              <div class="ck">
+                <div class="ck-dot wait"></div>
+                <div class="ck-name">PCR 0.8–1.4</div>
+                <div class="ck-val" id="chk-pcr">—</div>
+                <div class="ck-real" id="val-pcr" style="font-size:11px;color:var(--t2);margin-left:8px;font-family:var(--mono)">—</div>
+              </div>
+              <div class="ck">
+                <div class="ck-dot wait"></div>
+                <div class="ck-name">Daily loss gate</div>
+                <div class="ck-val" id="chk-gate">OK</div>
+                <div class="ck-real" id="val-gate" style="font-size:11px;color:var(--t2);margin-left:8px;font-family:var(--mono)">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Risk meters -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Risk Meters</span></div>
+            <div class="rb">
+              <div class="rb-top"><span>Daily limit</span><span class="rb-pct" id="daily-pct">0%</span></div>
+              <div class="rb-track"><div class="rb-fill" id="daily-bar" style="width:0%"></div></div>
+            </div>
+            <div class="rb">
+              <div class="rb-top"><span>Weekly limit</span><span class="rb-pct" id="weekly-pct">0%</span></div>
+              <div class="rb-track"><div class="rb-fill" id="weekly-bar" style="width:0%"></div></div>
+            </div>
+            <div style="margin-top:12px">
+              <div class="mdata-row"><span class="mdata-key">Daily P&amp;L</span><span class="mdata-val" id="risk-daily">₹ 0</span></div>
+              <div class="mdata-row"><span class="mdata-key">Weekly P&amp;L</span><span class="mdata-val" id="risk-weekly">₹ 0</span></div>
+              <div class="mdata-row"><span class="mdata-key">Max drawdown</span><span class="mdata-val c-red" id="max-dd">₹ 0</span></div>
+            </div>
+          </div>
+
+          <!-- Quick Config -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Quick Config</span><span style="font-size:9px;color:var(--t3);margin-left:6px">live-edit</span></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px">
+              <div>
+                <div class="sm-label">Capital (₹)</div>
+                <input class="input" type="number" id="qc-capital" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">Base Lots</div>
+                <input class="input" type="number" id="qc-base-lots" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">VIX Min</div>
+                <input class="input" type="number" id="qc-vix-min" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">VIX Max</div>
+                <input class="input" type="number" id="qc-vix-max" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">Entry Start</div>
+                <input class="input" type="time" id="qc-entry-start" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">Entry End</div>
+                <input class="input" type="time" id="qc-entry-end" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">Profit Target %</div>
+                <input class="input" type="number" step="0.01" id="qc-profit-target" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">SL Multiplier</div>
+                <input class="input" type="number" step="0.1" id="qc-sl-mult" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">Max Trades/Day</div>
+                <input class="input" type="number" id="qc-max-trades" style="padding:4px 7px;font-size:11px">
+              </div>
+              <div>
+                <div class="sm-label">Daily Loss Limit (₹)</div>
+                <input class="input" type="number" id="qc-daily-limit" style="padding:4px 7px;font-size:11px">
+              </div>
+            </div>
+            <button class="btn-primary" style="width:100%;margin-top:10px;padding:6px" onclick="saveQuickConfig()">Save Config</button>
+            <div id="qc-status" style="font-size:10px;color:var(--green);margin-top:5px;text-align:center;display:none">Saved</div>
+          </div>
+
+          <!-- Market data -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Market Data</span></div>
+            <div class="mdata-row"><span class="mdata-key">Nifty Spot</span><span class="mdata-val" id="md-spot">—</span></div>
+            <div class="mdata-row"><span class="mdata-key">India VIX</span><span class="mdata-val c-amber" id="md-vix">—</span></div>
+            <div class="mdata-row"><span class="mdata-key">PCR</span><span class="mdata-val" id="md-pcr">—</span></div>
+            <div class="mdata-row"><span class="mdata-key">IV (ATM)</span><span class="mdata-val" id="md-iv">—</span></div>
+            <div class="mdata-row"><span class="mdata-key">ATR (15m)</span><span class="mdata-val" id="md-atr">—</span></div>
+            <div class="mdata-row"><span class="mdata-key">Net Delta</span><span class="mdata-val" id="md-delta">—</span></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ POSITIONS PAGE ═══ -->
+    <div class="page" id="page-positions">
+      <div style="padding:18px">
+        <div class="card">
+          <div class="card-head">
+            <span class="card-label">Open Positions</span>
+            <span id="pos-count-pill" style="font-size:10px; color:var(--t3)">No positions</span>
+          </div>
+          <table class="trade-tbl">
+            <thead>
+              <tr>
+                <th>Entry</th>
+                <th>Type</th>
+                <th>CE Strike</th>
+                <th>PE Strike</th>
+                <th>Premium</th>
+                <th>Target</th>
+                <th>SL</th>
+                <th>Qty</th>
+                <th>Unrealised P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody id="positions-list">
+              <tr><td colspan="9" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TRADES PAGE ═══ -->
+    <div class="page" id="page-trades">
+      <div style="padding:18px">
+        <div class="card">
+          <div class="card-head"><span class="card-label">Today's Trades</span></div>
+          <table class="trade-tbl">
+            <thead>
+              <tr><th>Time</th><th>Type</th><th>CE Strike</th><th>PE Strike</th><th>Premium</th><th>Exit</th><th>P&amp;L</th><th></th></tr>
+            </thead>
+            <tbody id="trade-log">
+              <tr><td colspan="8" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No trades yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SETTINGS PAGE ═══ -->
+    <div class="page" id="page-settings">
+      <div class="settings-layout">
+
+        <!-- Settings nav -->
+        <nav class="settings-nav">
+          <button class="settings-nav-item active" onclick="showSettingsPanel('credentials', this)">🔑 Credentials</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('trading', this)">📊 Trading</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('risk', this)">🛡 Risk Limits</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('regime', this)">📈 Regime</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('timing', this)">⏱ Timing</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('notifications', this)">🔔 Notifications</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('execution', this)">⚡ Execution</button>
+        </nav>
+
+        <!-- Settings panels -->
+        <div class="settings-body">
+
+          <!-- Credentials -->
+          <div class="settings-panel active" id="spanel-credentials">
+            <div class="settings-section">
+              <div class="settings-section-title">AngelOne API</div>
+              <div class="settings-section-desc">Your broker API credentials. Stored as environment variables.</div>
+              <div class="field">
+                <div class="field-label">API Key</div>
+                <input class="input secret" type="password" placeholder="ANGEL_API_KEY" id="s-api-key">
+              </div>
+              <div class="input-row">
+                <div class="field">
+                  <div class="field-label">Client ID</div>
+                  <input class="input" type="text" placeholder="A12345" id="s-client-id">
+                </div>
+                <div class="field">
+                  <div class="field-label">Password</div>
+                  <input class="input secret" type="password" placeholder="••••••••" id="s-password">
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-label">TOTP Secret <span class="field-hint">Used to generate 2FA code</span></div>
+                <input class="input secret" type="password" placeholder="TOTP base32 secret" id="s-totp">
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Anthropic API</div>
+              <div class="settings-section-desc">For GoCharting Vision analysis via Claude.</div>
+              <div class="field">
+                <div class="field-label">API Key</div>
+                <input class="input secret" type="password" placeholder="sk-ant-..." id="s-anthropic-key">
+              </div>
+            </div>
+
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveSettings('credentials')">Save Credentials</button>
+              <button class="btn-ghost" onclick="testTelegram()">Test Telegram</button>
+              <span class="save-msg" id="save-msg-credentials">✓ Saved</span>
+            </div>
+          </div>
+
+          <!-- Trading -->
+          <div class="settings-panel" id="spanel-trading">
+            <div class="settings-section">
+              <div class="settings-section-title">Capital &amp; Lots</div>
+              <div class="settings-section-desc">Position sizing parameters.</div>
+              <div class="input-row">
+                <div class="field">
+                  <div class="field-label">Capital (₹)</div>
+                  <input class="input" type="number" value="1500000" id="s-capital">
+                </div>
+                <div class="field">
+                  <div class="field-label">Base Lots</div>
+                  <input class="input" type="number" value="2" id="s-base-lots">
+                </div>
+              </div>
+              <div class="input-row">
+                <div class="field">
+                  <div class="field-label">Lot Size <span class="field-hint">NSE Jan 2026</span></div>
+                  <input class="input" type="number" value="65" id="s-lot-size">
+                </div>
+                <div class="field">
+                  <div class="field-label">Delta Target</div>
+                  <input class="input" type="number" step="0.01" value="0.17" id="s-delta">
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-label">Margin Override (₹)</div>
+                <input class="input" type="number" value="1500000" id="s-margin-override">
+                <div style="font-size:11px;color:var(--t3);margin-top:6px">This only bypasses the app's margin gate. AngelOne can still reject a real order if broker-side funds are insufficient.</div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Exit Rules</div>
+              <div class="settings-section-desc">Profit and stop-loss thresholds.</div>
+              <div class="input-row-3">
+                <div class="field">
+                  <div class="field-label">Min Premium (₹)</div>
+                  <input class="input" type="number" value="45" id="s-min-premium">
+                </div>
+                <div class="field">
+                  <div class="field-label">Profit Target %</div>
+                  <input class="input" type="number" step="0.01" value="0.50" id="s-profit-target">
+                </div>
+                <div class="field">
+                  <div class="field-label">SL Multiplier</div>
+                  <input class="input" type="number" step="0.1" value="2.0" id="s-sl-mult">
+                </div>
+              </div>
+              <div class="field">
+                <div class="field-label">Trail Trigger % <span class="field-hint">Lock breakeven at this profit %</span></div>
+                <input class="input" type="number" step="0.01" value="0.30" id="s-trail">
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Mode</div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name">Paper Trade Mode</div>
+                  <div class="toggle-desc">Simulate trades without real orders</div>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" id="s-paper" checked onchange="updatePaperMode(this)">
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveSettings('trading')">Save Trading Config</button>
+              <span class="save-msg" id="save-msg-trading">✓ Saved</span>
+            </div>
+          </div>
+
+          <!-- Risk -->
+          <div class="settings-panel" id="spanel-risk">
+            <div class="settings-section">
+              <div class="settings-section-title">Loss Limits</div>
+              <div class="settings-section-desc">Agent stops trading when any limit is breached.</div>
+              <div class="input-row-3">
+                <div class="field">
+                  <div class="field-label">Daily Loss Limit (₹)</div>
+                  <input class="input" type="number" value="45000" id="s-daily-limit">
+                </div>
+                <div class="field">
+                  <div class="field-label">Weekly Loss Limit (₹)</div>
+                  <input class="input" type="number" value="60000" id="s-weekly-limit">
+                </div>
+                <div class="field">
+                  <div class="field-label">Monthly Loss Limit (₹)</div>
+                  <input class="input" type="number" value="150000" id="s-monthly-limit">
+                </div>
+              </div>
+              <div class="input-row">
+                <div class="field">
+                  <div class="field-label">Max Trades / Day</div>
+                  <input class="input" type="number" value="3" id="s-max-trades">
+                </div>
+                <div class="field">
+                  <div class="field-label">Risk per Trade %</div>
+                  <input class="input" type="number" step="0.001" value="0.02" id="s-risk-pct">
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Circuit Breakers</div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name">Stop after SL hit</div>
+                  <div class="toggle-desc">No new trades after stop-loss triggered today</div>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name">Weekly loss lockout</div>
+                  <div class="toggle-desc">Halt trading for rest of week if weekly limit hit</div>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveSettings('risk')">Save Risk Config</button>
+              <span class="save-msg" id="save-msg-risk">✓ Saved</span>
+            </div>
+          </div>
+
+          <!-- Regime -->
+          <div class="settings-panel" id="spanel-regime">
+            <div class="settings-section">
+              <div class="settings-section-title">VIX Thresholds</div>
+              <div class="settings-section-desc">Defines trading regimes based on India VIX.</div>
+              <div class="input-row-3">
+                <div class="field">
+                  <div class="field-label">VIX Min (Regime A floor)</div>
+                  <input class="input" type="number" value="13" id="s-vix-min">
+                </div>
+                <div class="field">
+                  <div class="field-label">VIX Max (Regime C trigger)</div>
+                  <input class="input" type="number" value="20" id="s-vix-max">
+                </div>
+                <div class="field">
+                  <div class="field-label">ATR Regime C Max</div>
+                  <input class="input" type="number" value="100" id="s-atr-max">
+                </div>
+              </div>
+              <div style="margin-top:14px; display:flex; flex-direction:column; gap:8px;">
+                <div class="toggle-row">
+                  <div class="toggle-info">
+                    <div class="toggle-name">Regime A (VIX 13–16)</div>
+                    <div class="toggle-desc">Sideways — full size, trade</div>
+                  </div>
+                  <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+                </div>
+                <div class="toggle-row">
+                  <div class="toggle-info">
+                    <div class="toggle-name">Regime B (VIX 16–20)</div>
+                    <div class="toggle-desc">Mild trend — reduced size, trade</div>
+                  </div>
+                  <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+                </div>
+              </div>
+            </div>
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveSettings('regime')">Save Regime Config</button>
+              <span class="save-msg" id="save-msg-regime">✓ Saved</span>
+            </div>
+          </div>
+
+          <!-- Timing -->
+          <div class="settings-panel" id="spanel-timing">
+            <div class="settings-section">
+              <div class="settings-section-title">Session Windows</div>
+              <div class="settings-section-desc">Entry and exit time windows for the trading session.</div>
+              <div class="input-row">
+                <div class="field">
+                  <div class="field-label">Entry Start</div>
+                  <input class="input" type="time" value="09:30" id="s-entry-start">
+                </div>
+                <div class="field">
+                  <div class="field-label">Entry End</div>
+                  <input class="input" type="time" value="11:00" id="s-entry-end">
+                </div>
+              </div>
+              <div class="input-row">
+                <div class="field">
+                  <div class="field-label">Dead Zone Start</div>
+                  <input class="input" type="time" value="14:30" id="s-dead-zone">
+                </div>
+                <div class="field">
+                  <div class="field-label">Expiry Cut Time <span class="field-hint">Tuesday</span></div>
+                  <input class="input" type="time" value="13:00" id="s-expiry-cut">
+                </div>
+              </div>
+            </div>
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveSettings('timing')">Save Timing Config</button>
+              <span class="save-msg" id="save-msg-timing">✓ Saved</span>
+            </div>
+          </div>
+
+          <!-- Notifications -->
+          <div class="settings-panel" id="spanel-notifications">
+            <div class="settings-section">
+              <div class="settings-section-title">Telegram Bot</div>
+              <div class="settings-section-desc">Receive trade alerts, signals, and EOD reports on Telegram.</div>
+              <div class="field">
+                <div class="field-label">Bot Token</div>
+                <input class="input secret" type="password" placeholder="123456:ABCdef..." id="s-telegram-token">
+              </div>
+              <div class="field">
+                <div class="field-label">Chat ID</div>
+                <input class="input" type="text" placeholder="-100xxxxxxxxxx" id="s-telegram-chat-id">
+              </div>
+            </div>
+            <div class="settings-section">
+              <div class="settings-section-title">Alert Events</div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Morning regime scan</div><div class="toggle-desc">Notify at 9:15 AM with VIX & regime</div></div>
+                <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Trade entry / exit</div><div class="toggle-desc">Notify on every order placed</div></div>
+                <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">Vision buy signal</div><div class="toggle-desc">Send chart image for manual approval</div></div>
+                <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="toggle-name">EOD report</div><div class="toggle-desc">Daily summary at 3:30 PM</div></div>
+                <label class="toggle"><input type="checkbox" checked><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveSettings('notifications')">Save</button>
+              <button class="btn-ghost" onclick="testTelegram()">Send Test Message</button>
+              <span class="save-msg" id="save-msg-notifications">✓ Saved</span>
+            </div>
+          </div>
+
+          <!-- Execution Mode -->
+          <div class="settings-panel" id="spanel-execution">
+            <div class="settings-section">
+              <div class="settings-section-title">Execution Mode</div>
+              <div class="settings-section-desc">Choose how signals are executed when a valid setup is found.</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:12px;border-radius:8px;border:1px solid var(--line2);background:var(--surface2)">
+                  <input type="radio" name="exec-mode" value="MANUAL" id="exec-manual" style="margin-top:3px;accent-color:var(--blue)">
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:var(--t1)">Manual Initiate</div>
+                    <div style="font-size:11px;color:var(--t2);margin-top:3px">Signal fires → shows on dashboard → you click <b>Execute Trade</b> to place the order. Full control.</div>
+                  </div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:12px;border-radius:8px;border:1px solid var(--line2);background:var(--surface2)">
+                  <input type="radio" name="exec-mode" value="AUTO" id="exec-auto" style="margin-top:3px;accent-color:var(--blue)">
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:var(--t1)">Fully Automatic</div>
+                    <div style="font-size:11px;color:var(--t2);margin-top:3px">Signal fires → order placed immediately via AngelOne. Bot monitors SL/target and squares off automatically.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div class="settings-section">
+              <div class="settings-section-title">Entry Window</div>
+              <div class="settings-section-desc">Signals are only generated inside this time window on weekdays.</div>
+              <div class="input-row">
+                <div class="field">
+                  <div class="field-label">Start Time</div>
+                  <input class="input" type="time" value="09:30" id="s-entry-start">
+                </div>
+                <div class="field">
+                  <div class="field-label">End Time</div>
+                  <input class="input" type="time" value="11:00" id="s-entry-end">
+                </div>
+              </div>
+            </div>
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveSettings('execution')">Save Execution Config</button>
+              <span class="save-msg" id="save-msg-execution">✓ Saved</span>
+            </div>
+          </div>
+
+        </div><!-- /settings-body -->
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /body -->
+
+<script>
+// ── Theme ──
+function toggleTheme() {
+  const html = document.documentElement;
+  const btn  = document.getElementById('theme-btn');
+  if (html.classList.contains('light')) {
+    html.classList.remove('light');
+    btn.textContent = '🌙';
+    localStorage.setItem('fifto-theme', 'dark');
+  } else {
+    html.classList.add('light');
+    btn.textContent = '☀️';
+    localStorage.setItem('fifto-theme', 'light');
+  }
+}
+// Restore saved theme on load
+(function() {
+  if (localStorage.getItem('fifto-theme') === 'light') {
+    document.documentElement.classList.add('light');
+    // btn not yet rendered at script time — set after DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('theme-btn');
+      if (btn) btn.textContent = '☀️';
+    });
+  }
+})();
+
+// ── Clock ──
+function isMarketOpen() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) return false;
+  // IST = UTC+5:30 → convert local time to IST minutes
+  const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const istMin = (utcMin + 330) % 1440; // +5h30m
+  return istMin >= 555 && istMin < 930; // 9:15 AM to 3:30 PM IST
+}
+
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-IN', { hour12: true }).toUpperCase();
+
+  const open = isMarketOpen();
+  const mktPill = document.getElementById('mkt-pill');
+  const mktTxt  = document.getElementById('mkt-text');
+  if (mktPill && mktTxt) {
+    mktPill.className = 'pill ' + (open ? 'mkt-open' : 'mkt-closed');
+    mktTxt.textContent = open ? 'MARKET OPEN' : 'MARKET CLOSED';
+  }
+}
+setInterval(tick,1000); tick();
+
+// ── Page navigation ──
+function showPage(id, navBtn, sideBtn, mobileBtn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (navBtn)    { document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); navBtn.classList.add('active'); }
+  if (sideBtn)   { document.querySelectorAll('.sidebar-item').forEach(t=>t.classList.remove('active')); sideBtn.classList.add('active'); }
+  // Sync mobile nav
+  document.querySelectorAll('.mobile-nav-item').forEach(b => b.classList.remove('active'));
+  if (mobileBtn) { mobileBtn.classList.add('active'); }
+  else           { document.querySelector(`.mobile-nav-item[data-page="${id}"]`)?.classList.add('active'); }
+  // Sync desktop topbar tab
+  if (!navBtn) { document.querySelectorAll('.nav-tab').forEach((t,i) => { const pages=['dashboard','positions','trades','settings']; if(pages[i]===id) t.classList.add('active'); else t.classList.remove('active'); }); }
+  if (id === 'trades') fetchTrades();
+}
+
+// ── Settings panel navigation ──
+function showSettingsPanel(id, btn) {
+  document.querySelectorAll('.settings-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.settings-nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('spanel-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Save feedback ──
+function saveSettings(id) {
+  const msg = document.getElementById('save-msg-' + id);
+  if (!msg) return;
+  
+  // Gather form data based on panel
+  let data = {};
+  if (id === 'credentials') {
+    data = {
+      angel_api_key: document.getElementById('s-api-key').value,
+      angel_client_id: document.getElementById('s-client-id').value,
+      angel_password: document.getElementById('s-password').value,
+      angel_totp_secret: document.getElementById('s-totp').value,
+      anthropic_api_key: document.getElementById('s-anthropic-key').value,
+    };
+  } else if (id === 'trading') {
+    data = {
+      capital: parseFloat(document.getElementById('s-capital').value) || 1500000,
+      base_lots: parseInt(document.getElementById('s-base-lots').value) || 2,
+      lot_size: parseInt(document.getElementById('s-lot-size').value) || 65,
+      margin_override: parseFloat(document.getElementById('s-margin-override').value) || 0,
+      delta_target: parseFloat(document.getElementById('s-delta').value) || 0.17,
+      min_premium: parseInt(document.getElementById('s-min-premium').value) || 45,
+      profit_target_pct: parseFloat(document.getElementById('s-profit-target').value) || 0.50,
+      sl_multiplier: parseFloat(document.getElementById('s-sl-mult').value) || 2.0,
+      trail_trigger_pct: parseFloat(document.getElementById('s-trail').value) || 0.30,
+      paper_trade: document.getElementById('s-paper').checked,
+    };
+  } else if (id === 'risk') {
+    data = {
+      daily_loss_limit: parseInt(document.getElementById('s-daily-limit').value) || 45000,
+      weekly_loss_limit: parseInt(document.getElementById('s-weekly-limit').value) || 60000,
+      monthly_loss_limit: parseInt(document.getElementById('s-monthly-limit').value) || 150000,
+      max_trades_per_day: parseInt(document.getElementById('s-max-trades').value) || 3,
+      risk_per_trade_pct: parseFloat(document.getElementById('s-risk-pct').value) || 0.02,
+    };
+  } else if (id === 'regime') {
+    data = {
+      vix_min: parseFloat(document.getElementById('s-vix-min').value) || 13,
+      vix_max: parseFloat(document.getElementById('s-vix-max').value) || 20,
+      atr_regime_b_max: parseFloat(document.getElementById('s-atr-max').value) || 100,
+    };
+  } else if (id === 'timing') {
+    data = {
+      entry_start: document.getElementById('s-entry-start').value || '09:30',
+      entry_end: document.getElementById('s-entry-end').value || '11:00',
+      dead_zone_start: document.getElementById('s-dead-zone').value || '14:30',
+      expiry_cut_time: document.getElementById('s-expiry-cut').value || '13:00',
+    };
+  } else if (id === 'execution') {
+    const modeEl = document.querySelector('input[name="exec-mode"]:checked');
+    data = {
+      execution_mode: modeEl ? modeEl.value : 'MANUAL',
+      entry_start: document.getElementById('s-entry-start')?.value || '09:30',
+      entry_end:   document.getElementById('s-entry-end')?.value   || '11:00',
+    };
+  }
+  
+  // Send to server
+  fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      msg.style.display = 'inline';
+      setTimeout(() => msg.style.display = 'none', 2000);
+    }
+  });
+}
+
+// ── Telegram test ──
+async function testTelegram() {
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.textContent = 'Sending...';
+  btn.disabled = true;
+  
+  try {
+    const r = await fetch('/api/test_telegram', {method: 'POST'});
+    const d = await r.json();
+    alert(d.msg);
+  } catch (e) {
+    alert('Telegram test failed: ' + e.message);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+}
+
+// ── Load config on page load ──
+async function loadConfig() {
+  try {
+    const cfg = await (await fetch('/api/config')).json();
+    
+    // Credentials
+    if (cfg.angel_api_key) document.getElementById('s-api-key').value = cfg.angel_api_key;
+    if (cfg.angel_client_id) document.getElementById('s-client-id').value = cfg.angel_client_id;
+    if (cfg.angel_password) document.getElementById('s-password').value = cfg.angel_password;
+    if (cfg.angel_totp_secret) document.getElementById('s-totp').value = cfg.angel_totp_secret;
+    if (cfg.anthropic_api_key) document.getElementById('s-anthropic-key').value = cfg.anthropic_api_key;
+    if (cfg.telegram_token) document.getElementById('s-telegram-token').value = cfg.telegram_token;
+    if (cfg.telegram_chat_id) document.getElementById('s-telegram-chat-id').value = cfg.telegram_chat_id;
+    
+    // Trading
+    if (cfg.capital) document.getElementById('s-capital').value = cfg.capital;
+    if (cfg.base_lots) document.getElementById('s-base-lots').value = cfg.base_lots;
+    if (cfg.lot_size) document.getElementById('s-lot-size').value = cfg.lot_size;
+    if (cfg.margin_override !== undefined) document.getElementById('s-margin-override').value = cfg.margin_override;
+    if (cfg.delta_target) document.getElementById('s-delta').value = cfg.delta_target;
+    if (cfg.min_premium) document.getElementById('s-min-premium').value = cfg.min_premium;
+    if (cfg.profit_target_pct) document.getElementById('s-profit-target').value = cfg.profit_target_pct;
+    if (cfg.sl_multiplier) document.getElementById('s-sl-mult').value = cfg.sl_multiplier;
+    if (cfg.trail_trigger_pct) document.getElementById('s-trail').value = cfg.trail_trigger_pct;
+    if (cfg.paper_trade !== undefined) document.getElementById('s-paper').checked = cfg.paper_trade;
+    
+    // Risk
+    if (cfg.daily_loss_limit) document.getElementById('s-daily-limit').value = cfg.daily_loss_limit;
+    if (cfg.weekly_loss_limit) document.getElementById('s-weekly-limit').value = cfg.weekly_loss_limit;
+    if (cfg.monthly_loss_limit) document.getElementById('s-monthly-limit').value = cfg.monthly_loss_limit;
+    if (cfg.max_trades_per_day) document.getElementById('s-max-trades').value = cfg.max_trades_per_day;
+    if (cfg.risk_per_trade_pct) document.getElementById('s-risk-pct').value = cfg.risk_per_trade_pct;
+    
+    // Regime
+    if (cfg.vix_min) document.getElementById('s-vix-min').value = cfg.vix_min;
+    if (cfg.vix_max) document.getElementById('s-vix-max').value = cfg.vix_max;
+    if (cfg.atr_regime_b_max) document.getElementById('s-atr-max').value = cfg.atr_regime_b_max;
+    
+    // Timing
+    if (cfg.entry_start) document.getElementById('s-entry-start').value = cfg.entry_start;
+    if (cfg.entry_end) document.getElementById('s-entry-end').value = cfg.entry_end;
+    if (cfg.dead_zone_start) document.getElementById('s-dead-zone').value = cfg.dead_zone_start;
+    if (cfg.expiry_cut_time) document.getElementById('s-expiry-cut').value = cfg.expiry_cut_time;
+    
+    // Quick Config panel
+    loadQuickConfig(cfg);
+
+    // Execution
+    if (cfg.execution_mode) {
+      const mode = cfg.execution_mode.toUpperCase();
+      const el = document.querySelector(`input[name="exec-mode"][value="${mode}"]`);
+      if (el) el.checked = true;
+    }
+    if (cfg.entry_start) { const el2 = document.getElementById('s-entry-start'); if (el2) el2.value = cfg.entry_start; }
+    if (cfg.entry_end)   { const el3 = document.getElementById('s-entry-end');   if (el3) el3.value = cfg.entry_end; }
+    
+  } catch (e) {
+    console.error('Failed to load config:', e);
+  }
+}
+
+// ── Quick Config ──
+function _qcSet(id, val) { const el = document.getElementById(id); if (el && val != null) el.value = val; }
+
+function loadQuickConfig(cfg) {
+  _qcSet('qc-capital',      cfg.capital);
+  _qcSet('qc-base-lots',    cfg.base_lots);
+  _qcSet('qc-vix-min',      cfg.vix_min);
+  _qcSet('qc-vix-max',      cfg.vix_max);
+  _qcSet('qc-entry-start',  cfg.entry_start);
+  _qcSet('qc-entry-end',    cfg.entry_end);
+  _qcSet('qc-profit-target',cfg.profit_target_pct);
+  _qcSet('qc-sl-mult',      cfg.sl_multiplier);
+  _qcSet('qc-max-trades',   cfg.max_trades_per_day);
+  _qcSet('qc-daily-limit',  cfg.daily_loss_limit);
+}
+
+async function saveQuickConfig() {
+  const data = {
+    capital:           parseFloat(document.getElementById('qc-capital').value)       || undefined,
+    base_lots:         parseInt(document.getElementById('qc-base-lots').value)       || undefined,
+    vix_min:           parseFloat(document.getElementById('qc-vix-min').value)       || undefined,
+    vix_max:           parseFloat(document.getElementById('qc-vix-max').value)       || undefined,
+    entry_start:       document.getElementById('qc-entry-start').value               || undefined,
+    entry_end:         document.getElementById('qc-entry-end').value                 || undefined,
+    profit_target_pct: parseFloat(document.getElementById('qc-profit-target').value) || undefined,
+    sl_multiplier:     parseFloat(document.getElementById('qc-sl-mult').value)       || undefined,
+    max_trades_per_day:parseInt(document.getElementById('qc-max-trades').value)      || undefined,
+    daily_loss_limit:  parseFloat(document.getElementById('qc-daily-limit').value)   || undefined,
+  };
+  // strip undefined keys
+  Object.keys(data).forEach(k => data[k] === undefined && delete data[k]);
+  try {
+    await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    const st = document.getElementById('qc-status');
+    st.style.display = 'block';
+    setTimeout(() => { st.style.display = 'none'; }, 2000);
+  } catch(e) { console.error('Quick config save failed', e); }
+}
+
+// ── Mode badge — always LIVE ──
+function updatePaperMode(cb) { /* mode controlled by server */ }
+
+// ── Formatters ──
+const rupee = v => v.toLocaleString('en-IN',{maximumFractionDigits:0});
+const fmt   = v => v >= 0
+  ? `<span style="color:var(--green)">+₹${rupee(v)}</span>`
+  : `<span style="color:var(--red)">−₹${rupee(Math.abs(v))}</span>`;
+
+// ── Poll ──
+async function poll() {
+  try { applyState(await (await fetch('/api/state')).json()); }
+  catch { applyState(demo()); }
+}
+
+function applyState(d) {
+  const rm = d.regime || '—';
+  const badge = document.getElementById('regime-badge');
+  badge.className = 'regime-badge ' + (['A','B','C'].includes(rm) ? rm : 'X');
+  badge.textContent = rm === '—' ? '—' : 'Regime ' + rm;
+
+  // ── DTE ring widget ──
+  const dte = (d.dte != null) ? d.dte : null;
+  const maxDTE = 3;
+  const dteNum   = document.getElementById('dte-num');
+  const dteRing  = document.getElementById('dte-ring');
+  const dteDay   = document.getElementById('dte-day-label');
+  const dteExp   = document.getElementById('dte-expiry-str');
+  const dteSub   = document.getElementById('dte-trades-sub');
+  const CIRCUM   = 169.6;   // 2π × r=27
+  const trades   = d.trades_today || 0;
+  const maxTrad  = d.max_trades || 3;
+  dteSub.textContent = trades + ' / ' + maxTrad + ' trades today';
+  if (dte != null) {
+    dteNum.textContent = dte;
+    dteExp.textContent = d.expiry_date || '—';
+    const urgClass = dte === 0 ? 'dte-crit' : dte === 1 ? 'dte-warn' : 'dte-safe';
+    dteNum.className  = 'dte-num '  + urgClass;
+    dteRing.className = 'dte-ring-fg ' + urgClass;
+    dteDay.textContent = dte === 0 ? 'EXPIRY TODAY' : dte === 1 ? 'TOMORROW' : 'DTE';
+    // ring fills proportionally: 0 DTE = nearly empty, 3+ DTE = full
+    const fillRatio = Math.min(dte / maxDTE, 1);
+    dteRing.style.strokeDashoffset = CIRCUM * (1 - fillRatio);
+  } else {
+    dteNum.textContent = '—';
+    dteExp.textContent = '—';
+    dteDay.textContent = 'DTE';
+    dteRing.style.strokeDashoffset = CIRCUM;
+  }
+  document.getElementById('kpi-trades') && (document.getElementById('kpi-trades').innerHTML = trades + ' <span style="font-size:14px;color:var(--t3)">/ '+maxTrad+'</span>');
+
+  const pnl = d.daily_pnl || 0;
+  document.getElementById('kpi-pnl').innerHTML = fmt(pnl);
+  document.getElementById('pnl-big').innerHTML = fmt(pnl);
+  document.getElementById('risk-daily').innerHTML = fmt(pnl);
+
+  // Margin is now updated from connection API
+
+  const hasPOS = d.active_position && d.position_detail;
+  document.getElementById('no-pos').style.display  = hasPOS ? 'none' : 'block';
+  document.getElementById('has-pos').style.display = hasPOS ? 'block' : 'none';
+  const posPill = document.getElementById('pos-pill');
+  posPill.textContent = hasPOS ? '● Active' : 'No position';
+  posPill.style.color = hasPOS ? 'var(--green)' : 'var(--t3)';
+  if (hasPOS) {
+    const p = d.position_detail;
+    document.getElementById('ce-strike').textContent  = p.ce_strike || '—';
+    document.getElementById('pe-strike').textContent  = p.pe_strike || '—';
+    if (p.premium_received) {
+      const total = p.premium_received * (p.quantity || 1);
+      document.getElementById('premium').textContent = '₹' + p.premium_received.toFixed(1) + '  (₹' + total.toLocaleString('en-IN', {maximumFractionDigits:0}) + ' total)';
+    } else {
+      document.getElementById('premium').textContent = '—';
+    }
+    const qty   = p.quantity || 1;
+    const entry = p.premium_received;
+    // Target: p.target = profit pts (e.g. 76.8); exit level = entry - p.target (e.g. 349.6)
+    if (p.target && entry) {
+      const tgtExitLevel = entry - p.target;
+      const tgtAmt = p.target * qty;
+      document.getElementById('target').textContent =
+        p.target.toFixed(1) + ' pts  (exit ₹' + tgtExitLevel.toFixed(1) + '  +₹' + tgtAmt.toLocaleString('en-IN', {maximumFractionDigits:0}) + ')';
+    } else {
+      document.getElementById('target').textContent = p.target ? p.target.toFixed(1) + ' pts' : '—';
+    }
+    // SL: loss pts = p.sl (exit level) − entry (e.g. 533 - 426.4 = 106.6)
+    if (p.sl && entry) {
+      const slPts = p.sl - entry;
+      const slAmt = slPts * qty;
+      document.getElementById('stop-loss').textContent =
+        slPts.toFixed(1) + ' pts  (exit ₹' + p.sl.toFixed(1) + '  -₹' + slAmt.toLocaleString('en-IN', {maximumFractionDigits:0}) + ')';
+    } else {
+      document.getElementById('stop-loss').textContent = p.sl ? (p.sl - (entry||0)).toFixed(1) + ' pts' : '—';
+    }
+    // Risk/Reward: reward pts (p.target) vs risk pts (p.sl - entry)
+    if (p.target && p.sl && entry) {
+      const slPts = p.sl - entry;
+      const rr = p.target > 0 ? (slPts / p.target).toFixed(2) : '—';
+      document.getElementById('rr-ratio').textContent = '1 : ' + rr + '  (reward ' + p.target.toFixed(1) + ' / risk ' + slPts.toFixed(1) + ' pts)';
+    } else {
+      document.getElementById('rr-ratio').textContent = '—';
+    }
+    document.getElementById('entry-time').textContent = p.entry_time || '—';
+  }
+
+  const sig = d.last_signal;
+  if (sig) {
+    const sc = document.getElementById('signal-card');
+    sc.className = 'signal-card ' + (sig.signal||'wait').toLowerCase();
+    document.getElementById('sig-name').textContent   = sig.signal || 'WAIT';
+    document.getElementById('sig-reason').textContent = sig.reason || '—';
+    const conf = sig.confidence || 0;
+    document.getElementById('sig-conf').textContent = conf + '%';
+    const fill = document.getElementById('conf-fill');
+    fill.style.width      = conf + '%';
+    fill.style.background = conf>75 ? 'var(--green)' : conf>50 ? 'var(--amber)' : 'var(--t3)';
+    document.getElementById('sig-setup').textContent = sig.setup_type || '—';
+    document.getElementById('sig-ce').textContent    = sig.ce_strike ? sig.ce_strike : '—';
+    document.getElementById('sig-pe').textContent    = sig.pe_strike ? sig.pe_strike : '—';
+    document.getElementById('sig-entry').textContent = sig.premium ? '₹' + sig.premium.toFixed(0) : (sig.approx_entry ? '₹' + sig.approx_entry : '—');
+    document.getElementById('sig-sl').textContent    = sig.approx_sl ? '₹' + sig.approx_sl : '—';
+  }
+
+  // Execution mode toggle buttons
+  const mode = d.execution_mode || 'MANUAL';
+  document.getElementById('mode-manual')?.classList.toggle('active', mode === 'MANUAL');
+  document.getElementById('mode-auto')?.classList.toggle('active',   mode === 'AUTO');
+
+  // Execute button — only in MANUAL mode when signal pending
+  const execZone = document.getElementById('execute-zone');
+  if (execZone) execZone.style.display = (d.signal_pending && mode === 'MANUAL') ? 'block' : 'none';
+
+  const dailyPct = Math.min(100, Math.abs(pnl)/45000*100);
+  const bar = document.getElementById('daily-bar');
+  bar.style.width      = dailyPct + '%';
+  bar.style.background = dailyPct>80 ? 'var(--red)' : dailyPct>50 ? 'var(--amber)' : 'var(--green)';
+  document.getElementById('daily-pct').textContent = dailyPct.toFixed(0) + '%';
+
+  // Market data
+  if (d.market) {
+    const m = d.market;
+    const spot = m.nifty_spot ? m.nifty_spot.toLocaleString('en-IN',{maximumFractionDigits:2}) : '—';
+    const vix  = m.vix ? m.vix.toFixed(2) : '—';
+    document.getElementById('nifty-spot').textContent = spot;
+    document.getElementById('vix-val').textContent    = vix;
+    document.getElementById('md-spot').textContent    = spot;
+    document.getElementById('md-vix').textContent     = vix;
+    document.getElementById('md-pcr').textContent     = m.pcr ? m.pcr.toFixed(2) : '—';
+    document.getElementById('md-iv').textContent      = m.iv_atm ? m.iv_atm.toFixed(1) + '%' : '—';
+    document.getElementById('md-atr').textContent     = m.atr_15m ? m.atr_15m.toFixed(1) : '—';
+    document.getElementById('md-delta').textContent   = m.net_delta != null ? m.net_delta.toFixed(3) : '—';
+  }
+
+  // Setup checks — true=pass, false=fail, null=no data yet
+  if (d.checks) {
+    const marketClosed = !isMarketOpen();
+    const map = { vix:'chk-vix', iv:'chk-iv', ema:'chk-ema', pcr:'chk-pcr', gate:'chk-gate' };
+    const realMap = { 
+      vix: { id: 'val-vix', format: (v) => v != null ? v.toFixed(2) : '—', range: [13, 28] },
+      iv: { id: 'val-iv', format: (v) => v != null ? v.toFixed(1) + '%' : '—', threshold: 40 },
+      ema: { id: 'val-ema', format: (v) => v != null ? (v ? 'Flat' : 'Trending') : '—' },
+      pcr: { id: 'val-pcr', format: (v) => v != null ? v.toFixed(2) : '—', range: [0.8, 1.4] },
+      gate: { id: 'val-gate', format: (v) => v != null ? (v ? 'OK' : 'BREACHED') : '—' }
+    };
+    Object.entries(map).forEach(([k,id]) => {
+      const row  = document.getElementById(id)?.closest('.ck');
+      const dot  = row?.querySelector('.ck-dot');
+      let val = d.checks[k];
+      if (k === 'pcr' && marketClosed) val = null;
+      const cls  = val === true ? 'pass' : val === false ? 'fail' : 'wait';
+      const text = val === true ? 'OK'   : val === false ? 'FAIL' : '—';
+      if (dot) dot.className = 'ck-dot ' + cls;
+      const el = document.getElementById(id);
+      if (el) { el.textContent = text; el.style.color = val === true ? 'var(--green)' : val === false ? 'var(--red)' : 'var(--t3)'; }
+      
+      // Show real value
+      const realEl = document.getElementById(realMap[k].id);
+      if (realEl) {
+        let realVal = null;
+        if (k === 'vix' && d.market?.vix) realVal = d.market.vix;
+        else if (k === 'iv' && d.market?.iv_percentile) realVal = d.market.iv_percentile;
+        else if (k === 'ema' && d.market?.ema_trend_flat != null) realVal = d.market.ema_trend_flat;
+        else if (k === 'pcr' && d.market?.pcr) realVal = d.market.pcr;
+        else if (k === 'gate' && d.daily_pnl != null) realVal = d.daily_pnl > -45000;
+        realEl.textContent = realMap[k].format(realVal);
+      }
+    });
+  }
+
+  const pill = document.getElementById('status-pill');
+  const txt  = document.getElementById('status-text');
+  if (d.bot_running) { pill.className='pill live'; txt.textContent='LIVE'; }
+  else               { pill.className='pill off';  txt.textContent='STOPPED'; }
+
+  // Drive Start/Stop toggle from server bot_running state
+  agentRunning = !!d.bot_running;
+
+  // Sync button states from server
+  if (d.button_states) {
+    buttonStates.approveBuy = d.button_states.approve_buy || false;
+    buttonStates.emergencyExit = d.button_states.emergency_exit || false;
+    buttonStates.stopAgent = d.button_states.stop_agent || false;
+    buttonStates.startAgent = d.button_states.start_agent || false;
+  }
+  updateButtonStates();
+  renderPositions(d);
+}
+
+function renderPositions(d) {
+  const tbody = document.getElementById('positions-list');
+  const pill  = document.getElementById('pos-count-pill');
+  if (!tbody) return;
+
+  const hasPOS = d.active_position && d.position_detail;
+  if (!hasPOS) {
+    pill.textContent = 'No positions';
+    pill.style.color = 'var(--t3)';
+    tbody.innerHTML  = '<tr><td colspan="9" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>';
+    return;
+  }
+
+  pill.textContent = '● 1 Active';
+  pill.style.color = 'var(--green)';
+
+  const p   = d.position_detail;
+  const qty = p.quantity || 1;
+  const pnl = d.daily_pnl || 0;
+  const pnlHtml = pnl >= 0
+    ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
+    : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
+
+  const entryTime = p.entry_time
+    ? (typeof p.entry_time === 'string' ? p.entry_time.substring(0,8) : String(p.entry_time).substring(11,19))
+    : '—';
+
+  tbody.innerHTML = `<tr>
+    <td>${entryTime}</td>
+    <td>${p.setup_type || 'Short Strangle'}</td>
+    <td style="color:var(--red)">${p.ce_strike || '—'}</td>
+    <td style="color:var(--green)">${p.pe_strike || '—'}</td>
+    <td>₹${p.premium_received ? p.premium_received.toFixed(1) : '—'}</td>
+    <td style="color:var(--green)">${p.target ? '₹'+p.target.toFixed(0) : '—'}</td>
+    <td style="color:var(--red)">${p.sl ? '₹'+p.sl.toFixed(0) : '—'}</td>
+    <td>${qty}</td>
+    <td>${pnlHtml}</td>
+  </tr>`;
+}
+
+function demo() {
+  return {
+    regime:'A', trades_today:1, daily_pnl:8420, bot_running:true,
+    active_position:true, signal_pending:false, execution_mode:'MANUAL',
+    dte: 2, expiry_date: '10-Apr-2026',
+    position_detail:{ ce_strike:24500, pe_strike:24100, premium_received:142.5, target:71.25, sl:285, entry_time:'09:35:00' },
+    last_signal:{ signal:'WAIT', confidence:44, reason:'No clear imbalance visible', setup_type:'—', ce_strike:null, pe_strike:null, premium:null, approx_entry:null, approx_sl:null },
+    market:{ nifty_spot:24300, vix:14.5, pcr:1.12, iv_atm:null, atr_15m:null, net_delta:null },
+    checks:{ vix:true, iv:null, ema:null, pcr:true, event:true, margin:true, gate:true },
+    funds:{ available_cash:870000, used_margin:230000 },
+    button_states: { approve_buy: false, emergency_exit: false, stop_agent: false, start_agent: false }
+  };
+}
+
+async function fetchLogs() {
+  try {
+    const d = await (await fetch('/api/logs')).json();
+    const area = document.getElementById('log-area');
+    area.innerHTML = d.lines.map(l => {
+      const cls = l.includes('[INFO]')?'I': l.includes('[WARN]')?'W': l.includes('[ERROR]')?'E': l.includes('[TRADE]')?'T':'';
+      return `<div class="ll ${cls}">${l.trim()}</div>`;
+    }).join('');
+    area.scrollTop = area.scrollHeight;
+  } catch {}
+}
+
+async function fetchTrades() {
+  try {
+    const d = await (await fetch('/api/trades')).json();
+    const tbody = document.getElementById('trade-log');
+    if (!d.trades || d.trades.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:24px;font-family:var(--ui)">No trades yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.trades.slice().reverse().map(t => {
+      const pnl = t.final_pnl || 0;
+      const pnlHtml = pnl >= 0
+        ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
+        : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
+      const exitTime = t.exit_time ? t.exit_time.substring(11,19) : '—';
+      return `<tr>
+        <td>${exitTime}</td>
+        <td>${t.setup_type || '—'}</td>
+        <td>${t.ce_strike || '—'}</td>
+        <td>${t.pe_strike || '—'}</td>
+        <td>₹${(t.premium_received||0).toFixed(0)}</td>
+        <td style="font-size:10px;color:var(--t3)">${t.exit_reason || '—'}</td>
+        <td>${pnlHtml}</td>
+        <td><button onclick="deleteTrade('${t.trade_id}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:2px 6px" title="Delete">✕</button></td>
+      </tr>`;
+    }).join('');
+  } catch {}
+}
+
+async function deleteTrade(tradeId) {
+  if (!confirm('Delete this trade record?')) return;
+  try {
+    const r = await fetch('/api/trade/' + tradeId, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.ok) fetchTrades();
+    else alert('Delete failed: ' + d.msg);
+  } catch { alert('Delete failed'); }
+}
+
+// ── Control button state management ──
+let buttonStates = {
+  approveBuy: false,
+  emergencyExit: false,
+  stopAgent: false,
+  startAgent: false
+};
+
+let agentRunning = false;
+
+function updateButtonStates() {
+  const buyBtn = document.getElementById('btn-approve-buy');
+  const exitBtn = document.getElementById('btn-emergency-exit');
+  const stopBtn = document.getElementById('btn-stop-agent');
+  const startBtn = document.getElementById('btn-start-agent');
+
+  if (buyBtn) {
+    buyBtn.disabled = buttonStates.approveBuy;
+    buyBtn.textContent = buttonStates.approveBuy ? '✓ Buy Approved' : '▶ Approve Buy';
+    if (buttonStates.approveBuy) buyBtn.classList.add('processing');
+    else buyBtn.classList.remove('processing');
+  }
+
+  if (exitBtn) {
+    exitBtn.disabled = buttonStates.emergencyExit;
+    exitBtn.textContent = buttonStates.emergencyExit ? '✓ Positions Closed' : '⚠ Emergency Exit';
+    if (buttonStates.emergencyExit) exitBtn.classList.add('processing');
+    else exitBtn.classList.remove('processing');
+  }
+
+  // Toggle Stop/Start buttons based on server bot_running state
+  if (stopBtn && startBtn) {
+    if (!agentRunning) {
+      stopBtn.style.display = 'none';
+      startBtn.style.display = 'flex';
+      startBtn.disabled = buttonStates.startAgent;
+      startBtn.textContent = buttonStates.startAgent ? '✓ Agent Starting...' : '▶ Start Agent';
+      if (buttonStates.startAgent) startBtn.classList.add('processing');
+      else startBtn.classList.remove('processing');
+    } else {
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'flex';
+      stopBtn.disabled = false;
+      stopBtn.textContent = '■ Stop Agent';
+      stopBtn.classList.remove('processing');
+    }
+  }
+
+  // ── Sync mobile control bar ──
+  const mBuy   = document.getElementById('m-btn-approve');
+  const mExit  = document.getElementById('m-btn-exit');
+  const mStop  = document.getElementById('m-btn-stop');
+  const mStart = document.getElementById('m-btn-start');
+  if (mBuy) {
+    mBuy.disabled    = buttonStates.approveBuy;
+    mBuy.textContent = buttonStates.approveBuy ? '✓ Approved' : '▶ Approve';
+  }
+  if (mExit) {
+    mExit.disabled    = buttonStates.emergencyExit;
+    mExit.textContent = buttonStates.emergencyExit ? '✓ Closed' : '⚠ Exit';
+  }
+  if (mStop && mStart) {
+    if (!agentRunning) {
+      mStop.style.display  = 'none';
+      mStart.style.display = 'flex';
+      mStart.disabled      = buttonStates.startAgent;
+      mStart.textContent   = buttonStates.startAgent ? '...' : '▶ Start';
+    } else {
+      mStart.style.display = 'none';
+      mStop.style.display  = 'flex';
+      mStop.disabled       = false;
+      mStop.textContent    = '■ Stop';
+    }
+  }
+}
+
+async function stopAgent() {
+  if (buttonStates.stopAgent) return;
+  if (!confirm('Stop the agent?')) return;
+  buttonStates.stopAgent = true;
+  buttonStates.startAgent = false;
+  updateButtonStates();
+  await fetch('/api/stop', {method:'POST'});
+}
+
+async function emergencyExit() {
+  if (buttonStates.emergencyExit) return;
+  if (!confirm('Emergency exit all positions?')) return;
+  buttonStates.emergencyExit = true;
+  buttonStates.stopAgent = false;
+  buttonStates.startAgent = false;
+  updateButtonStates();
+  await fetch('/api/emergency_exit', {method:'POST'});
+}
+
+async function approveBuy() {
+  if (buttonStates.approveBuy) return;
+  buttonStates.approveBuy = true;
+  buttonStates.stopAgent = false;
+  buttonStates.startAgent = false;
+  updateButtonStates();
+  const r = await fetch('/api/approve_buy', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+  alert((await r.json()).msg);
+}
+
+async function startAgent() {
+  if (buttonStates.startAgent) return;
+  buttonStates.startAgent = true;
+  buttonStates.stopAgent = false;
+  updateButtonStates();
+  await fetch('/api/start', {method:'POST'});
+  // Reset start state after successful start
+  setTimeout(() => {
+    buttonStates.startAgent = false;
+    updateButtonStates();
+  }, 2000);
+}
+
+async function reconnect() { await fetch('/api/reconnect', {method:'POST'}); }
+
+async function setMode(mode) {
+  await fetch('/api/set_mode', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({mode})
+  });
+}
+
+async function executeTrade() {
+  const btn = document.getElementById('btn-execute');
+  if (!btn || btn.disabled) return;
+  btn.disabled    = true;
+  btn.textContent = '⏳ Placing orders...';
+  try {
+    const r = await fetch('/api/execute', {method: 'POST'});
+    const d = await r.json();
+    if (!r.ok) {
+      alert(d.error || 'Execution failed');
+      btn.disabled    = false;
+      btn.textContent = '⚡ Execute Trade';
+    }
+    // On success the execute-zone hides automatically on next poll
+  } catch(e) {
+    alert('Network error: ' + e.message);
+    btn.disabled    = false;
+    btn.textContent = '⚡ Execute Trade';
+  }
+}
+
+async function testLiveTrade() {
+  const btn = document.getElementById('btn-test-live');
+  if (!btn || btn.disabled) return;
+  const ok = confirm('This will place a LIVE market SELL order for 1 lot of the current ATM NIFTY CE on AngelOne. Continue?');
+  if (!ok) return;
+
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = '⏳ Sending live order...';
+  try {
+    const r = await fetch('/api/test_live_trade', {method: 'POST'});
+    const d = await r.json();
+    if (!r.ok) {
+      alert(d.error || 'Live test order failed');
+    } else {
+      alert(`Live order sent.\n${d.symbol}\nQty: ${d.qty}\nOrder ID: ${d.order_id}`);
+    }
+  } catch (e) {
+    alert('Network error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+// ── Connection status ──
+async function pollConnection() {
+  try {
+    const c = await (await fetch('/api/connection')).json();
+    const dot   = document.getElementById('conn-dot');
+    const label = document.getElementById('conn-status-label');
+    const colorMap = { connected:'var(--green)', disconnected:'var(--red)', reconnecting:'var(--amber)' };
+    const color = colorMap[c.status] || 'var(--t3)';
+    dot.className     = 'conn-dot ' + (c.status || 'disconnected');
+    label.textContent = c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : '—';
+    label.style.color = color;
+    document.getElementById('conn-name').textContent      = c.name         || '—';
+    document.getElementById('conn-client').textContent    = c.client_id    || '—';
+    document.getElementById('conn-ping').textContent      = c.ping_ms != null ? c.ping_ms + ' ms' : '—';
+    document.getElementById('conn-time').textContent      = c.connected_at || '—';
+    document.getElementById('conn-last-ping').textContent = c.last_ping    || '—';
+
+    // Margin — conn widget + KPI card
+    const avail = c.available_margin || 0;
+    const used  = c.used_margin      || 0;
+    const total = avail + used;
+    const fmtL  = v => v >= 100000 ? '₹' + (v/100000).toFixed(2) + 'L'
+                     : v >= 1000   ? '₹' + Math.round(v/1000) + 'K'
+                     : '₹' + Math.round(v);
+    const isConn  = c.status === 'connected';
+    const availEl = document.getElementById('conn-avail-margin');
+    const usedEl  = document.getElementById('conn-used-margin');
+    const totEl   = document.getElementById('conn-total-margin');
+    if (availEl) availEl.textContent = isConn ? fmtL(avail) : '—';
+    if (usedEl)  usedEl.textContent  = isConn ? fmtL(used)  : '—';
+    if (totEl)   totEl.textContent   = isConn ? fmtL(total) : '—';
+
+    // KPI card (top row)
+    document.getElementById('kpi-margin').textContent     = isConn ? fmtL(avail) : '₹ —';
+    document.getElementById('kpi-margin-sub').textContent = isConn ? fmtL(used) + ' used' : '—';
+
+    const errEl = document.getElementById('conn-error');
+    if (c.error) { errEl.textContent = c.error; errEl.style.display = 'block'; }
+    else         { errEl.style.display = 'none'; }
+  } catch {
+    document.getElementById('conn-dot').className = 'conn-dot disconnected';
+    document.getElementById('conn-status-label').textContent = 'Offline';
+    document.getElementById('conn-status-label').style.color = 'var(--red)';
+  }
+}
+
+// ── Toast + Chrome Notifications ──
+const TOAST_ICONS = { success:'✅', danger:'🛑', warning:'⚠️', info:'📊' };
+
+function showToast(title, body, level='info', duration=8000) {
+  const container = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = 'toast ' + level;
+  t.innerHTML = `
+    <span class="toast-icon">${TOAST_ICONS[level]||'🔔'}</span>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      <div class="toast-msg">${body.replace(/\n/g,'<br>')}</div>
+    </div>
+    <button class="toast-close" onclick="this.closest('.toast').remove()">✕</button>`;
+  container.appendChild(t);
+  setTimeout(() => {
+    t.classList.add('removing');
+    setTimeout(() => t.remove(), 450);
+  }, duration);
+}
+
+function showChromeNotif(title, body) {
+  if (Notification.permission === 'granted') {
+    new Notification('FIFTO — ' + title, { body, icon: '/fifto_logo.png', silent: false });
+  }
+}
+
+function notify(title, body, level) {
+  showToast(title, body, level);
+  showChromeNotif(title, body);
+}
+
+// Request Chrome notification permission once
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+// Poll server notifications every 3s
+async function pollNotifications() {
+  try {
+    const d = await (await fetch('/api/notifications')).json();
+    (d.notifications || []).forEach(n => notify(n.title, n.body, n.level));
+  } catch {}
+}
+
+poll();
+pollConnection();
+loadConfig();
+pollNotifications();
+setInterval(poll, 3000);
+setInterval(pollConnection, 5000);
+setInterval(fetchLogs, 10000);
+setInterval(pollNotifications, 3000);
+fetchTrades();
+setInterval(fetchTrades, 15000);
+</script>
+
+<!-- ══════════ TOAST CONTAINER ══════════ -->
+<div id="toast-container"></div>
+
+<!-- ══════════ MOBILE BOTTOM NAV ══════════ -->
+<nav class="mobile-nav" id="mobile-nav">
+  <button class="mobile-nav-item active" data-page="dashboard" onclick="showPage('dashboard',null,null,this)">
+    <span class="mobile-nav-icon">◉</span>
+    <span>Dashboard</span>
+  </button>
+  <button class="mobile-nav-item" data-page="positions" onclick="showPage('positions',null,null,this)">
+    <span class="mobile-nav-icon">☰</span>
+    <span>Positions</span>
+  </button>
+  <button class="mobile-nav-item" data-page="trades" onclick="showPage('trades',null,null,this)">
+    <span class="mobile-nav-icon">📋</span>
+    <span>Trades</span>
+  </button>
+  <button class="mobile-nav-item" data-page="settings" onclick="showPage('settings',null,null,this)">
+    <span class="mobile-nav-icon">⚙</span>
+    <span>Settings</span>
+  </button>
+</nav>
+
+<!-- ══════════ MOBILE CONTROL BAR ══════════ -->
+<div class="mobile-ctrl-bar" id="mobile-ctrl-bar">
+  <button class="ctrl-btn ok"     id="m-btn-approve" onclick="approveBuy()">▶ Approve</button>
+  <button class="ctrl-btn danger" id="m-btn-exit"    onclick="emergencyExit()">⚠ Exit</button>
+  <button class="ctrl-btn danger" id="m-btn-stop"    onclick="stopAgent()">■ Stop</button>
+  <button class="ctrl-btn ok"     id="m-btn-start"   onclick="startAgent()" style="display:none">▶ Start</button>
+</div>
+
+</body>
+</html>
