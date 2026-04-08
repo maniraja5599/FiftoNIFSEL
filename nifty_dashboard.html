@@ -1162,6 +1162,11 @@ html.light .toggle-name      { color: #111827; }
             <div class="kpi-sub">unrealised</div>
           </div>
           <div class="kpi">
+            <div class="kpi-label">Overall P&amp;L</div>
+            <div class="kpi-val" id="kpi-overall-pnl">₹ 0</div>
+            <div class="kpi-sub" id="kpi-overall-pct" style="font-weight:600">0.00% on capital</div>
+          </div>
+          <div class="kpi">
             <div class="kpi-label">Available Margin</div>
             <div class="kpi-val c-green" id="kpi-margin">₹ —</div>
             <div class="kpi-sub" id="kpi-margin-sub">—</div>
@@ -2162,6 +2167,16 @@ function applyState(d) {
   document.getElementById('kpi-pnl').innerHTML = fmt(pnl);
   document.getElementById('pnl-big').innerHTML = fmt(pnl);
   document.getElementById('risk-daily').innerHTML = fmt(pnl);
+
+  // Overall P&L
+  const overallPnl = d.overall_pnl || 0;
+  const overallPct = d.overall_pnl_pct || 0;
+  const overallEl  = document.getElementById('kpi-overall-pnl');
+  const overallPctEl = document.getElementById('kpi-overall-pct');
+  overallEl.innerHTML = fmt(overallPnl);
+  overallEl.style.color = overallPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  overallPctEl.textContent = (overallPct >= 0 ? '+' : '') + overallPct.toFixed(2) + '% on capital';
+  overallPctEl.style.color = overallPct >= 0 ? 'var(--green)' : 'var(--red)';
 
   // Margin is now updated from connection API
 

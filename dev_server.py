@@ -1963,7 +1963,7 @@ def position_monitor():
                             )
                             _square_off_position()
 
-                        elif current_cost >= pos["sl"]:
+                        elif current_cost > pos["sl"]:
                             pos["exit_reason"] = "STOP_LOSS"
                             LOG_LINES.append(f"[TRADE] [{_ts()}] SL HIT ✗ | P&L ₹{pnl:,.0f} | Squaring off")
                             _notify(
@@ -2124,6 +2124,15 @@ def api_state():
         state["expiry_date"] = exp_str
     except Exception:
         pass   # keep whatever was there before
+    # Compute overall P&L from all closed trades in history
+    overall = sum(
+        float(t.get("final_pnl") or 0)
+        for t in state.get("trade_history", [])
+        if t.get("exit_time") and t.get("final_pnl") is not None
+    )
+    capital = float(config.get("capital", 1500000))
+    state["overall_pnl"] = round(overall, 2)
+    state["overall_pnl_pct"] = round((overall / capital * 100), 2) if capital else 0
     return jsonify(state)
 
 @app.route("/api/connection")
