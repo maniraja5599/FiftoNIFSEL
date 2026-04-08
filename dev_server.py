@@ -1462,29 +1462,38 @@ def _place_order(symbol, token, qty, txn_type="SELL"):
             "quantity":        qty,
         }
         result = angel_obj.placeOrder(params)
-        
-        # Handle both dict and string responses from AngelOne API
-        if isinstance(result, str):
-            # String response - could be order ID or error message
-            if result.isdigit() or (len(result) > 0 and not result.startswith('{')):
-                # Likely a successful order ID
-                oid = result
-                LOG_LINES.append(f"[TRADE] [{_ts()}] Order OK: {txn_type} {qty}x {symbol} → #{oid}")
-                return oid
-            else:
-                # String error message
-                LOG_LINES.append(f"[ERROR] [{_ts()}] Order FAILED: {symbol} — {result}")
-                return None
-        elif result and isinstance(result, dict):
+
+        LOG_LINES.append(f"[DEBUG] [{_ts()}] placeOrder raw response ({type(result).__name__}): {str(result)[:200]}")
+
+        # AngelOne SDK can return: dict, str (order ID), int (order ID), or list
+        if isinstance(result, dict):
             if result.get("status"):
-                oid = result["data"]["orderid"]
+                oid = str(result.get("data", {}).get("orderid") or result.get("data") or result)
                 LOG_LINES.append(f"[TRADE] [{_ts()}] Order OK: {txn_type} {qty}x {symbol} → #{oid}")
                 return oid
             else:
-                msg = result.get("message", "unknown error")
+                msg = result.get("message", str(result))
                 LOG_LINES.append(f"[ERROR] [{_ts()}] Order FAILED: {symbol} — {msg}")
+                return None
+        elif isinstance(result, (str, int)):
+            oid = str(result).strip()
+            if oid and oid not in ("None", "0", ""):
+                LOG_LINES.append(f"[TRADE] [{_ts()}] Order OK: {txn_type} {qty}x {symbol} → #{oid}")
+                return oid
+            else:
+                LOG_LINES.append(f"[ERROR] [{_ts()}] Order FAILED: {symbol} — empty/zero order ID: {oid!r}")
+                return None
+        elif isinstance(result, list) and result:
+            # Some SDK versions return a list with the order ID as first element
+            oid = str(result[0]).strip()
+            if oid and oid not in ("None", "0", ""):
+                LOG_LINES.append(f"[TRADE] [{_ts()}] Order OK (list): {txn_type} {qty}x {symbol} → #{oid}")
+                return oid
+            else:
+                LOG_LINES.append(f"[ERROR] [{_ts()}] Order FAILED: {symbol} — list response: {result}")
+                return None
         else:
-            LOG_LINES.append(f"[ERROR] [{_ts()}] Order FAILED: {symbol} — Invalid response type: {type(result)}")
+            LOG_LINES.append(f"[ERROR] [{_ts()}] Order FAILED: {symbol} — unexpected response: {result!r}")
     except Exception as e:
         LOG_LINES.append(f"[ERROR] [{_ts()}] Order exception ({symbol}): {e}")
     return None
@@ -1953,26 +1962,30 @@ def position_monitor():
 
                         # Target = 30% profit (current_cost ≤ entry - target)
                         if current_cost <= entry_prem - pos["target"]:
-                            pos["exit_reason"] = "TARGET"
-                            LOG_LINES.append(f"[TRADE] [{_ts()}] TARGET HIT ✓ | P&L ₹{pnl:,.0f} | Squaring off")
-                            _notify(
-                                "🎯 Target Hit!",
-                                f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\n"
-                                f"P&L: +₹{pnl:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}\nSquaring off...",
-                                "success"
-                            )
-                            _square_off_position()
+                            if not pos.get("exit_notified"):
+                                pos["exit_notified"] = True
+                                pos["exit_reason"] = "TARGET"
+                                LOG_LINES.append(f"[TRADE] [{_ts()}] TARGET HIT ✓ | P&L ₹{pnl:,.0f} | Squaring off")
+                                _notify(
+                                    "🎯 Target Hit!",
+                                    f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\n"
+                                    f"P&L: +₹{pnl:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}\nSquaring off...",
+                                    "success"
+                                )
+                                _square_off_position()
 
                         elif current_cost > pos["sl"]:
-                            pos["exit_reason"] = "STOP_LOSS"
-                            LOG_LINES.append(f"[TRADE] [{_ts()}] SL HIT ✗ | P&L ₹{pnl:,.0f} | Squaring off")
-                            _notify(
-                                "🛑 Stop Loss Hit",
-                                f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\n"
-                                f"P&L: ₹{pnl:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}\nSquaring off...",
-                                "danger"
-                            )
-                            _square_off_position()
+                            if not pos.get("exit_notified"):
+                                pos["exit_notified"] = True
+                                pos["exit_reason"] = "STOP_LOSS"
+                                LOG_LINES.append(f"[TRADE] [{_ts()}] SL HIT ✗ | P&L ₹{pnl:,.0f} | Squaring off")
+                                _notify(
+                                    "🛑 Stop Loss Hit",
+                                    f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\n"
+                                    f"P&L: ₹{pnl:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}\nSquaring off...",
+                                    "danger"
+                                )
+                                _square_off_position()
 
                         else:
                             now_t = datetime.now()
@@ -1981,24 +1994,28 @@ def position_monitor():
                                 expiry_dt = datetime.strptime(pos.get("expiry", ""), "%d-%b-%Y").date()
                                 h, m = map(int, config.get("expiry_cut_time", "13:00").split(":"))
                                 if now_t.date() == expiry_dt and now_t.time() >= _time(h, m):
-                                    pos["exit_reason"] = "EXPIRY_CUT"
-                                    LOG_LINES.append(f"[TRADE] [{_ts()}] EXPIRY CUT-TIME {config.get('expiry_cut_time','13:00')} on expiry day | P&L ₹{pnl:,.0f} | Squaring off")
-                                    _notify("⏰ Expiry Cut-Time Exit", f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\nP&L: ₹{pnl:,.0f}\nExiting before expiry.", "warning")
-                                    _square_off_position()
+                                    if not pos.get("exit_notified"):
+                                        pos["exit_notified"] = True
+                                        pos["exit_reason"] = "EXPIRY_CUT"
+                                        LOG_LINES.append(f"[TRADE] [{_ts()}] EXPIRY CUT-TIME {config.get('expiry_cut_time','13:00')} on expiry day | P&L ₹{pnl:,.0f} | Squaring off")
+                                        _notify("⏰ Expiry Cut-Time Exit", f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\nP&L: ₹{pnl:,.0f}\nExiting before expiry.", "warning")
+                                        _square_off_position()
                             except Exception:
                                 pass
 
                             # Dead zone: force exit after 14:30 if still in position
-                            if state["active_position"]:
+                            if state["active_position"] and not pos.get("exit_notified"):
                                 dh, dm = map(int, config.get("dead_zone_start", "14:30").split(":"))
                                 if now_t.time() >= _time(dh, dm):
+                                    pos["exit_notified"] = True
                                     pos["exit_reason"] = "DEAD_ZONE"
                                     LOG_LINES.append(f"[TRADE] [{_ts()}] DEAD ZONE {config.get('dead_zone_start','14:30')} reached | P&L ₹{pnl:,.0f} | Squaring off")
                                     _notify("⏰ Dead Zone Exit", f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\nP&L: ₹{pnl:,.0f}\nExiting — past 14:30 dead zone.", "warning")
                                     _square_off_position()
 
                             # EOD exit at 3:20 PM
-                            if state["active_position"] and now_t.time() >= _time(15, 20):
+                            if state["active_position"] and not pos.get("exit_notified") and now_t.time() >= _time(15, 20):
+                                pos["exit_notified"] = True
                                 pos["exit_reason"] = "EOD_EXIT"
                                 LOG_LINES.append(f"[TRADE] [{_ts()}] EOD auto-exit at 3:20 PM | P&L ₹{pnl:,.0f} | Squaring off")
                                 _notify("⏰ EOD Auto-Exit — 3:20 PM", f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\nP&L: ₹{pnl:,.0f} | Squaring off before market close.", "warning")
