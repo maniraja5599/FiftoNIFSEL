@@ -1216,6 +1216,22 @@ html.light .toggle-name      { color: #111827; }
                   <div class="pos-field-val c-green" id="pe-strike">—</div>
                 </div>
                 <div>
+                  <div class="pos-field-label">CE Entry LTP</div>
+                  <div class="pos-field-val c-red" id="ce-entry-ltp">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">PE Entry LTP</div>
+                  <div class="pos-field-val c-green" id="pe-entry-ltp">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">CE Current LTP</div>
+                  <div class="pos-field-val c-red" id="ce-current-ltp">—</div>
+                </div>
+                <div>
+                  <div class="pos-field-label">PE Current LTP</div>
+                  <div class="pos-field-val c-green" id="pe-current-ltp">—</div>
+                </div>
+                <div>
                   <div class="pos-field-label">Premium</div>
                   <div class="pos-field-val" id="premium">—</div>
                 </div>
@@ -2157,8 +2173,12 @@ function applyState(d) {
   posPill.style.color = hasPOS ? 'var(--green)' : 'var(--t3)';
   if (hasPOS) {
     const p = d.position_detail;
-    document.getElementById('ce-strike').textContent  = p.ce_strike || '—';
-    document.getElementById('pe-strike').textContent  = p.pe_strike || '—';
+    document.getElementById('ce-strike').textContent       = p.ce_strike || '—';
+    document.getElementById('pe-strike').textContent       = p.pe_strike || '—';
+    document.getElementById('ce-entry-ltp').textContent    = p.ce_entry_price != null ? '₹' + p.ce_entry_price.toFixed(2) : '—';
+    document.getElementById('pe-entry-ltp').textContent    = p.pe_entry_price != null ? '₹' + p.pe_entry_price.toFixed(2) : '—';
+    document.getElementById('ce-current-ltp').textContent  = p.current_ce_ltp != null ? '₹' + p.current_ce_ltp.toFixed(2) : '—';
+    document.getElementById('pe-current-ltp').textContent  = p.current_pe_ltp != null ? '₹' + p.current_pe_ltp.toFixed(2) : '—';
     if (p.premium_received) {
       const total = p.premium_received * (p.quantity || 1);
       document.getElementById('premium').textContent = '₹' + p.premium_received.toFixed(1) + '  (₹' + total.toLocaleString('en-IN', {maximumFractionDigits:0}) + ' total)';

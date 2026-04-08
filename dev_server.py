@@ -53,11 +53,12 @@ def _get_or_create_sheet():
     try:
         return sh.worksheet("Trades")
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title="Trades", rows=1000, cols=15)
+        ws = sh.add_worksheet(title="Trades", rows=1000, cols=17)
         ws.append_row([
             "Trade ID", "Entry Time", "Exit Time", "Setup",
             "CE Strike", "PE Strike", "CE Symbol", "PE Symbol",
-            "Qty", "Premium", "Target", "Stop Loss", "P&L", "Exit Reason", "Expiry"
+            "Qty", "Premium", "Target", "Stop Loss", "P&L", "Exit Reason", "Expiry",
+            "CE Entry LTP", "PE Entry LTP"
         ])
         return ws
 
@@ -83,6 +84,8 @@ def _save_entry_sheets(trade_record):
             "",                                   # P&L — blank at entry
             "",                                   # exit reason — blank at entry
             trade_record.get("expiry", ""),
+            trade_record.get("ce_entry_ltp", ""),
+            trade_record.get("pe_entry_ltp", ""),
         ])
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets entry write failed: {e}")
@@ -126,6 +129,8 @@ def _persist_entry(pos):
         "final_pnl":       None,
         "exit_reason":     None,
         "expiry":          pos.get("expiry", ""),
+        "ce_entry_ltp":    pos.get("ce_entry_price", ""),
+        "pe_entry_ltp":    pos.get("pe_entry_price", ""),
     }
     _save_trade_local(entry_record)
     threading.Thread(target=_save_entry_sheets, args=(entry_record,), daemon=True).start()
@@ -220,6 +225,15 @@ def angel_login():
             LOG_LINES.append(f"[INFO]  [{_ts()}] AngelOne connected — {connection['name']} ({client})")
             _fetch_margin()
             _update_checks()
+            # Resolve tokens for any position restored from disk
+            pos = state.get("position_detail")
+            if pos and pos.get("ce_token") is None and pos.get("ce_symbol"):
+                try:
+                    pos["ce_token"] = _get_nfo_token(pos["ce_symbol"])
+                    pos["pe_token"] = _get_nfo_token(pos["pe_symbol"])
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] Tokens resolved for restored position: CE={pos['ce_token']} PE={pos['pe_token']}")
+                except Exception as _te:
+                    LOG_LINES.append(f"[WARN]  [{_ts()}] Could not resolve tokens for restored position: {_te}")
         else:
             connection["status"] = "disconnected"
             connection["error"]  = data.get("message", "Login failed")
@@ -382,11 +396,80 @@ state["button_states"]["start_agent"] = False
 state["button_states"]["stop_agent"]  = False
 state["last_signal"]["reason"]        = "Agent running. Connecting to AngelOne..."
 
+# ── Restore today's realized P&L from trades.json on startup ──
+def _restore_daily_pnl():
+    """Sum final_pnl of all closed trades from today so daily_pnl survives restarts."""
+    trades = _load_trades_from_disk()
+    today = datetime.now().date()
+    total = 0.0
+    count = 0
+    for t in trades:
+        exit_t = t.get("exit_time")
+        pnl    = t.get("final_pnl")
+        if not exit_t or pnl is None:
+            continue
+        try:
+            # Handle both ISO format and custom format
+            exit_dt = datetime.fromisoformat(exit_t) if "T" in str(exit_t) else datetime.strptime(str(exit_t).strip(), "%d-%m-%Y  %H:%M:%S")
+            if exit_dt.date() == today:
+                total += float(pnl)
+                count += 1
+        except Exception:
+            continue
+    if count:
+        state["closed_pnl"] = round(total, 2)
+        state["daily_pnl"]  = round(total, 2)
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Restored daily P&L from disk: ₹{total:,.0f} ({count} closed trade{'s' if count>1 else ''})")
+
+# ── Restore open position from trades.json on startup ──
+def _restore_open_position():
+    """If trades.json has a trade with no exit_time, restore it as the active position."""
+    trades = _load_trades_from_disk()
+    today = datetime.now().date()
+    for t in reversed(trades):
+        if t.get("exit_time") is None and t.get("entry_time"):
+            try:
+                entry_dt = datetime.fromisoformat(t["entry_time"])
+                if entry_dt.date() != today:
+                    continue  # only restore today's open position
+            except Exception:
+                continue
+            state["active_position"] = True
+            state["trades_today"]   += 1
+            state["position_detail"] = {
+                "trade_id":         t.get("trade_id", ""),
+                "entry_time":       t.get("entry_time", ""),
+                "ce_strike":        t.get("ce_strike"),
+                "pe_strike":        t.get("pe_strike"),
+                "ce_symbol":        t.get("ce_symbol", ""),
+                "pe_symbol":        t.get("pe_symbol", ""),
+                "ce_token":         None,   # filled in after AngelOne login
+                "pe_token":         None,
+                "ce_entry_price":   t.get("ce_entry_ltp") or (t.get("premium_received") / 2 if t.get("premium_received") else None),
+                "pe_entry_price":   t.get("pe_entry_ltp") or (t.get("premium_received") / 2 if t.get("premium_received") else None),
+                "premium_received": t.get("premium_received"),
+                "target":           t.get("target"),
+                "sl":               t.get("stop_loss"),
+                "initial_sl":       t.get("stop_loss"),
+                "quantity":         t.get("quantity"),
+                "setup_type":       t.get("setup_type", "Short Strangle"),
+                "expiry":           t.get("expiry", ""),
+                "pnl":              0,
+                "exit_reason":      None,
+                "trail_locked":     False,
+            }
+            state["last_signal"]["signal"] = "ACTIVE"
+            LOG_LINES.append(f"[INFO]  [{_ts()}] Restored open position from disk: {t.get('ce_symbol')} / {t.get('pe_symbol')}")
+            break
+
 LOG_LINES = [
     f"[INFO]  [{_ts()}] FIFTO AI Trading server starting...",
     f"[INFO]  [{_ts()}] Agent auto-started in AUTO mode.",
     f"[INFO]  [{_ts()}] Connecting to AngelOne...",
 ]
+
+_restore_daily_pnl()
+_restore_open_position()
 
 # ── Notification queue (consumed by dashboard poll) ──
 _NOTIF = []
@@ -1329,14 +1412,28 @@ def _get_nfo_token(symbol):
     """Get AngelOne NFO token for a given trading symbol."""
     if not angel_obj:
         return None
+    # 1. Try direct searchScrip for exact symbol
     try:
         result = angel_obj.searchScrip("NFO", symbol)
         if result and result.get("status"):
             for item in result.get("data", []):
                 if item.get("tradingsymbol") == symbol:
-                    return item.get("symboltoken")
+                    tok = item.get("symboltoken")
+                    if tok:
+                        return str(tok)
     except Exception as e:
-        LOG_LINES.append(f"[WARN]  [{_ts()}] Token lookup failed for {symbol}: {e}")
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Token lookup (direct) failed for {symbol}: {e}")
+    # 2. Fall back to full NIFTY contract cache
+    try:
+        contracts = _fetch_nifty_option_contracts()
+        for row in contracts:
+            if row.get("tradingsymbol") == symbol:
+                tok = row.get("symboltoken")
+                if tok:
+                    return str(tok)
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Token lookup (cache) failed for {symbol}: {e}")
+    LOG_LINES.append(f"[WARN]  [{_ts()}] Token not found for {symbol}")
     return None
 
 
@@ -1806,6 +1903,16 @@ def position_monitor():
                 ce_token = pos.get("ce_token")
                 pe_token = pos.get("pe_token")
 
+                # Retry token lookup if missing (e.g. restored from disk before login)
+                if not ce_token and pos.get("ce_symbol"):
+                    ce_token = _get_nfo_token(pos["ce_symbol"])
+                    if ce_token:
+                        pos["ce_token"] = ce_token
+                if not pe_token and pos.get("pe_symbol"):
+                    pe_token = _get_nfo_token(pos["pe_symbol"])
+                    if pe_token:
+                        pos["pe_token"] = pe_token
+
                 if ce_token and pe_token:
                     ce_r = angel_obj.ltpData("NFO", pos["ce_symbol"], ce_token)
                     pe_r = angel_obj.ltpData("NFO", pos["pe_symbol"], pe_token)
@@ -1819,8 +1926,10 @@ def position_monitor():
                         open_pnl     = (entry_prem - current_cost) * qty
                         pnl          = open_pnl   # alias for SL/target log
 
-                        pos["pnl"]         = round(open_pnl, 2)
-                        state["daily_pnl"] = round(state["closed_pnl"] + open_pnl, 2)
+                        pos["pnl"]              = round(open_pnl, 2)
+                        pos["current_ce_ltp"]   = round(ce_ltp, 2)
+                        pos["current_pe_ltp"]   = round(pe_ltp, 2)
+                        state["daily_pnl"]      = round(state["closed_pnl"] + open_pnl, 2)
 
                         # ── Trailing SL: tighten to breakeven at 20% profit ──
                         trail_pct = config.get("trail_trigger_pct", 0.20)
