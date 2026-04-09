@@ -4,7 +4,7 @@ Real AngelOne + NSE data + Signal Engine + Order Execution (Auto & Manual)
 Run: .venv/Scripts/python.exe dev_server.py
 """
 
-import os, time, threading, math, json
+import os, time, threading, math, json, hmac
 from datetime import datetime, date as _date, time as _time, timedelta
 from flask import Flask, jsonify, send_from_directory, request
 from dotenv import load_dotenv
@@ -179,6 +179,108 @@ def _update_exit_sheets(trade_record):
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets exit update failed: {e}")
 
+
+def _load_open_position_from_sheet():
+    """Fallback recovery from today's open trade in Google Sheets."""
+    ws = _get_or_create_sheet()
+    if not ws:
+        return None
+
+    def parse_number(value, default=None):
+        if value is None:
+            return default
+        text = str(value).strip()
+        if text == "":
+            return default
+        try:
+            return float(text.replace(",", ""))
+        except Exception:
+            return default
+
+    try:
+        rows = ws.get_all_records()
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets open-position read failed: {e}")
+        return None
+
+    today = datetime.now().date()
+    latest = None
+    latest_dt = None
+    for row in rows:
+        exit_time = str(row.get("Exit Time", "")).strip()
+        if exit_time:
+            continue
+        entry_time = str(row.get("Entry Time", "")).strip()
+        if not entry_time:
+            continue
+        try:
+            entry_dt = datetime.fromisoformat(entry_time) if "T" in entry_time else datetime.strptime(entry_time, "%d-%m-%Y  %H:%M:%S")
+        except Exception:
+            continue
+        if entry_dt.date() != today:
+            continue
+        if latest_dt is None or entry_dt > latest_dt:
+            latest_dt = entry_dt
+            latest = row
+
+    if not latest:
+        return None
+
+    trade_id = str(latest.get("Trade ID", "")).strip()
+    state_record = {
+        "trade_id":        trade_id,
+        "entry_time":      latest.get("Entry Time", ""),
+        "exit_time":       None,
+        "setup_type":      latest.get("Setup", "Short Strangle"),
+        "ce_strike":       latest.get("CE Strike", ""),
+        "pe_strike":       latest.get("PE Strike", ""),
+        "ce_symbol":       latest.get("CE Symbol", ""),
+        "pe_symbol":       latest.get("PE Symbol", ""),
+        "quantity":        int(parse_number(latest.get("Qty", "")) or 0),
+        "premium_received": parse_number(latest.get("Premium", "")) or 0,
+        "target":          parse_number(latest.get("Target", "")) or 0,
+        "stop_loss":       parse_number(latest.get("Final SL", "")) or 0,
+        "expiry":          latest.get("Expiry", ""),
+        "ce_entry_ltp":    parse_number(latest.get("CE Entry LTP", "")) or 0,
+        "pe_entry_ltp":    parse_number(latest.get("PE Entry LTP", "")) or 0,
+        "initial_sl":      parse_number(latest.get("Initial SL", "")) or parse_number(latest.get("Final SL", "")) or 0,
+        "target_pct":      latest.get("Target", ""),
+        "sl_mult":         latest.get("Final SL", ""),
+    }
+
+    pos = {
+        "trade_id":         trade_id,
+        "entry_time":       latest.get("Entry Time", ""),
+        "ce_strike":        latest.get("CE Strike", ""),
+        "pe_strike":        latest.get("PE Strike", ""),
+        "ce_symbol":        latest.get("CE Symbol", ""),
+        "pe_symbol":        latest.get("PE Symbol", ""),
+        "ce_token":         None,
+        "pe_token":         None,
+        "ce_entry_price":   parse_number(latest.get("CE Entry LTP", "")) or 0,
+        "pe_entry_price":   parse_number(latest.get("PE Entry LTP", "")) or 0,
+        "premium_received": parse_number(latest.get("Premium", "")) or 0,
+        "target":           parse_number(latest.get("Target", "")) or 0,
+        "sl":               parse_number(latest.get("Final SL", "")) or 0,
+        "initial_sl":       parse_number(latest.get("Initial SL", "")) or parse_number(latest.get("Final SL", "")) or 0,
+        "quantity":         int(parse_number(latest.get("Qty", "")) or 0),
+        "setup_type":       latest.get("Setup", "Short Strangle"),
+        "expiry":           latest.get("Expiry", ""),
+        "pnl":              0,
+        "exit_reason":      None,
+        "trail_locked":     str(latest.get("Trail Locked", "")).strip().lower().startswith("y"),
+    }
+
+    if trade_id:
+        if any(t.get("trade_id") == trade_id for t in state.get("trade_history", [])):
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Trade {trade_id} already in history, skipping duplicate from Sheet")
+        else:
+            _save_trade_local(state_record)
+            state["trade_history"].append(state_record)
+
+    return pos
+
+
 def _persist_entry(pos):
     """Called at trade entry — save partial record locally + write entry row to Sheets."""
     entry_record = {
@@ -264,8 +366,8 @@ def angel_login():
     secret   = os.getenv("ANGEL_TOTP_SECRET", "")
 
     # Debug: log what credentials are loaded
-    LOG_LINES.append(f"[DEBUG] [{_ts()}] API Key: {api_key[:4]}***, Client: {client}")
-    LOG_LINES.append(f"[DEBUG] [{_ts()}] Password: {'*' * len(password)}, TOTP: {secret[:4]}***")
+    LOG_LINES.append(f"[DEBUG] [{_ts()}] API Key: {'(set)' if api_key else '(missing)'}, Client: {client}")
+    LOG_LINES.append(f"[DEBUG] [{_ts()}] Password: {'(set)' if password else '(missing)'}, TOTP: {'(set)' if secret else '(missing)'}")
 
     if not all([api_key, client, password, secret]):
         connection["status"] = "disconnected"
@@ -404,6 +506,7 @@ config = {
     "entry_end":         "11:00",
     "dead_zone_start":   "14:30",
     "expiry_cut_time":   "13:00",
+    "login_pin":         os.getenv("LOGIN_PIN", "5599"),
     "execution_mode":    "AUTO",
     "gsheet_id":         os.getenv("GSHEET_ID", ""),
 }
@@ -491,8 +594,9 @@ def _restore_daily_pnl():
         except Exception:
             continue
     if count:
-        state["closed_pnl"] = round(total, 2)
-        state["daily_pnl"]  = round(total, 2)
+        state["closed_pnl"]   = round(total, 2)
+        state["daily_pnl"]    = round(total, 2)
+        state["trades_today"] = count
         LOG_LINES.append(f"[INFO]  [{_ts()}] Restored daily P&L from disk: ₹{total:,.0f} ({count} closed trade{'s' if count>1 else ''})")
 
 # ── Restore open position from active_pos.json or trades.json on startup ──
@@ -511,6 +615,8 @@ def _restore_open_position():
                 saved["ce_token"] = None
                 saved["pe_token"] = None
                 saved["pnl"] = 0
+                if "initial_sl" not in saved and "sl" in saved:
+                    saved["initial_sl"] = saved["sl"]
                 state["active_position"] = True
                 state["trades_today"]   += 1
                 state["position_detail"] = saved
@@ -542,8 +648,8 @@ def _restore_open_position():
                 "pe_symbol":        t.get("pe_symbol", ""),
                 "ce_token":         None,
                 "pe_token":         None,
-                "ce_entry_price":   t.get("ce_entry_ltp") or (t.get("premium_received") / 2 if t.get("premium_received") else None),
-                "pe_entry_price":   t.get("pe_entry_ltp") or (t.get("premium_received") / 2 if t.get("premium_received") else None),
+                "ce_entry_price":   t.get("ce_entry_ltp"),
+                "pe_entry_price":   t.get("pe_entry_ltp"),
                 "premium_received": t.get("premium_received"),
                 "target":           t.get("target"),
                 "sl":               t.get("stop_loss"),
@@ -558,6 +664,15 @@ def _restore_open_position():
             state["last_signal"]["signal"] = "ACTIVE"
             LOG_LINES.append(f"[INFO]  [{_ts()}] Restored position from trades.json: {t.get('ce_symbol')} / {t.get('pe_symbol')}")
             break
+
+    if not state["active_position"]:
+        restored = _load_open_position_from_sheet()
+        if restored:
+            state["active_position"] = True
+            state["trades_today"]  += 1
+            state["position_detail"] = restored
+            state["last_signal"]["signal"] = "ACTIVE"
+            LOG_LINES.append(f"[INFO]  [{_ts()}] Restored position from Google Sheets: {restored.get('ce_symbol')} / {restored.get('pe_symbol')}")
 
 LOG_LINES = [
     f"[INFO]  [{_ts()}] FIFTO AI Trading server starting...",
@@ -576,15 +691,21 @@ def _send_telegram(text):
     token   = config.get("telegram_token", "")
     chat_id = config.get("telegram_chat_id", "")
     if not token or not chat_id:
-        return
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Telegram send skipped: missing token/chat_id")
+        return False
     try:
-        _requests.post(
+        resp = _requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
             json={"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
             timeout=8
         )
+        if resp.ok:
+            return True
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Telegram send failed: {resp.status_code} {resp.text}")
+        return False
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Telegram error: {e}")
+        return False
 
 
 def _notify(title, body, level="info"):
@@ -592,7 +713,10 @@ def _notify(title, body, level="info"):
     _NOTIF.append({"title": title, "body": body, "level": level, "ts": _ts()})
     if len(_NOTIF) > 30:
         del _NOTIF[:-30]
-    _send_telegram(f"*FIFTO* — *{title}*\n{body}")
+    emoji = {"danger": "🚨", "warning": "⚠️", "success": "✅"}.get(level, "ℹ️")
+    msg   = f"{emoji} *FIFTO* — *{title}*\n{body}"
+    # Send danger/critical alerts immediately in background; others are best-effort
+    threading.Thread(target=_send_telegram, args=(msg,), daemon=True).start()
 
 
 # ── Market timing helpers ──
@@ -1082,9 +1206,8 @@ def _record_iv_sample(iv_atm):
 
 
 def _calc_atr(candles, period=14):
-    if not candles or len(candles) < period + 1:
-        if not candles or len(candles) < 2:
-            return None
+    if not candles or len(candles) < 2:
+        return None
     trs = []
     prev_close = None
     for row in candles:
@@ -1266,6 +1389,27 @@ def _compute_option_metrics(spot):
     }
 
 
+def _safe_ltp_data(exchange, symbol, token):
+    """Fetch LTP for a single instrument via AngelOne getMarketData.
+    Returns a dict shaped like {status: bool, data: {ltp: float}} or {status: False}."""
+    try:
+        resp = angel_obj.getMarketData("LTP", {exchange: [str(token)]})
+        if not resp or not resp.get("status"):
+            return {"status": False, "message": resp.get("message", "no data") if resp else "no response"}
+        raw = resp.get("data") or {}
+        # getMarketData returns data as {"fetched": [...], "unfetched": [...]}
+        rows = raw if isinstance(raw, list) else raw.get("fetched", [])
+        if not rows:
+            return {"status": False, "message": "empty data"}
+        row = rows[0]
+        ltp = row.get("ltp") or row.get("lastPrice") or row.get("close")
+        if ltp is None:
+            return {"status": False, "message": "ltp missing in response"}
+        return {"status": True, "data": {"ltp": float(ltp)}}
+    except Exception as e:
+        return {"status": False, "message": str(e)}
+
+
 def _refresh_market_metrics():
     metrics = _compute_option_metrics(state["market"].get("nifty_spot"))
     candles_15m = _fetch_nifty_candles("FIFTEEN_MINUTE", 5)
@@ -1381,7 +1525,7 @@ def _select_strikes_angelone(spot):
             for item in result.get("data", []):
                 if item.get("tradingsymbol") == symbol:
                     token = item.get("symboltoken")
-                    r = angel_obj.ltpData("NFO", symbol, token)
+                    r = _safe_ltp_data("NFO", symbol, token)
                     if r.get("status"):
                         return r["data"]["ltp"], token
         except Exception:
@@ -1452,7 +1596,7 @@ def _select_strikes(spot):
                         sym = rec["CE"].get("tradingsymbol")
                         tok = rec["CE"].get("symboltoken")
                         if sym and tok:
-                            q = angel_obj.ltpData("NFO", sym, tok)
+                            q = _safe_ltp_data("NFO", sym, tok)
                             if q.get("status"):
                                 ltp = q["data"]["ltp"]
                     if ltp >= min_premium:
@@ -1469,7 +1613,7 @@ def _select_strikes(spot):
                         sym = rec["PE"].get("tradingsymbol")
                         tok = rec["PE"].get("symboltoken")
                         if sym and tok:
-                            q = angel_obj.ltpData("NFO", sym, tok)
+                            q = _safe_ltp_data("NFO", sym, tok)
                             if q.get("status"):
                                 ltp = q["data"]["ltp"]
                     if ltp >= min_premium:
@@ -1685,10 +1829,22 @@ def _execute_trade(signal):
     ce_oid = _place_order(ce_symbol, ce_token, qty, "SELL")
     pe_oid = _place_order(pe_symbol, pe_token, qty, "SELL")
 
-    # Partial fill recovery — CE filled but PE failed → buy back CE immediately
+    # Partial fill recovery — one leg filled but other failed → buy back filled leg
     if ce_oid and not pe_oid:
         LOG_LINES.append(f"[ERROR] [{_ts()}] PE leg failed! Buying back CE to avoid naked short...")
-        _place_order(ce_symbol, ce_token, qty, "BUY")
+        buyback = _place_order(ce_symbol, ce_token, qty, "BUY")
+        if not buyback:
+            LOG_LINES.append(f"[ERROR] [{_ts()}] CE BUYBACK FAILED — NAKED SHORT! MANUAL INTERVENTION REQUIRED")
+            _notify("🚨 Partial Fill Crisis", f"CE {ce_symbol} sold but PE failed AND CE buyback failed.\nManual intervention required immediately.", "danger")
+        state["signal_pending"] = False
+        return False
+
+    if not ce_oid and pe_oid:
+        LOG_LINES.append(f"[ERROR] [{_ts()}] CE leg failed! Buying back PE to avoid naked short...")
+        buyback = _place_order(pe_symbol, pe_token, qty, "BUY")
+        if not buyback:
+            LOG_LINES.append(f"[ERROR] [{_ts()}] PE BUYBACK FAILED — NAKED SHORT! MANUAL INTERVENTION REQUIRED")
+            _notify("🚨 Partial Fill Crisis", f"PE {pe_symbol} sold but CE failed AND PE buyback failed.\nManual intervention required immediately.", "danger")
         state["signal_pending"] = False
         return False
 
@@ -1776,7 +1932,7 @@ def _place_test_live_atm_sell():
 
     ltp = None
     try:
-        q = angel_obj.ltpData("NFO", symbol, token)
+        q = _safe_ltp_data("NFO", symbol, token)
         if q and q.get("status"):
             ltp = q["data"]["ltp"]
     except Exception:
@@ -1810,14 +1966,17 @@ def _place_test_live_atm_sell():
     }, 200
 
 
+_squaring_lock = threading.Lock()
+
 def _square_off_position():
     """Square off both legs with MARKET BUY and record trade history."""
-    if not state["active_position"] or not state["position_detail"]:
-        return
-    if state["squaring_off"]:
-        LOG_LINES.append(f"[WARN]  [{_ts()}] Square-off already in progress — skipping duplicate call")
-        return
-    state["squaring_off"] = True
+    with _squaring_lock:
+        if not state["active_position"] or not state["position_detail"]:
+            return
+        if state["squaring_off"]:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Square-off already in progress — skipping duplicate call")
+            return
+        state["squaring_off"] = True
     pos = state["position_detail"]
     qty = pos["quantity"]
     exit_time = datetime.now()
@@ -1826,7 +1985,7 @@ def _square_off_position():
     ce_oid = _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
     pe_oid = _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
 
-    final_pnl = pos.get("pnl", 0)
+    final_pnl = round(pos.get("pnl", 0) * pos.get("quantity", 1), 2)
     state["closed_pnl"] += final_pnl        # accumulate realized P&L for the day
     state["daily_pnl"]   = state["closed_pnl"]
     # trades_today already incremented at entry — do NOT increment again here
@@ -2035,22 +2194,22 @@ def position_monitor():
                         pos["pe_token"] = pe_token
 
                 if ce_token and pe_token:
-                    ce_r = angel_obj.ltpData("NFO", pos["ce_symbol"], ce_token)
-                    pe_r = angel_obj.ltpData("NFO", pos["pe_symbol"], pe_token)
+                    ce_r = _safe_ltp_data("NFO", pos["ce_symbol"], ce_token)
+                    pe_r = _safe_ltp_data("NFO", pos["pe_symbol"], pe_token)
 
                     if ce_r.get("status") and pe_r.get("status"):
                         ce_ltp       = ce_r["data"]["ltp"]
                         pe_ltp       = pe_r["data"]["ltp"]
                         current_cost = ce_ltp + pe_ltp
                         entry_prem   = pos["premium_received"]
-                        qty          = pos["quantity"]
-                        open_pnl     = (entry_prem - current_cost) * qty
+                        open_pnl     = entry_prem - current_cost
                         pnl          = open_pnl   # alias for SL/target log
 
-                        pos["pnl"]              = round(open_pnl, 2)
+                        qty                     = pos.get("quantity", 1)
+                        pos["pnl"]              = round(open_pnl * qty, 2)
                         pos["current_ce_ltp"]   = round(ce_ltp, 2)
                         pos["current_pe_ltp"]   = round(pe_ltp, 2)
-                        state["daily_pnl"]      = round(state["closed_pnl"] + open_pnl, 2)
+                        state["daily_pnl"]      = round(state["closed_pnl"] + open_pnl * qty, 2)
 
                         # ── Trailing SL: tighten to breakeven at 20% profit ──
                         trail_pct = config.get("trail_trigger_pct", 0.20)
@@ -2173,8 +2332,8 @@ def fetch_market_data():
         if angel_obj and connection["status"] == "connected":
             try:
                 t0    = time.time()
-                nifty = angel_obj.ltpData("NSE", "Nifty 50", "26000")
-                vix   = angel_obj.ltpData("NSE", "India VIX", "99926017")
+                nifty = _safe_ltp_data("NSE", "Nifty 50", "26000")
+                vix   = _safe_ltp_data("NSE", "India VIX", "99926017")
                 ping  = int((time.time() - t0) * 1000)
 
                 if nifty.get("status"):
@@ -2301,8 +2460,24 @@ def api_connection():
 def api_logs():
     return jsonify({"lines": LOG_LINES[-60:]})
 
+_CONFIG_SENSITIVE = {"login_pin", "angel_api_key", "angel_password", "angel_totp_secret"}
+
+def _require_pin():
+    """Returns None if PIN is valid, or a (response, status) tuple to return immediately."""
+    data = request.get_json(force=True, silent=True) or {}
+    pin  = str(data.get("pin", "")).strip()
+    if not pin:
+        return jsonify({"ok": False, "msg": "PIN required."}), 401
+    correct = str(config.get("login_pin", "5599"))
+    if not hmac.compare_digest(pin, correct):
+        return jsonify({"ok": False, "msg": "Invalid PIN."}), 401
+    return None
+
+
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
+    err = _require_pin()
+    if err: return err
     state["bot_running"]    = False
     state["signal_pending"] = False
     state["pending_signal"] = None
@@ -2331,6 +2506,8 @@ def api_start():
 
 @app.route("/api/emergency_exit", methods=["POST"])
 def api_emergency_exit():
+    err = _require_pin()
+    if err: return err
     LOG_LINES.append(f"[ERROR] [{_ts()}] EMERGENCY EXIT triggered by user.")
     _notify("🚨 Emergency Exit", "Manual emergency exit triggered. All positions being squared off.", "danger")
     state["signal_pending"] = False
@@ -2375,6 +2552,8 @@ def api_test_live_trade():
 @app.route("/api/approve_buy", methods=["POST"])
 def api_approve_buy():
     """Legacy endpoint — manual execution now handled by /api/execute."""
+    err = _require_pin()
+    if err: return err
     if state.get("signal_pending") and state.get("pending_signal"):
         signal = state["pending_signal"]
         LOG_LINES.append(f"[TRADE] [{_ts()}] Approve Buy → executing pending signal.")
@@ -2390,7 +2569,7 @@ def api_reconnect():
 
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
-    return jsonify(config)
+    return jsonify({k: v for k, v in config.items() if k not in _CONFIG_SENSITIVE})
 
 @app.route("/api/config", methods=["POST"])
 def api_save_config():
@@ -2419,6 +2598,8 @@ def api_trades():
 
 @app.route("/api/trade/<trade_id>", methods=["DELETE"])
 def api_delete_trade(trade_id):
+    err = _require_pin()
+    if err: return err
     # Remove from memory
     before = len(state["trade_history"])
     state["trade_history"] = [t for t in state["trade_history"] if t.get("trade_id") != trade_id]
@@ -2467,6 +2648,43 @@ def api_test_telegram():
     except Exception as e:
         return jsonify({"ok": False, "msg": str(e)}), 500
 
+@app.route("/api/login_pin", methods=["POST"])
+def api_login_pin():
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        pin = str(data.get("pin", "")).strip()
+        if not pin:
+            return jsonify({"ok": False, "msg": "PIN is required."}), 400
+        if pin == str(config.get("login_pin", "5599")):
+            return jsonify({"ok": True, "msg": "PIN validated."})
+        return jsonify({"ok": False, "msg": "Invalid PIN."}), 401
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
+@app.route("/api/forgot_pin", methods=["POST"])
+def api_forgot_pin():
+    token   = config.get("telegram_token", "")
+    chat_id = config.get("telegram_chat_id", "")
+    if not token or not chat_id:
+        return jsonify({"ok": False, "msg": "Telegram token or chat ID not configured"}), 400
+
+    try:
+        remote_ip = request.remote_addr or 'unknown'
+        login_pin = str(config.get("login_pin", "5599"))
+        message = (
+            f"*FIFTO* — Forgot PIN requested from browser.\n"
+            f"Source IP: {remote_ip}\n"
+            f"Time: {datetime.now().strftime('%d-%b-%Y %H:%M:%S')}\n\n"
+            f"Configured browser PIN: `{login_pin}`"
+        )
+        sent = _send_telegram(message)
+        if not sent:
+            return jsonify({"ok": False, "msg": "Telegram delivery failed."}), 500
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Forgot PIN alert sent to Telegram.")
+        return jsonify({"ok": True, "msg": "Telegram recovery alert sent."})
+    except Exception as e:
+        return jsonify({"ok": False, "msg": str(e)}), 500
+
 
 def _startup_nse_fetch():
     """Fetch lot size + holidays once at startup (runs in background)."""
@@ -2475,11 +2693,156 @@ def _startup_nse_fetch():
     _fetch_nse_holidays()
 
 
+# ── Telegram Bot Command Polling ──────────────────────────────────────────────
+
+_tg_offset = 0   # tracks last processed update_id
+
+_TG_HELP = (
+    "🤖 *FIFTO Commands*\n\n"
+    "/status — Live NIFTY, position & P\\&L\n"
+    "/run — Start the trading agent\n"
+    "/stop — Stop the trading agent\n"
+    "/exit — Emergency square-off\n"
+    "/approve — Execute pending trade\n"
+    "/pnl — Today's P\\&L summary\n"
+    "/mode auto — Switch to AUTO mode\n"
+    "/mode manual — Switch to MANUAL mode\n"
+    "/menu — Show this list"
+)
+
+def _tg_reply(text):
+    """Send a reply back to the configured chat."""
+    _send_telegram(text)
+
+def _handle_tg_command(text):
+    """Parse and execute a Telegram command. Returns reply string."""
+    global _tg_offset
+    cmd = text.strip().lower().split("@")[0]   # strip bot username suffix
+
+    if cmd in ("/menu", "/start_bot", "/start"):
+        return _TG_HELP
+
+    if cmd == "/status":
+        spot  = state["market"].get("nifty_spot")
+        vix   = state["market"].get("vix")
+        mode  = state.get("execution_mode", "—")
+        run   = "🟢 Running" if state.get("bot_running") else "🔴 Stopped"
+        pos   = state.get("position_detail") or {}
+        lines = [
+            f"📡 *FIFTO Status* — {_ts()}",
+            f"Bot: {run} | Mode: {mode}",
+            f"NIFTY: `{spot:.2f}`  VIX: `{vix:.2f}`" if spot and vix else "NIFTY/VIX: —",
+        ]
+        if state.get("active_position") and pos:
+            pnl = pos.get("pnl")
+            lines.append(
+                f"📊 Position: CE {pos.get('ce_strike')} / PE {pos.get('pe_strike')}\n"
+                f"Entry ₹{pos.get('premium_received', 0):.0f} | Open P&L: "
+                + (f"{'+'if pnl>=0 else ''}₹{pnl:,.0f}" if isinstance(pnl, (int, float)) else "—")
+            )
+        else:
+            lines.append(f"No active position | Daily P&L: ₹{state.get('daily_pnl',0):,.0f}")
+        return "\n".join(lines)
+
+    if cmd == "/pnl":
+        daily  = state.get("daily_pnl", 0)
+        closed = state.get("closed_pnl", 0)
+        trades = state.get("trades_today", 0)
+        sign   = "+" if daily >= 0 else ""
+        return (
+            f"💰 *Today's P&L*\n"
+            f"Realized: {sign}₹{daily:,.0f}\n"
+            f"Trades today: {trades}"
+        )
+
+    if cmd == "/stop":
+        if not state.get("bot_running"):
+            return "ℹ️ Agent is already stopped."
+        state["bot_running"]    = False
+        state["signal_pending"] = False
+        state["pending_signal"] = None
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Agent stopped via Telegram.")
+        return "🔴 Agent stopped."
+
+    if cmd == "/run":
+        if state.get("bot_running"):
+            return "ℹ️ Agent is already running."
+        state["bot_running"] = True
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Agent started via Telegram.")
+        return "🟢 Agent started."
+
+    if cmd == "/exit":
+        if not state.get("active_position"):
+            return "ℹ️ No active position to exit."
+        LOG_LINES.append(f"[ERROR] [{_ts()}] EMERGENCY EXIT triggered via Telegram.")
+        threading.Thread(target=_square_off_position, daemon=True).start()
+        return "🚨 Emergency exit triggered — squaring off positions."
+
+    if cmd == "/approve":
+        if not state.get("signal_pending") or not state.get("pending_signal"):
+            return "ℹ️ No pending signal to execute."
+        signal = state["pending_signal"]
+        LOG_LINES.append(f"[TRADE] [{_ts()}] Trade approved via Telegram.")
+        threading.Thread(target=_execute_trade, args=(signal,), daemon=True).start()
+        return "✅ Trade execution started."
+
+    if cmd.startswith("/mode"):
+        parts = cmd.split()
+        if len(parts) < 2 or parts[1] not in ("auto", "manual"):
+            return "⚠️ Usage: /mode auto  or  /mode manual"
+        mode = parts[1].upper()
+        state["execution_mode"] = mode
+        config["execution_mode"] = mode
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Execution mode → {mode} (via Telegram)")
+        return f"✅ Mode set to *{mode}*."
+
+    return f"❓ Unknown command: `{text}`\nSend /menu for the list."
+
+
+def telegram_command_poll():
+    """Long-poll Telegram getUpdates and dispatch commands. Runs in background thread."""
+    global _tg_offset
+    time.sleep(8)   # wait for config to load
+
+    while True:
+        token   = config.get("telegram_token", "")
+        chat_id = str(config.get("telegram_chat_id", ""))
+        if not token or not chat_id:
+            time.sleep(30)
+            continue
+        try:
+            resp = _requests.get(
+                f"https://api.telegram.org/bot{token}/getUpdates",
+                params={"offset": _tg_offset, "timeout": 20, "allowed_updates": ["message"]},
+                timeout=25
+            )
+            if not resp.ok:
+                time.sleep(10)
+                continue
+            updates = resp.json().get("result", [])
+            for upd in updates:
+                _tg_offset = upd["update_id"] + 1
+                msg = upd.get("message") or {}
+                # Only accept messages from the configured chat
+                if str(msg.get("chat", {}).get("id", "")) != chat_id:
+                    continue
+                text = (msg.get("text") or "").strip()
+                if not text.startswith("/"):
+                    continue
+                reply = _handle_tg_command(text)
+                if reply:
+                    _send_telegram(reply)
+        except Exception as e:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Telegram poll error: {e}")
+            time.sleep(15)
+
+
 if __name__ == "__main__":
-    threading.Thread(target=angel_login,        daemon=True).start()
-    threading.Thread(target=fetch_market_data,  daemon=True).start()
-    threading.Thread(target=signal_engine,      daemon=True).start()
-    threading.Thread(target=position_monitor,   daemon=True).start()
-    threading.Thread(target=_startup_nse_fetch, daemon=True).start()
+    threading.Thread(target=angel_login,              daemon=True).start()
+    threading.Thread(target=fetch_market_data,        daemon=True).start()
+    threading.Thread(target=signal_engine,            daemon=True).start()
+    threading.Thread(target=position_monitor,         daemon=True).start()
+    threading.Thread(target=_startup_nse_fetch,       daemon=True).start()
+    threading.Thread(target=telegram_command_poll,    daemon=True).start()
     print("FIFTO AI Trading server → http://localhost:8080")
     app.run(host="0.0.0.0", port=8080, debug=False)

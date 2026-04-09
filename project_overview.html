@@ -189,6 +189,17 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
   .hero-stats{gap:20px}
   .exit-name{width:auto}
   .page{padding:20px 14px 60px}
+
+  /* ── Tables: responsive ── */
+  .tbl {
+    font-size: 10px;
+    overflow-x: auto;
+    display: block;
+  }
+  .tbl th, .tbl td {
+    padding: 6px 8px;
+    white-space: nowrap;
+  }
 }
 </style>
 </head>
@@ -541,6 +552,33 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
         <div class="alert-row"><div class="alert-emoji">⏰</div><div><div class="alert-title">Dead Zone / EOD Exit</div><div class="alert-desc">Time-based force exit. P&L shown.</div></div></div>
         <div class="alert-row"><div class="alert-emoji">🚨</div><div><div class="alert-title">Emergency Exit</div><div class="alert-desc">Manual trigger from dashboard button.</div></div></div>
         <div class="alert-row"><div class="alert-emoji">⏰</div><div><div class="alert-title">Expiry Cut-Time</div><div class="alert-desc">On expiry day before 1 PM, force exit.</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TELEGRAM BOT COMMANDS -->
+  <div class="section">
+    <div class="section-title">Telegram Bot Commands</div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.6">
+        Send commands directly to the bot from your Telegram chat. Only messages from the configured <code>TELEGRAM_CHAT_ID</code> are accepted — all others are silently ignored. No PIN required (chat identity is the auth).
+      </div>
+      <table class="tbl" style="width:100%">
+        <thead><tr><td style="font-weight:700;color:var(--t1)">Command</td><td style="font-weight:700;color:var(--t1)">Action</td></tr></thead>
+        <tbody>
+          <tr><td><code>/status</code></td><td>Live NIFTY spot, VIX, bot state, active position, open P&amp;L</td></tr>
+          <tr><td><code>/pnl</code></td><td>Today's realized P&amp;L and trade count</td></tr>
+          <tr><td><code>/run</code></td><td>Start the trading agent (begin scanning for signals)</td></tr>
+          <tr><td><code>/stop</code></td><td>Stop the trading agent (no new trades, existing position monitored)</td></tr>
+          <tr><td><code>/exit</code></td><td>Emergency square-off — closes both CE &amp; PE legs immediately</td></tr>
+          <tr><td><code>/approve</code></td><td>Execute the pending trade signal (MANUAL mode only)</td></tr>
+          <tr><td><code>/mode auto</code></td><td>Switch to AUTO mode — trades execute automatically on signal</td></tr>
+          <tr><td><code>/mode manual</code></td><td>Switch to MANUAL mode — wait for /approve before executing</td></tr>
+          <tr><td><code>/menu</code></td><td>Show the full command list in chat (also shown on /start)</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:14px;padding:10px 14px;background:var(--surface2,rgba(255,255,255,0.04));border-radius:8px;font-size:11px;color:var(--t3)">
+        ⚙️ <strong>How it works:</strong> Server long-polls <code>getUpdates</code> every 20 s. No webhook or public URL needed. Polling starts automatically with the server.
       </div>
     </div>
   </div>

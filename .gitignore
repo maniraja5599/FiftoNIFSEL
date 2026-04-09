@@ -48,6 +48,9 @@ gsheet_creds.json
 # Claude internal
 .claude/
 
+# Qwen AI tool
+.qwen/
+
 # OS
 .DS_Store
 Thumbs.db

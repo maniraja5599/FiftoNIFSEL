@@ -17,7 +17,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FIFTO">
-<link rel="apple-touch-icon" href="/icon-192.svg">
+<link rel="apple-touch-icon" sizes="512x512" href="/icon-512.svg">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -1097,6 +1097,18 @@ html.light .toggle-name      { color: #111827; }
     gap: 4px;
   }
 
+  /* ── Tables: responsive ── */
+  .trade-tbl {
+    font-size: 9px;
+    overflow-x: auto;
+    display: block;
+    white-space: nowrap;
+  }
+  .trade-tbl th, .trade-tbl td {
+    padding: 4px 6px;
+    white-space: nowrap;
+  }
+
   /* ── Connection widget: compact ── */
   .conn-widget    { margin: 0 0 8px; }
 }
@@ -1167,9 +1179,94 @@ html.light .toggle-name      { color: #111827; }
 .td-divider { border: none; border-top: 1px solid var(--line); margin: 12px 0 4px; }
 .trade-tbl tbody tr { cursor: pointer; }
 .trade-tbl tbody tr:hover td { background: var(--surface2); }
+
+.login-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.88);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.login-overlay.open { display: flex; }
+.login-panel {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 28px 24px;
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0,0,0,.35);
+}
+.login-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--t1);
+  font-size: 15px;
+  margin-bottom: 14px;
+}
+.login-button {
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-radius: 14px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.login-forgot {
+  margin-top: 12px;
+  background: none;
+  border: none;
+  color: var(--blue);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.login-msg {
+  margin-top: 14px;
+  min-height: 20px;
+  font-size: 13px;
+  color: var(--t2);
+}
 </style>
 </head>
 <body>
+
+<div class="login-overlay" id="login-overlay">
+  <div class="login-panel">
+    <div style="font-size:24px;font-weight:800;color:var(--blue);margin-bottom:12px">FIFTO PIN Login</div>
+    <div style="font-size:13px;color:var(--t2);margin-bottom:18px;line-height:1.5">Enter the browser PIN to unlock the dashboard.<br>First-time PIN: <strong>5599</strong>.</div>
+    <input id="login-pin" class="login-input" type="password" maxlength="6" placeholder="Enter PIN" autocomplete="one-time-code" />
+    <button class="login-button" onclick="verifyLoginPin()">Unlock</button>
+    <button class="login-forgot" onclick="forgotPinRequest()">Forgot PIN? Send recovery alert</button>
+    <div class="login-msg" id="login-msg">PIN is required to access this browser.</div>
+  </div>
+</div>
+
+<!-- ══════════ ACTION PIN MODAL ══════════ -->
+<div id="action-pin-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9000;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px 32px;min-width:280px;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.5)">
+    <div id="action-pin-title" style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:4px">Confirm Action</div>
+    <div id="action-pin-subtitle" style="font-size:12px;color:var(--t3);margin-bottom:16px">Enter your PIN to continue</div>
+    <input id="action-pin-input" type="password" maxlength="6" placeholder="Enter PIN"
+      style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--t1);font-size:16px;text-align:center;letter-spacing:4px;outline:none;box-sizing:border-box"
+      onkeydown="if(event.key==='Enter')_actionPinSubmit();if(event.key==='Escape')_actionPinCancel()" />
+    <div id="action-pin-msg" style="font-size:12px;color:var(--red);margin-top:8px;min-height:16px"></div>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button onclick="_actionPinCancel()" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--t2);cursor:pointer;font-size:13px">Cancel</button>
+      <button onclick="_actionPinSubmit()" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--blue);color:#fff;cursor:pointer;font-size:13px;font-weight:600">Confirm</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════ TOPBAR ══════════ -->
 <header class="topbar">
@@ -2131,6 +2228,73 @@ function showSettingsPanel(id, btn) {
   btn.classList.add('active');
 }
 
+function isAuthenticated() {
+  return sessionStorage.getItem('fifto-authenticated') === 'true';
+}
+
+function setAuthenticated() {
+  sessionStorage.setItem('fifto-authenticated', 'true');
+  document.getElementById('login-overlay')?.classList.remove('open');
+}
+
+async function verifyLoginPin() {
+  const pinInput = document.getElementById('login-pin');
+  const msg = document.getElementById('login-msg');
+  const pin = pinInput?.value.trim();
+  if (!pin) {
+    msg.textContent = 'Enter the PIN to continue.';
+    msg.style.color = 'var(--red)';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/login_pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      setAuthenticated();
+      msg.textContent = 'PIN accepted. Welcome back.';
+      msg.style.color = 'var(--green)';
+    } else {
+      msg.textContent = data.msg || 'Incorrect PIN. Try again or use Forgot PIN.';
+      msg.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    msg.textContent = 'Login failed. Please try again.';
+    msg.style.color = 'var(--red)';
+  }
+}
+
+async function forgotPinRequest() {
+  const msg = document.getElementById('login-msg');
+  msg.textContent = 'Sending recovery alert to Telegram...';
+  msg.style.color = 'var(--t2)';
+  try {
+    const res = await fetch('/api/forgot_pin', { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) {
+      msg.textContent = 'Recovery alert sent. Check Telegram for support.';
+      msg.style.color = 'var(--green)';
+    } else {
+      msg.textContent = 'Failed to send alert: ' + (data.msg || 'unknown error');
+      msg.style.color = 'var(--red)';
+    }
+  } catch (e) {
+    msg.textContent = 'Could not reach server. Try again.';
+    msg.style.color = 'var(--red)';
+  }
+}
+
+function ensureLogin() {
+  if (!isAuthenticated()) {
+    document.getElementById('login-overlay')?.classList.add('open');
+    document.getElementById('login-pin')?.focus();
+  }
+}
+
 // ── Save feedback ──
 function saveSettings(id) {
   const msg = document.getElementById('save-msg-' + id);
@@ -2336,6 +2500,37 @@ const fmt   = v => v >= 0
   ? `<span style="color:var(--green)">+₹${rupee(v)}</span>`
   : `<span style="color:var(--red)">−₹${rupee(Math.abs(v))}</span>`;
 
+function formatDateTime(raw) {
+  if (!raw) return '—';
+  const s = String(raw).trim();
+  let date = null;
+
+  const dmyMatch = s.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})$/);
+  if (dmyMatch) {
+    date = new Date(`${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}T${dmyMatch[4]}`);
+  } else if (/^\d{4}-\d{2}-\d{2}(\s|T)\d{2}:\d{2}(:\d{2})?$/.test(s)) {
+    date = new Date(s.replace(' ', 'T'));
+  } else if (/^\d{2}:\d{2}:\d{2}$/.test(s)) {
+    // only time provided
+    return s;
+  }
+
+  if (!date || isNaN(date.getTime())) {
+    return s.replace('T', ' ').substring(0, 19);
+  }
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const time = date.toLocaleString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+  return `${day}-${month}-${year} ${time}`;
+}
+
 // ── Poll ──
 async function poll() {
   try { applyState(await (await fetch('/api/state')).json()); }
@@ -2380,8 +2575,15 @@ function applyState(d) {
 
   const pnl = d.daily_pnl || 0;
   document.getElementById('kpi-pnl').innerHTML = fmt(pnl);
-  document.getElementById('pnl-big').innerHTML = fmt(pnl);
   document.getElementById('risk-daily').innerHTML = fmt(pnl);
+
+  const activePosPnl = d.position_detail && Object.keys(d.position_detail).length > 0
+    ? (typeof d.position_detail.pnl === 'number'
+        ? d.position_detail.pnl
+        : ((d.position_detail.premium_received || 0)
+            - ((d.position_detail.current_ce_ltp || 0) + (d.position_detail.current_pe_ltp || 0))))
+    : null;
+  document.getElementById('pnl-big').innerHTML = fmt(activePosPnl != null ? activePosPnl : pnl);
 
   // Overall P&L
   const overallPnl = d.overall_pnl || 0;
@@ -2395,7 +2597,7 @@ function applyState(d) {
 
   // Margin is now updated from connection API
 
-  const hasPOS = d.active_position && d.position_detail;
+  const hasPOS = d.position_detail && Object.keys(d.position_detail).length > 0;
   document.getElementById('no-pos').style.display  = hasPOS ? 'none' : 'block';
   document.getElementById('has-pos').style.display = hasPOS ? 'block' : 'none';
   const posPill = document.getElementById('pos-pill');
@@ -2463,22 +2665,7 @@ function applyState(d) {
     }
 
     // ── Footer ──
-    // Entry time — show full date + time (server sends "DD-MM-YYYY  HH:MM:SS" local IST)
-    let etStr = p.entry_time || '—';
-    try {
-      const raw = String(p.entry_time).trim();
-      const m = raw.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
-      if (m) {
-        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        etStr = `${m[1]} ${months[parseInt(m[2])-1]} ${m[3]}, ${m[4]}`;
-      } else {
-        // ISO fallback — parse as local time by replacing Z-less T string
-        const et = new Date(raw.includes('T') ? raw : raw.replace(' ','T'));
-        etStr = et.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
-               + ', ' + et.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-      }
-    } catch {}
-    document.getElementById('entry-time').textContent = etStr;
+    document.getElementById('entry-time').textContent = formatDateTime(p.entry_time);
     document.getElementById('pos-expiry').textContent = p.expiry || '—';
 
     if (p.target && p.sl && ep) {
@@ -2596,7 +2783,7 @@ function renderPositions(d) {
   const pill  = document.getElementById('pos-count-pill');
   if (!tbody) return;
 
-  const hasPOS = d.active_position && d.position_detail;
+  const hasPOS = d.position_detail && Object.keys(d.position_detail).length > 0;
   if (!hasPOS) {
     pill.textContent = 'No positions';
     pill.style.color = 'var(--t3)';
@@ -2609,23 +2796,14 @@ function renderPositions(d) {
 
   const p   = d.position_detail;
   const qty = p.quantity || 1;
-  const pnl = d.daily_pnl || 0;
+  const pnl = (typeof p.pnl === 'number')
+    ? p.pnl
+    : ((p.premium_received || 0) - ((p.current_ce_ltp || 0) + (p.current_pe_ltp || 0)));
   const pnlHtml = pnl >= 0
     ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
     : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
 
-  // Format entry time — server sends "DD-MM-YYYY  HH:MM:SS"
-  let entryTime = '—';
-  try {
-    const raw = String(p.entry_time || '').trim();
-    const m = raw.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
-    if (m) {
-      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      entryTime = `${m[1]} ${months[parseInt(m[2])-1]} ${m[3]}<br><span style="color:var(--t2);font-size:10px">${m[4]}</span>`;
-    } else if (raw.length >= 8) {
-      entryTime = raw.substring(0, 19).replace('T', ' ');
-    }
-  } catch {}
+  const entryTime = formatDateTime(p.entry_time);
 
   const tid = p.trade_id || '';
   tbody.innerHTML = `<tr onclick="${tid ? `showTradeDetail('${tid}')` : ''}" style="${tid ? 'cursor:pointer' : ''}" title="${tid ? 'Click for full details' : ''}">
@@ -2690,12 +2868,7 @@ async function fetchTrades() {
         : pnl >= 0
           ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
           : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
-      let exitTime = '—';
-      if (t.exit_time) {
-        const es = String(t.exit_time).trim();
-        const em = es.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
-        exitTime = em ? `${em[1]}/${em[2]}<br><span style="font-size:10px;color:var(--t2)">${em[4]}</span>` : es.replace('T',' ').substring(0,16);
-      }
+      const exitTime = t.exit_time ? formatDateTime(t.exit_time) : '—';
       return `<tr onclick="showTradeDetail('${t.trade_id}')" title="Click for full details">
         <td>${exitTime}</td>
         <td>${t.setup_type || '—'}</td>
@@ -2728,14 +2901,10 @@ function showTradeDetail(tradeId) {
   const combinedExit = (parseFloat(t.ce_exit_ltp)||0) + (parseFloat(t.pe_exit_ltp)||0);
 
   function _fmtTime(raw) {
-    if (!raw) return '—';
-    const s = String(raw).trim();
-    const m = s.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
-    if (m) { const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[1]} ${mo[parseInt(m[2])-1]} ${m[3]}, ${m[4]}`; }
-    return s.replace('T',' ').substring(0,19);
+    return formatDateTime(raw);
   }
-  const entryTime = _fmtTime(t.entry_time);
-  const exitTime  = _fmtTime(t.exit_time);
+  const entryTime = formatDateTime(t.entry_time);
+  const exitTime  = formatDateTime(t.exit_time);
   const dur = t.duration_mins != null ? t.duration_mins + ' min' : '—';
 
   document.getElementById('td-title').textContent = (t.setup_type || 'Trade') + ' — ' + (t.trade_id || '');
@@ -2802,13 +2971,46 @@ function closeTdModal(e) {
   }
 }
 
+// ── Action PIN modal ──
+let _pinResolve = null;
+
+function _showActionPin(title, subtitle) {
+  return new Promise(resolve => {
+    _pinResolve = resolve;
+    document.getElementById('action-pin-title').textContent    = title;
+    document.getElementById('action-pin-subtitle').textContent = subtitle || 'Enter your PIN to continue';
+    document.getElementById('action-pin-msg').textContent      = '';
+    document.getElementById('action-pin-input').value          = '';
+    const overlay = document.getElementById('action-pin-overlay');
+    overlay.style.display = 'flex';
+    setTimeout(() => document.getElementById('action-pin-input').focus(), 80);
+  });
+}
+
+function _actionPinSubmit() {
+  const pin = document.getElementById('action-pin-input').value.trim();
+  if (!pin) { document.getElementById('action-pin-msg').textContent = 'Enter PIN'; return; }
+  document.getElementById('action-pin-overlay').style.display = 'none';
+  if (_pinResolve) { _pinResolve(pin); _pinResolve = null; }
+}
+
+function _actionPinCancel() {
+  document.getElementById('action-pin-overlay').style.display = 'none';
+  if (_pinResolve) { _pinResolve(null); _pinResolve = null; }
+}
+
 async function deleteTrade(tradeId) {
-  if (!confirm('Delete this trade record?')) return;
+  const pin = await _showActionPin('Delete Trade', 'Enter PIN to delete this trade record');
+  if (!pin) return;
   try {
-    const r = await fetch('/api/trade/' + tradeId, { method: 'DELETE' });
+    const r = await fetch('/api/trade/' + tradeId, {
+      method: 'DELETE',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ pin })
+    });
     const d = await r.json();
     if (d.ok) fetchTrades();
-    else alert('Delete failed: ' + d.msg);
+    else { document.getElementById('action-pin-msg').textContent = d.msg; document.getElementById('action-pin-overlay').style.display='flex'; }
   } catch { alert('Delete failed'); }
 }
 
@@ -2890,31 +3092,41 @@ function updateButtonStates() {
 
 async function stopAgent() {
   if (buttonStates.stopAgent) return;
-  if (!confirm('Stop the agent?')) return;
+  const pin = await _showActionPin('Stop Agent', 'Enter PIN to stop the trading agent');
+  if (!pin) return;
+  const r = await fetch('/api/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pin})});
+  const d = await r.json();
+  if (!d.ok) { document.getElementById('action-pin-msg').textContent = d.msg; document.getElementById('action-pin-overlay').style.display='flex'; return; }
   buttonStates.stopAgent = true;
   buttonStates.startAgent = false;
   updateButtonStates();
-  await fetch('/api/stop', {method:'POST'});
 }
 
 async function emergencyExit() {
   if (buttonStates.emergencyExit) return;
-  if (!confirm('Emergency exit all positions?')) return;
+  const pin = await _showActionPin('⚠ Emergency Exit', 'Enter PIN to square off all positions');
+  if (!pin) return;
+  const r = await fetch('/api/emergency_exit', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pin})});
+  const d = await r.json();
+  if (!d.ok) { document.getElementById('action-pin-msg').textContent = d.msg; document.getElementById('action-pin-overlay').style.display='flex'; return; }
   buttonStates.emergencyExit = true;
   buttonStates.stopAgent = false;
   buttonStates.startAgent = false;
   updateButtonStates();
-  await fetch('/api/emergency_exit', {method:'POST'});
 }
 
 async function approveBuy() {
   if (buttonStates.approveBuy) return;
+  const pin = await _showActionPin('Approve Buy', 'Enter PIN to execute the trade');
+  if (!pin) return;
+  const r = await fetch('/api/approve_buy', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pin})});
+  const d = await r.json();
+  if (!d.ok) { document.getElementById('action-pin-msg').textContent = d.msg; document.getElementById('action-pin-overlay').style.display='flex'; return; }
   buttonStates.approveBuy = true;
   buttonStates.stopAgent = false;
   buttonStates.startAgent = false;
   updateButtonStates();
-  const r = await fetch('/api/approve_buy', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
-  alert((await r.json()).msg);
+  alert(d.msg);
 }
 
 async function startAgent() {
@@ -3080,6 +3292,7 @@ async function pollNotifications() {
 poll();
 pollConnection();
 loadConfig();
+ensureLogin();
 pollNotifications();
 setInterval(poll, 3000);
 setInterval(pollConnection, 5000);
