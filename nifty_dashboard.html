@@ -2446,7 +2446,9 @@ function tick() {
 setInterval(tick,1000); tick();
 
 // ── Page navigation ──
-function showPage(id, navBtn, sideBtn, mobileBtn) {
+let _currentPage = 'dashboard';
+
+function showPage(id, navBtn, sideBtn, mobileBtn, fromPopState) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   if (navBtn)    { document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active')); navBtn.classList.add('active'); }
@@ -2459,7 +2461,24 @@ function showPage(id, navBtn, sideBtn, mobileBtn) {
   if (!navBtn) { document.querySelectorAll('.nav-tab').forEach((t,i) => { const pages=['dashboard','positions','trades','analytics','settings']; if(pages[i]===id) t.classList.add('active'); else t.classList.remove('active'); }); }
   if (id === 'trades')    fetchTrades();
   if (id === 'analytics') fetchAnalytics();
+  // Push history state so back button navigates within the app
+  if (!fromPopState) {
+    if (_currentPage !== id) {
+      history.pushState({ page: id }, '', '#' + id);
+    }
+  }
+  _currentPage = id;
 }
+
+// Handle Android/browser back button — navigate between tabs, never leave app
+window.addEventListener('popstate', function(e) {
+  const page = (e.state && e.state.page) ? e.state.page : 'dashboard';
+  showPage(page, null, null, null, true);
+  // Always keep a state so next back press is caught too
+  if (page === 'dashboard') {
+    history.pushState({ page: 'dashboard' }, '', '#dashboard');
+  }
+});
 
 // ── Settings panel navigation ──
 function showSettingsPanel(id, btn) {
@@ -3698,6 +3717,9 @@ async function fetchAnalytics() {
     console.error('Analytics fetch failed', e);
   }
 }
+
+// Seed initial history state so very first back press is caught by popstate
+history.replaceState({ page: 'dashboard' }, '', '#dashboard');
 
 poll();
 pollConnection();
