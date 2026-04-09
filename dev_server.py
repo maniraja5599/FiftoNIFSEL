@@ -2228,7 +2228,7 @@ def _place_test_live_atm_sell():
 _squaring_lock = threading.Lock()
 
 def _square_off_position():
-    """Square off both legs with MARKET BUY and record trade history."""
+    """Square off position — handles Short Strangle, Bull Put Spread, Bear Call Spread."""
     with _squaring_lock:
         if not state["active_position"] or not state["position_detail"]:
             return
@@ -2236,13 +2236,33 @@ def _square_off_position():
             LOG_LINES.append(f"[WARN]  [{_ts()}] Square-off already in progress — skipping duplicate call")
             return
         state["squaring_off"] = True
-    pos = state["position_detail"]
-    qty = pos["quantity"]
+    pos       = state["position_detail"]
+    qty       = pos["quantity"]
     exit_time = datetime.now()
-    LOG_LINES.append(f"[TRADE] [{_ts()}] Squaring off position...")
+    setup     = pos.get("setup_type", "Short Strangle")
+    LOG_LINES.append(f"[TRADE] [{_ts()}] Squaring off {setup}...")
 
-    ce_oid = _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
-    pe_oid = _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
+    # Buy back only the legs that were actually sold
+    if setup == "Bull Put Spread":
+        # Buy back sold PE leg
+        if pos.get("pe_symbol") and pos.get("pe_token"):
+            _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
+        # Sell the hedge PE leg (we bought it at entry, sell it at exit)
+        if pos.get("hedge_pe_symbol") and pos.get("hedge_pe_token"):
+            _place_order(pos["hedge_pe_symbol"], pos["hedge_pe_token"], qty, "SELL")
+    elif setup == "Bear Call Spread":
+        # Buy back sold CE leg
+        if pos.get("ce_symbol") and pos.get("ce_token"):
+            _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
+        # Sell the hedge CE leg
+        if pos.get("hedge_ce_symbol") and pos.get("hedge_ce_token"):
+            _place_order(pos["hedge_ce_symbol"], pos["hedge_ce_token"], qty, "SELL")
+    else:
+        # Short Strangle — buy back both legs
+        if pos.get("ce_symbol") and pos.get("ce_token"):
+            _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
+        if pos.get("pe_symbol") and pos.get("pe_token"):
+            _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
 
     final_pnl = round(pos.get("pnl", 0) * pos.get("quantity", 1), 2)
     state["closed_pnl"] += final_pnl        # accumulate realized P&L for the day
@@ -2512,119 +2532,141 @@ def position_monitor():
     while True:
         try:
             if state["active_position"] and state["position_detail"] and angel_obj:
-                pos      = state["position_detail"]
-                ce_token = pos.get("ce_token")
-                pe_token = pos.get("pe_token")
+                pos       = state["position_detail"]
+                setup     = pos.get("setup_type", "Short Strangle")
+                ce_token  = pos.get("ce_token")
+                pe_token  = pos.get("pe_token")
+                qty       = pos.get("quantity", 1)
+                entry_prem = pos["premium_received"]
 
                 # Retry token lookup if missing (e.g. restored from disk before login)
                 if not ce_token and pos.get("ce_symbol"):
                     ce_token = _get_nfo_token(pos["ce_symbol"])
-                    if ce_token:
-                        pos["ce_token"] = ce_token
+                    if ce_token: pos["ce_token"] = ce_token
                 if not pe_token and pos.get("pe_symbol"):
                     pe_token = _get_nfo_token(pos["pe_symbol"])
-                    if pe_token:
-                        pos["pe_token"] = pe_token
+                    if pe_token: pos["pe_token"] = pe_token
 
-                if ce_token and pe_token:
+                # ── Fetch LTP for the sold leg(s) ──
+                # Spreads have only one sold leg; Strangle has both
+                current_cost = None
+
+                if setup == "Bull Put Spread" and pe_token:
+                    pe_r = _safe_ltp_data("NFO", pos["pe_symbol"], pe_token)
+                    if pe_r.get("status"):
+                        pe_ltp = pe_r["data"]["ltp"]
+                        current_cost = pe_ltp
+                        pos["current_pe_ltp"] = round(pe_ltp, 2)
+                        pos["current_ce_ltp"] = 0
+
+                elif setup == "Bear Call Spread" and ce_token:
+                    ce_r = _safe_ltp_data("NFO", pos["ce_symbol"], ce_token)
+                    if ce_r.get("status"):
+                        ce_ltp = ce_r["data"]["ltp"]
+                        current_cost = ce_ltp
+                        pos["current_ce_ltp"] = round(ce_ltp, 2)
+                        pos["current_pe_ltp"] = 0
+
+                elif setup == "Short Strangle" and ce_token and pe_token:
                     ce_r = _safe_ltp_data("NFO", pos["ce_symbol"], ce_token)
                     pe_r = _safe_ltp_data("NFO", pos["pe_symbol"], pe_token)
-
                     if ce_r.get("status") and pe_r.get("status"):
-                        ce_ltp       = ce_r["data"]["ltp"]
-                        pe_ltp       = pe_r["data"]["ltp"]
+                        ce_ltp = ce_r["data"]["ltp"]
+                        pe_ltp = pe_r["data"]["ltp"]
                         current_cost = ce_ltp + pe_ltp
-                        entry_prem   = pos["premium_received"]
-                        open_pnl     = entry_prem - current_cost
-                        pnl          = open_pnl   # alias for SL/target log
+                        pos["current_ce_ltp"] = round(ce_ltp, 2)
+                        pos["current_pe_ltp"] = round(pe_ltp, 2)
 
-                        qty                     = pos.get("quantity", 1)
-                        pos["pnl"]              = round(open_pnl * qty, 2)
-                        pos["current_ce_ltp"]   = round(ce_ltp, 2)
-                        pos["current_pe_ltp"]   = round(pe_ltp, 2)
-                        state["daily_pnl"]      = round(state["closed_pnl"] + open_pnl * qty, 2)
+                if current_cost is not None:
+                    open_pnl = entry_prem - current_cost
+                    pos["pnl"]         = round(open_pnl * qty, 2)
+                    state["daily_pnl"] = round(state["closed_pnl"] + open_pnl * qty, 2)
 
-                        # ── Trailing SL: tighten to breakeven at 20% profit ──
-                        trail_pct = config.get("trail_trigger_pct", 0.20)
-                        profit_pct = (entry_prem - current_cost) / entry_prem if entry_prem > 0 else 0
-                        if profit_pct >= trail_pct and not pos.get("trail_locked"):
-                            # Lock SL at breakeven (entry premium = no loss)
-                            old_sl = pos["sl"]
-                            pos["sl"] = entry_prem
-                            pos["trail_locked"] = True
-                            LOG_LINES.append(
-                                f"[TRADE] [{_ts()}] TRAILING SL ACTIVATED ✓ | "
-                                f"Profit {profit_pct*100:.0f}% ≥ {trail_pct*100:.0f}% | "
-                                f"SL tightened: ₹{old_sl:.0f} → ₹{entry_prem:.0f} (breakeven)"
-                            )
+                    # Label for notifications
+                    leg_label = (
+                        f"PE {pos['pe_strike']}" if setup == "Bull Put Spread" else
+                        f"CE {pos['ce_strike']}" if setup == "Bear Call Spread" else
+                        f"CE {pos['ce_strike']} | PE {pos['pe_strike']}"
+                    )
+
+                    # ── Trailing SL: lock at breakeven at 20% profit ──
+                    trail_pct  = config.get("trail_trigger_pct", 0.20)
+                    profit_pct = (entry_prem - current_cost) / entry_prem if entry_prem > 0 else 0
+                    if profit_pct >= trail_pct and not pos.get("trail_locked"):
+                        old_sl = pos["sl"]
+                        pos["sl"]          = entry_prem
+                        pos["trail_locked"] = True
+                        LOG_LINES.append(
+                            f"[TRADE] [{_ts()}] TRAILING SL ACTIVATED ✓ | {setup} | "
+                            f"Profit {profit_pct*100:.0f}% ≥ {trail_pct*100:.0f}% | "
+                            f"SL ₹{old_sl:.0f} → ₹{entry_prem:.0f} (breakeven)"
+                        )
+                        _notify(
+                            "🔒 Trailing SL — Breakeven Locked",
+                            f"{setup} | {leg_label}\nProfit {profit_pct*100:.0f}% | SL → ₹{entry_prem:.0f}",
+                            "success"
+                        )
+                        _save_active_position(pos)
+
+                    # ── Target hit ──
+                    if current_cost <= entry_prem - pos["target"]:
+                        if not pos.get("exit_notified"):
+                            pos["exit_notified"] = True
+                            pos["exit_reason"]   = "TARGET"
+                            LOG_LINES.append(f"[TRADE] [{_ts()}] TARGET HIT ✓ | {setup} | P&L ₹{open_pnl:,.0f} | Squaring off")
                             _notify(
-                                "🔒 Trailing SL — Breakeven Locked",
-                                f"Profit at {profit_pct*100:.0f}% | SL moved to ₹{entry_prem:.0f} (breakeven)\n"
-                                f"CE {pos['ce_strike']} | PE {pos['pe_strike']}",
+                                "🎯 Target Hit!",
+                                f"{setup} | {leg_label}\nP&L: +₹{pos['pnl']:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}",
                                 "success"
                             )
-                            _save_active_position(pos)  # persist updated SL
+                            _square_off_position()
 
-                        # Target = 30% profit (current_cost ≤ entry - target)
-                        if current_cost <= entry_prem - pos["target"]:
-                            if not pos.get("exit_notified"):
-                                pos["exit_notified"] = True
-                                pos["exit_reason"] = "TARGET"
-                                LOG_LINES.append(f"[TRADE] [{_ts()}] TARGET HIT ✓ | P&L ₹{pnl:,.0f} | Squaring off")
-                                _notify(
-                                    "🎯 Target Hit!",
-                                    f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\n"
-                                    f"P&L: +₹{pnl:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}\nSquaring off...",
-                                    "success"
-                                )
-                                _square_off_position()
+                    # ── Stop Loss hit ──
+                    elif current_cost > pos["sl"]:
+                        if not pos.get("exit_notified"):
+                            pos["exit_notified"] = True
+                            pos["exit_reason"]   = "STOP_LOSS"
+                            LOG_LINES.append(f"[TRADE] [{_ts()}] SL HIT ✗ | {setup} | P&L ₹{open_pnl:,.0f} | Squaring off")
+                            _notify(
+                                "🛑 Stop Loss Hit",
+                                f"{setup} | {leg_label}\nP&L: ₹{pos['pnl']:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}",
+                                "danger"
+                            )
+                            _square_off_position()
 
-                        elif current_cost > pos["sl"]:
-                            if not pos.get("exit_notified"):
-                                pos["exit_notified"] = True
-                                pos["exit_reason"] = "STOP_LOSS"
-                                LOG_LINES.append(f"[TRADE] [{_ts()}] SL HIT ✗ | P&L ₹{pnl:,.0f} | Squaring off")
-                                _notify(
-                                    "🛑 Stop Loss Hit",
-                                    f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\n"
-                                    f"P&L: ₹{pnl:,.0f} | Entry ₹{entry_prem:.0f} → Now ₹{current_cost:.0f}\nSquaring off...",
-                                    "danger"
-                                )
-                                _square_off_position()
-
-                        else:
-                            now_t = datetime.now()
-                            # Expiry cut-time: exit on expiry day before 1 PM
-                            try:
-                                expiry_dt = datetime.strptime(pos.get("expiry", ""), "%d-%b-%Y").date()
-                                h, m = map(int, config.get("expiry_cut_time", "13:00").split(":"))
-                                if now_t.date() == expiry_dt and now_t.time() >= _time(h, m):
-                                    if not pos.get("exit_notified"):
-                                        pos["exit_notified"] = True
-                                        pos["exit_reason"] = "EXPIRY_CUT"
-                                        LOG_LINES.append(f"[TRADE] [{_ts()}] EXPIRY CUT-TIME {config.get('expiry_cut_time','13:00')} on expiry day | P&L ₹{pnl:,.0f} | Squaring off")
-                                        _notify("⏰ Expiry Cut-Time Exit", f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\nP&L: ₹{pnl:,.0f}\nExiting before expiry.", "warning")
-                                        _square_off_position()
-                            except Exception:
-                                pass
-
-                            # Dead zone: force exit after 14:30 if still in position
-                            if state["active_position"] and not pos.get("exit_notified"):
-                                dh, dm = map(int, config.get("dead_zone_start", "14:30").split(":"))
-                                if now_t.time() >= _time(dh, dm):
+                    else:
+                        now_t = datetime.now()
+                        # Expiry cut-time
+                        try:
+                            expiry_dt = datetime.strptime(pos.get("expiry", ""), "%d-%b-%Y").date()
+                            h, m = map(int, config.get("expiry_cut_time", "13:00").split(":"))
+                            if now_t.date() == expiry_dt and now_t.time() >= _time(h, m):
+                                if not pos.get("exit_notified"):
                                     pos["exit_notified"] = True
-                                    pos["exit_reason"] = "DEAD_ZONE"
-                                    LOG_LINES.append(f"[TRADE] [{_ts()}] DEAD ZONE {config.get('dead_zone_start','14:30')} reached | P&L ₹{pnl:,.0f} | Squaring off")
-                                    _notify("⏰ Dead Zone Exit", f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\nP&L: ₹{pnl:,.0f}\nExiting — past 14:30 dead zone.", "warning")
+                                    pos["exit_reason"]   = "EXPIRY_CUT"
+                                    LOG_LINES.append(f"[TRADE] [{_ts()}] EXPIRY CUT-TIME | {setup} | P&L ₹{open_pnl:,.0f} | Squaring off")
+                                    _notify("⏰ Expiry Cut-Time Exit", f"{setup} | {leg_label}\nP&L: ₹{pos['pnl']:,.0f}", "warning")
                                     _square_off_position()
+                        except Exception:
+                            pass
 
-                            # EOD exit at 3:20 PM
-                            if state["active_position"] and not pos.get("exit_notified") and now_t.time() >= _time(15, 20):
+                        # Dead zone
+                        if state["active_position"] and not pos.get("exit_notified"):
+                            dh, dm = map(int, config.get("dead_zone_start", "14:30").split(":"))
+                            if now_t.time() >= _time(dh, dm):
                                 pos["exit_notified"] = True
-                                pos["exit_reason"] = "EOD_EXIT"
-                                LOG_LINES.append(f"[TRADE] [{_ts()}] EOD auto-exit at 3:20 PM | P&L ₹{pnl:,.0f} | Squaring off")
-                                _notify("⏰ EOD Auto-Exit — 3:20 PM", f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\nP&L: ₹{pnl:,.0f} | Squaring off before market close.", "warning")
+                                pos["exit_reason"]   = "DEAD_ZONE"
+                                LOG_LINES.append(f"[TRADE] [{_ts()}] DEAD ZONE | {setup} | P&L ₹{open_pnl:,.0f} | Squaring off")
+                                _notify("⏰ Dead Zone Exit", f"{setup} | {leg_label}\nP&L: ₹{pos['pnl']:,.0f}", "warning")
                                 _square_off_position()
+
+                        # EOD exit
+                        if state["active_position"] and not pos.get("exit_notified") and now_t.time() >= _time(15, 20):
+                            pos["exit_notified"] = True
+                            pos["exit_reason"]   = "EOD_EXIT"
+                            LOG_LINES.append(f"[TRADE] [{_ts()}] EOD AUTO-EXIT | {setup} | P&L ₹{open_pnl:,.0f} | Squaring off")
+                            _notify("⏰ EOD Auto-Exit — 3:20 PM", f"{setup} | {leg_label}\nP&L: ₹{pos['pnl']:,.0f}", "warning")
+                            _square_off_position()
 
         except Exception as e:
             LOG_LINES.append(f"[WARN]  [{_ts()}] Position monitor error: {e}")
