@@ -1658,19 +1658,22 @@ html.light .toggle-name      { color: #111827; }
           <table class="trade-tbl">
             <thead>
               <tr>
-                <th>Entry</th>
+                <th>Entry Date &amp; Time</th>
                 <th>Type</th>
                 <th>CE Strike</th>
                 <th>PE Strike</th>
+                <th>CE Entry LTP</th>
+                <th>PE Entry LTP</th>
                 <th>Premium</th>
                 <th>Target</th>
                 <th>SL</th>
                 <th>Qty</th>
+                <th>Expiry</th>
                 <th>Unrealised P&amp;L</th>
               </tr>
             </thead>
             <tbody id="positions-list">
-              <tr><td colspan="9" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>
+              <tr><td colspan="12" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>
             </tbody>
           </table>
         </div>
@@ -2460,13 +2463,20 @@ function applyState(d) {
     }
 
     // ── Footer ──
-    // Entry time — strip date if today
+    // Entry time — show full date + time (server sends "DD-MM-YYYY  HH:MM:SS" local IST)
     let etStr = p.entry_time || '—';
     try {
-      const et = new Date(typeof p.entry_time === 'string' && !p.entry_time.includes('T')
-        ? p.entry_time.replace(/(\d{2})-(\d{2})-(\d{4})\s+/, '$3-$2-$1T')
-        : p.entry_time);
-      etStr = et.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+      const raw = String(p.entry_time).trim();
+      const m = raw.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
+      if (m) {
+        const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        etStr = `${m[1]} ${months[parseInt(m[2])-1]} ${m[3]}, ${m[4]}`;
+      } else {
+        // ISO fallback — parse as local time by replacing Z-less T string
+        const et = new Date(raw.includes('T') ? raw : raw.replace(' ','T'));
+        etStr = et.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})
+               + ', ' + et.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      }
     } catch {}
     document.getElementById('entry-time').textContent = etStr;
     document.getElementById('pos-expiry').textContent = p.expiry || '—';
@@ -2604,19 +2614,32 @@ function renderPositions(d) {
     ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
     : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
 
-  const entryTime = p.entry_time
-    ? (typeof p.entry_time === 'string' ? p.entry_time.substring(0,8) : String(p.entry_time).substring(11,19))
-    : '—';
+  // Format entry time — server sends "DD-MM-YYYY  HH:MM:SS"
+  let entryTime = '—';
+  try {
+    const raw = String(p.entry_time || '').trim();
+    const m = raw.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
+    if (m) {
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      entryTime = `${m[1]} ${months[parseInt(m[2])-1]} ${m[3]}<br><span style="color:var(--t2);font-size:10px">${m[4]}</span>`;
+    } else if (raw.length >= 8) {
+      entryTime = raw.substring(0, 19).replace('T', ' ');
+    }
+  } catch {}
 
-  tbody.innerHTML = `<tr>
+  const tid = p.trade_id || '';
+  tbody.innerHTML = `<tr onclick="${tid ? `showTradeDetail('${tid}')` : ''}" style="${tid ? 'cursor:pointer' : ''}" title="${tid ? 'Click for full details' : ''}">
     <td>${entryTime}</td>
     <td>${p.setup_type || 'Short Strangle'}</td>
     <td style="color:var(--red)">${p.ce_strike || '—'}</td>
     <td style="color:var(--green)">${p.pe_strike || '—'}</td>
-    <td>₹${p.premium_received ? p.premium_received.toFixed(1) : '—'}</td>
+    <td>${p.ce_entry_price != null ? '₹'+parseFloat(p.ce_entry_price).toFixed(2) : '—'}</td>
+    <td>${p.pe_entry_price != null ? '₹'+parseFloat(p.pe_entry_price).toFixed(2) : '—'}</td>
+    <td>₹${p.premium_received ? p.premium_received.toFixed(2) : '—'}</td>
     <td style="color:var(--green)">${p.target ? '₹'+p.target.toFixed(0) : '—'}</td>
     <td style="color:var(--red)">${p.sl ? '₹'+p.sl.toFixed(0) : '—'}</td>
     <td>${qty}</td>
+    <td style="color:var(--t2);font-size:11px">${p.expiry || '—'}</td>
     <td>${pnlHtml}</td>
   </tr>`;
 }
@@ -2667,7 +2690,12 @@ async function fetchTrades() {
         : pnl >= 0
           ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
           : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
-      const exitTime = t.exit_time ? t.exit_time.toString().substring(11,19) : '—';
+      let exitTime = '—';
+      if (t.exit_time) {
+        const es = String(t.exit_time).trim();
+        const em = es.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
+        exitTime = em ? `${em[1]}/${em[2]}<br><span style="font-size:10px;color:var(--t2)">${em[4]}</span>` : es.replace('T',' ').substring(0,16);
+      }
       return `<tr onclick="showTradeDetail('${t.trade_id}')" title="Click for full details">
         <td>${exitTime}</td>
         <td>${t.setup_type || '—'}</td>
@@ -2699,8 +2727,15 @@ function showTradeDetail(tradeId) {
   const combined = (parseFloat(t.ce_entry_ltp)||0) + (parseFloat(t.pe_entry_ltp)||0);
   const combinedExit = (parseFloat(t.ce_exit_ltp)||0) + (parseFloat(t.pe_exit_ltp)||0);
 
-  const entryTime = t.entry_time ? t.entry_time.toString().replace('T',' ').substring(0,19) : '—';
-  const exitTime  = t.exit_time  ? t.exit_time.toString().replace('T',' ').substring(0,19) : '—';
+  function _fmtTime(raw) {
+    if (!raw) return '—';
+    const s = String(raw).trim();
+    const m = s.match(/^(\d{2})-(\d{2})-(\d{4})\s+(\d{2}:\d{2}:\d{2})/);
+    if (m) { const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[1]} ${mo[parseInt(m[2])-1]} ${m[3]}, ${m[4]}`; }
+    return s.replace('T',' ').substring(0,19);
+  }
+  const entryTime = _fmtTime(t.entry_time);
+  const exitTime  = _fmtTime(t.exit_time);
   const dur = t.duration_mins != null ? t.duration_mins + ' min' : '—';
 
   document.getElementById('td-title').textContent = (t.setup_type || 'Trade') + ' — ' + (t.trade_id || '');

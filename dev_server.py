@@ -1720,7 +1720,7 @@ def _execute_trade(signal):
             "target":           target,
             "sl":               sl,
             "quantity":         qty,
-            "entry_time":       entry_time,
+            "entry_time":       entry_time.strftime("%d-%m-%Y  %H:%M:%S"),
             "pnl":              0.0,
             "ce_order_id":      ce_oid,
             "pe_order_id":      pe_oid,
