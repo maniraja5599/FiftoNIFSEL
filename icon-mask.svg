@@ -1,18 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Maskable icon — no rounded corners, safe zone respected -->
-  <rect width="512" height="512" fill="#ffffff"/>
+  <!-- Maskable: no rounded corners, content inside safe zone (central 80%) -->
+  <defs>
+    <linearGradient id="bgM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141e1a"/>
+      <stop offset="100%" stop-color="#0a0d10"/>
+    </linearGradient>
+    <linearGradient id="greenM" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#35f0aa"/>
+      <stop offset="100%" stop-color="#1ab87a"/>
+    </linearGradient>
+    <filter id="glowM" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
 
-  <!-- F -->
-  <text x="18" y="330" font-family="Arial Black,Impact,sans-serif" font-size="270" font-weight="900" fill="#1a6b2e">F</text>
-  <!-- i -->
-  <text x="162" y="330" font-family="Arial Black,Impact,sans-serif" font-size="210" font-weight="900" fill="#1a6b2e">i</text>
-  <!-- Red dot -->
-  <circle cx="202" cy="82" r="28" fill="#cc2200"/>
-  <!-- FT -->
-  <text x="210" y="330" font-family="Arial Black,Impact,sans-serif" font-size="270" font-weight="900" fill="#1a6b2e">FT</text>
-  <!-- O -->
-  <text x="398" y="330" font-family="Arial Black,Impact,sans-serif" font-size="270" font-weight="900" fill="#cc2200">O</text>
+  <!-- Full bleed background for maskable -->
+  <rect width="512" height="512" fill="url(#bgM)"/>
 
-  <line x1="20" y1="370" x2="235" y2="370" stroke="#1a6b2e" stroke-width="8" stroke-linecap="round"/>
-  <line x1="255" y1="370" x2="492" y2="370" stroke="#cc2200" stroke-width="8" stroke-linecap="round"/>
+  <!-- Safe zone content (shifted in slightly) -->
+  <line x1="80" y1="330" x2="440" y2="330" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+  <line x1="80" y1="255" x2="440" y2="255" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+  <line x1="80" y1="180" x2="440" y2="180" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+  <line x1="80" y1="400" x2="440" y2="400" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
+
+  <rect x="80"  y="340" width="62" height="60"  rx="8" fill="url(#greenM)" opacity="0.7"/>
+  <line x1="111" y1="322" x2="111" y2="340" stroke="#2dd698" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+
+  <rect x="170" y="355" width="62" height="45"  rx="8" fill="#f75252" opacity="0.8"/>
+  <line x1="201" y1="337" x2="201" y2="355" stroke="#f75252" stroke-width="4" stroke-linecap="round" opacity="0.8"/>
+
+  <rect x="260" y="280" width="62" height="120" rx="8" fill="url(#greenM)" opacity="0.85"/>
+  <line x1="291" y1="260" x2="291" y2="280" stroke="#2dd698" stroke-width="4" stroke-linecap="round" opacity="0.85"/>
+
+  <rect x="350" y="180" width="62" height="220" rx="8" fill="url(#greenM)" filter="url(#glowM)"/>
+  <line x1="381" y1="152" x2="381" y2="180" stroke="#35f0aa" stroke-width="5" stroke-linecap="round"/>
+
+  <polyline points="111,340 201,355 291,280 381,180"
+    fill="none" stroke="#2dd698" stroke-width="5"
+    stroke-linecap="round" stroke-linejoin="round"
+    stroke-dasharray="14,8" opacity="0.55"/>
+
+  <polygon points="381,100 407,146 394,140 394,164 368,164 368,140 355,146"
+    fill="#2dd698" filter="url(#glowM)"/>
 </svg>
