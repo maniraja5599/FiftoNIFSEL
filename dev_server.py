@@ -2267,6 +2267,10 @@ def icon512():
 def iconmask():
     return send_from_directory(BASE, "icon-mask.svg", mimetype="image/svg+xml")
 
+@app.route("/overview")
+def overview():
+    return send_from_directory(BASE, "project_overview.html")
+
 @app.route("/api/state")
 def api_state():
     # Inject live DTE on every poll — cheap calculation

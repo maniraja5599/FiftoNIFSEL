@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FIFTO — Project Overview</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%230c0c0f'/%3E%3Ctext x='7' y='44' font-family='Arial Black,sans-serif' font-size='28' font-weight='900' fill='%232dd698'%3EFI%3C/text%3E%3Ctext x='35' y='44' font-family='Arial Black,sans-serif' font-size='28' font-weight='900' fill='%23f75252'%3EFTO%3C/text%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0c0f;--surface:#111116;--surface2:#17171e;--surface3:#1e1e28;
+  --line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.12);
+  --green:#2dd698;--green-bg:rgba(45,214,152,.10);
+  --red:#f75252;--red-bg:rgba(247,82,82,.10);
+  --amber:#f5a623;--amber-bg:rgba(245,166,35,.10);
+  --blue:#4f8ef7;--blue-bg:rgba(79,142,247,.10);
+  --purple:#9b72f5;--purple-bg:rgba(155,114,245,.10);
+  --t1:#f0f0f8;--t2:#8a8aa8;--t3:#44445a;
+  --mono:'IBM Plex Mono',monospace;--ui:'Inter',sans-serif;
+}
+body{font-family:var(--ui);background:var(--bg);color:var(--t1);line-height:1.6;font-size:14px}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── Topbar ── */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(12,12,15,.92);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);padding:0 24px;height:52px;
+  display:flex;align-items:center;justify-content:space-between}
+.topbar-brand{display:flex;align-items:center;gap:10px}
+.brand-logo{font-family:var(--mono);font-size:18px;font-weight:900;letter-spacing:-.02em}
+.brand-logo .fi{color:var(--green)}.brand-logo .fto{color:var(--red)}
+.brand-sub{font-size:11px;color:var(--t3);font-weight:500}
+.topbar-back{font-size:12px;color:var(--t2);display:flex;align-items:center;gap:5px;
+  padding:6px 12px;border:1px solid var(--line2);border-radius:6px;transition:all .2s}
+.topbar-back:hover{color:var(--t1);border-color:var(--line2);background:var(--surface2);text-decoration:none}
+
+/* ── Layout ── */
+.page{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+.hero{text-align:center;padding:48px 0 40px}
+.hero-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--green);background:var(--green-bg);border:1px solid rgba(45,214,152,.2);
+  border-radius:99px;padding:4px 14px;margin-bottom:16px}
+.hero-title{font-size:42px;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:12px}
+.hero-title .fi{color:var(--green)}.hero-title .fto{color:var(--red)}
+.hero-sub{font-size:15px;color:var(--t2);max-width:520px;margin:0 auto 28px}
+.hero-stats{display:flex;justify-content:center;gap:32px;flex-wrap:wrap}
+.hero-stat{text-align:center}
+.hero-stat-val{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--t1)}
+.hero-stat-lbl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+
+/* ── Section ── */
+.section{margin-bottom:40px}
+.section-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--t3);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.section-title::before{content:'';flex:1;height:1px;background:var(--line)}
+.section-title::after{content:'';flex:1;height:1px;background:var(--line)}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:12px}
+.card-title{font-size:13px;font-weight:700;color:var(--t1);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card-grid{display:grid;gap:12px}
+.grid-2{grid-template-columns:1fr 1fr}
+.grid-3{grid-template-columns:1fr 1fr 1fr}
+
+/* ── Flow diagram ── */
+.flow{display:flex;flex-direction:column;gap:0}
+.flow-step{display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.flow-step:last-child{border-bottom:none}
+.flow-num{width:28px;height:28px;border-radius:50%;background:var(--surface3);border:1px solid var(--line2);
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+  font-family:var(--mono);color:var(--t2);flex-shrink:0;margin-top:2px}
+.flow-body{flex:1}
+.flow-label{font-size:12px;font-weight:700;color:var(--t1);margin-bottom:3px}
+.flow-desc{font-size:12px;color:var(--t2)}
+.flow-code{font-family:var(--mono);font-size:11px;color:var(--green);background:var(--surface2);
+  border:1px solid var(--line);border-radius:6px;padding:6px 10px;margin-top:6px;display:inline-block}
+
+/* ── Strategy diagram ── */
+.strategy-box{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.strategy-arrow{text-align:center;color:var(--t3);font-size:18px;padding:6px 0}
+
+/* ── Arch diagram ── */
+.arch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.arch-node{background:var(--surface2);border:1px solid var(--line);border-radius:9px;
+  padding:12px 14px;text-align:center}
+.arch-node.highlight{border-color:rgba(45,214,152,.3);background:var(--green-bg)}
+.arch-node-icon{font-size:22px;margin-bottom:6px}
+.arch-node-title{font-size:12px;font-weight:700;color:var(--t1)}
+.arch-node-desc{font-size:10px;color:var(--t3);margin-top:3px}
+.arch-connector{display:flex;align-items:center;justify-content:center;color:var(--t3);font-size:11px;gap:4px}
+
+/* ── Tables ── */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--t3);padding:8px 12px;border-bottom:1px solid var(--line2)}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--line);color:var(--t2);vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td:first-child{color:var(--t1);font-weight:600}
+.tbl .mono{font-family:var(--mono);font-size:11px}
+.tbl .c-green{color:var(--green)}
+.tbl .c-red{color:var(--red)}
+.tbl .c-amber{color:var(--amber)}
+.tbl .c-blue{color:var(--blue)}
+
+/* ── Checks grid ── */
+.checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.check-item{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start}
+.check-icon{font-size:14px;margin-top:1px;flex-shrink:0}
+.check-body{}
+.check-name{font-size:12px;font-weight:600;color:var(--t1)}
+.check-desc{font-size:11px;color:var(--t3);margin-top:2px}
+
+/* ── DTE table ── */
+.dte-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.dte-card{background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;text-align:center}
+.dte-card.expiry{border-color:rgba(45,214,152,.3);background:var(--green-bg)}
+.dte-day{font-size:20px;font-weight:800;font-family:var(--mono);color:var(--t1)}
+.dte-label{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.dte-target{font-size:13px;font-weight:700;color:var(--green)}
+.dte-sl{font-size:13px;font-weight:700;color:var(--red)}
+.dte-sub{font-size:10px;color:var(--t3);margin-top:3px}
+
+/* ── Exit triggers ── */
+.exits{display:flex;flex-direction:column;gap:8px}
+.exit-row{display:flex;align-items:center;gap:12px;background:var(--surface2);
+  border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.exit-badge{font-size:14px;width:28px;text-align:center;flex-shrink:0}
+.exit-name{font-size:12px;font-weight:700;color:var(--t1);width:140px;flex-shrink:0}
+.exit-cond{font-size:11px;color:var(--t3);font-family:var(--mono);flex:1}
+.exit-result{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;flex-shrink:0}
+.exit-result.profit{background:var(--green-bg);color:var(--green)}
+.exit-result.loss{background:var(--red-bg);color:var(--red)}
+.exit-result.time{background:var(--amber-bg);color:var(--amber)}
+
+/* ── Files ── */
+.files{display:flex;flex-direction:column;gap:6px}
+.file-row{display:flex;align-items:flex-start;gap:12px;padding:8px 12px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:7px}
+.file-icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.file-name{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--t1)}
+.file-desc{font-size:11px;color:var(--t3);margin-top:2px}
+
+/* ── Telegram alerts ── */
+.alerts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.alert-row{display:flex;align-items:flex-start;gap:10px;background:var(--surface2);
+  border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.alert-emoji{font-size:18px;flex-shrink:0}
+.alert-title{font-size:12px;font-weight:600;color:var(--t1)}
+.alert-desc{font-size:11px;color:var(--t3);margin-top:2px}
+
+/* ── Inline badges ── */
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;
+  vertical-align:middle;margin-left:6px}
+.badge.green{background:var(--green-bg);color:var(--green);border:1px solid rgba(45,214,152,.2)}
+.badge.red{background:var(--red-bg);color:var(--red);border:1px solid rgba(247,82,82,.2)}
+.badge.amber{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(245,166,35,.2)}
+.badge.blue{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(79,142,247,.2)}
+
+/* ── Config table ── */
+.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cfg-item{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.cfg-key{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--blue)}
+.cfg-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--t1);margin:3px 0}
+.cfg-desc{font-size:11px;color:var(--t3)}
+
+/* ── Code block ── */
+pre{background:var(--surface2);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:11px;
+  color:var(--t2);line-height:1.7}
+pre .c-green{color:var(--green)}pre .c-red{color:var(--red)}
+pre .c-amber{color:var(--amber)}pre .c-blue{color:var(--blue)}
+pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
+
+/* ── Quick start steps ── */
+.qs{display:flex;flex-direction:column;gap:8px}
+.qs-step{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;
+  background:var(--surface2);border:1px solid var(--line);border-radius:8px}
+.qs-num{width:24px;height:24px;border-radius:50%;background:var(--green);color:#000;
+  font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.qs-body{}
+.qs-title{font-size:12px;font-weight:700;color:var(--t1)}
+.qs-code{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:4px}
+
+/* ── Responsive ── */
+@media(max-width:640px){
+  .grid-2,.grid-3,.arch,.dte-grid,.alerts,.cfg-grid{grid-template-columns:1fr}
+  .hero-title{font-size:30px}
+  .hero-stats{gap:20px}
+  .exit-name{width:auto}
+  .page{padding:20px 14px 60px}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <div class="brand-logo"><span class="fi">FI</span><span class="fto">FTO</span></div>
+    <div class="brand-sub">Project Overview</div>
+  </div>
+  <a class="topbar-back" href="/">← Dashboard</a>
+</header>
+
+<div class="page">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-tag">NIFTY Options AI Trading System</div>
+    <div class="hero-title"><span class="fi">FI</span><span class="fto">FTO</span> AI Trading</div>
+    <div class="hero-sub">A fully-automated Short Strangle bot on NIFTY — signals, order execution, monitoring and exits, all on autopilot.</div>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="hero-stat-val" style="color:var(--green)">₹15L</div><div class="hero-stat-lbl">Capital</div></div>
+      <div class="hero-stat"><div class="hero-stat-val">3 Lots</div><div class="hero-stat-lbl">Per Trade</div></div>
+      <div class="hero-stat"><div class="hero-stat-val">195</div><div class="hero-stat-lbl">Qty per Leg</div></div>
+      <div class="hero-stat"><div class="hero-stat-val" style="color:var(--red)">₹45K</div><div class="hero-stat-lbl">Daily Loss Limit</div></div>
+      <div class="hero-stat"><div class="hero-stat-val">3</div><div class="hero-stat-lbl">Max Trades/Day</div></div>
+    </div>
+  </div>
+
+  <!-- WHAT IS A SHORT STRANGLE -->
+  <div class="section">
+    <div class="section-title">The Strategy</div>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div style="background:var(--red-bg);border:1px solid rgba(247,82,82,.2);border-radius:9px;padding:14px 16px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:6px">CE Leg — SELL Call</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">OTM Call above ATM</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23850 CE @ ₹192<br>Profit if NIFTY stays below 23850</div>
+        </div>
+        <div style="background:var(--green-bg);border:1px solid rgba(45,214,152,.2);border-radius:9px;padding:14px 16px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:6px">PE Leg — SELL Put</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">OTM Put below ATM</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23750 PE @ ₹186<br>Profit if NIFTY stays above 23750</div>
+        </div>
+      </div>
+      <div style="text-align:center;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px">
+        <div style="font-size:11px;color:var(--t3);margin-bottom:8px">PROFIT ZONE — NIFTY stays between the two strikes</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:0">
+          <div style="font-size:11px;color:var(--red);font-weight:700">23750 PE</div>
+          <div style="flex:1;height:4px;background:linear-gradient(90deg,var(--red),var(--green),var(--green),var(--red));border-radius:2px;margin:0 10px"></div>
+          <div style="font-size:11px;color:var(--red);font-weight:700">23850 CE</div>
+        </div>
+        <div style="font-size:11px;color:var(--green);margin-top:8px;font-weight:600">Combined Premium = ₹192 + ₹186 = ₹378 collected</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:4px">Max profit: ₹378 × 195 = ₹73,710 &nbsp;|&nbsp; Both options expire worthless</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAILY FLOW -->
+  <div class="section">
+    <div class="section-title">How Each Day Works</div>
+    <div class="card">
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <div class="flow-body">
+            <div class="flow-label">9:30 AM — Signal Engine Scans <span class="badge green">Every 5 min</span></div>
+            <div class="flow-desc">Checks all 8 conditions (VIX, margin, holiday, spot stability…). If all pass, finds the best CE + PE strikes with enough premium.</div>
+            <div class="flow-code">ATM = round(spot/50)×50 → walk up/down until LTP ≥ ₹40</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <div class="flow-body">
+            <div class="flow-label">Order Placement <span class="badge blue">AngelOne API</span></div>
+            <div class="flow-desc">SELL CE + SELL PE simultaneously. If one leg fails, the other is immediately bought back (partial fill recovery). On success, premium is locked in.</div>
+            <div class="flow-code">SELL NIFTY13APR2623850CE qty=195 + SELL NIFTY13APR2623750PE qty=195</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">3</div>
+          <div class="flow-body">
+            <div class="flow-label">Position Monitoring <span class="badge amber">Every 30 sec</span></div>
+            <div class="flow-desc">Fetches live LTP for both legs. Calculates open P&L. At 20% profit, trailing SL locks to breakeven. Watches for target / SL / time exits.</div>
+            <div class="flow-code">open_pnl = (entry_premium − current_cost) × 195</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">4</div>
+          <div class="flow-body">
+            <div class="flow-label">Exit — BUY Back Both Legs</div>
+            <div class="flow-desc">Square off triggered by target hit, SL hit, dead zone (2:30 PM), or EOD (3:20 PM). Telegram alert sent. Trade recorded to local JSON + Google Sheets.</div>
+            <div class="flow-code">BUY CE + BUY PE → final_pnl saved → active_pos.json deleted</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">5</div>
+          <div class="flow-body">
+            <div class="flow-label">Repeat <span class="badge green">Up to 3 trades/day</span></div>
+            <div class="flow-desc">After exit, signal engine resumes scanning. Max 3 trades per day or until daily loss limit hit. Agent stops automatically at end of day.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="section">
+    <div class="section-title">System Architecture</div>
+    <div class="card">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="display:inline-block;background:var(--green-bg);border:1px solid rgba(45,214,152,.25);border-radius:10px;padding:12px 24px">
+          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">Core Engine</div>
+          <div style="font-size:14px;font-weight:700;color:var(--green);font-family:var(--mono)">dev_server.py</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px">Flask + 4 background threads</div>
+        </div>
+      </div>
+      <div class="arch">
+        <div class="arch-node">
+          <div class="arch-node-icon">📡</div>
+          <div class="arch-node-title">AngelOne Smart API</div>
+          <div class="arch-node-desc">Live NIFTY/VIX data<br>Option chain<br>Order placement<br>Margin check</div>
+        </div>
+        <div class="arch-node">
+          <div class="arch-node-icon">📊</div>
+          <div class="arch-node-title">Dashboard (Browser)</div>
+          <div class="arch-node-desc">Real-time web UI<br>Desktop + Mobile PWA<br>REST API polling</div>
+        </div>
+        <div class="arch-node">
+          <div class="arch-node-icon">📱</div>
+          <div class="arch-node-title">Telegram Bot</div>
+          <div class="arch-node-desc">Trade alerts<br>Exit notifications<br>Signal updates</div>
+        </div>
+        <div class="arch-node">
+          <div class="arch-node-icon">📁</div>
+          <div class="arch-node-title">Local JSON</div>
+          <div class="arch-node-desc">trades.json<br>active_pos.json<br>Crash recovery</div>
+        </div>
+        <div class="arch-node">
+          <div class="arch-node-icon">📋</div>
+          <div class="arch-node-title">Google Sheets</div>
+          <div class="arch-node-desc">22-column trade log<br>CE/PE entry + exit LTP<br>Auto-updated on exit</div>
+        </div>
+        <div class="arch-node">
+          <div class="arch-node-icon">⚙️</div>
+          <div class="arch-node-title">Windows Auto-Start</div>
+          <div class="arch-node-desc">Task Scheduler<br>Runs silently on login<br>No console window</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENTRY CONDITIONS -->
+  <div class="section">
+    <div class="section-title">Entry Conditions — All Must Pass</div>
+    <div class="card">
+      <div class="checks">
+        <div class="check-item">
+          <div class="check-icon">🌡️</div>
+          <div class="check-body"><div class="check-name">VIX Range</div><div class="check-desc">13 ≤ VIX ≤ 28<br>Too low = no premium; Too high = risky</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon">⏰</div>
+          <div class="check-body"><div class="check-name">Entry Window</div><div class="check-desc">9:30 AM – 11:00 AM<br>Avoid open volatility + late theta</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon">📉</div>
+          <div class="check-body"><div class="check-name">Daily Gate</div><div class="check-desc">Daily P&L > −₹45,000<br>Stops after hitting loss limit</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon">💰</div>
+          <div class="check-body"><div class="check-name">Margin Available</div><div class="check-desc">Available cash > 0<br>Cannot trade without funds</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon">📅</div>
+          <div class="check-body"><div class="check-name">No Holiday</div><div class="check-desc">NSE F&O holiday list<br>No trading on market holidays</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon">📌</div>
+          <div class="check-body"><div class="check-name">Spot Stability</div><div class="check-desc">NIFTY moved &lt; 0.5% in 15 min<br>Avoid entering during fast moves</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon">🔢</div>
+          <div class="check-body"><div class="check-name">Max Trades</div><div class="check-desc">Trades today &lt; 3<br>Prevents over-trading</div></div>
+        </div>
+        <div class="check-item">
+          <div class="check-icon">⚖️</div>
+          <div class="check-body"><div class="check-name">PCR Range <span class="badge amber">Optional</span></div><div class="check-desc">0.8 ≤ PCR ≤ 1.4<br>Sentiment not extreme</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DTE-TIERED RISK -->
+  <div class="section">
+    <div class="section-title">Target &amp; Stop Loss — DTE Tiered</div>
+    <div class="card">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:14px">Risk/reward auto-adjusts based on days remaining to expiry. More DTE = conservative targets.</div>
+      <div class="dte-grid">
+        <div class="dte-card expiry">
+          <div class="dte-label">Days to Expiry</div>
+          <div class="dte-day" style="color:var(--green)">0</div>
+          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">Expiry Day</div>
+          <div class="dte-target">45% target</div>
+          <div class="dte-sub">e.g. ₹378 → exit ₹208</div>
+          <div class="dte-sl" style="margin-top:6px">1.5× SL</div>
+          <div class="dte-sub">exit at ₹567</div>
+        </div>
+        <div class="dte-card">
+          <div class="dte-label">Days to Expiry</div>
+          <div class="dte-day">1</div>
+          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">Tomorrow</div>
+          <div class="dte-target">28% target</div>
+          <div class="dte-sub">e.g. ₹378 → exit ₹272</div>
+          <div class="dte-sl" style="margin-top:6px">1.4× SL</div>
+          <div class="dte-sub">exit at ₹529</div>
+        </div>
+        <div class="dte-card">
+          <div class="dte-label">Days to Expiry</div>
+          <div class="dte-day">2</div>
+          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">2 Days</div>
+          <div class="dte-target">22% target</div>
+          <div class="dte-sub">e.g. ₹378 → exit ₹295</div>
+          <div class="dte-sl" style="margin-top:6px">1.3× SL</div>
+          <div class="dte-sub">exit at ₹491</div>
+        </div>
+        <div class="dte-card">
+          <div class="dte-label">Days to Expiry</div>
+          <div class="dte-day">3+</div>
+          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">3+ Days</div>
+          <div class="dte-target">18% target</div>
+          <div class="dte-sub">e.g. ₹378 → exit ₹310</div>
+          <div class="dte-sl" style="margin-top:6px">1.25× SL</div>
+          <div class="dte-sub">exit at ₹473</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:12px 14px">
+        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:6px">🔒 Trailing SL — Breakeven Lock</div>
+        <div style="font-size:11px;color:var(--t2)">When profit reaches <strong style="color:var(--t1)">20%</strong> of premium collected, stop loss automatically tightens to breakeven (= entry premium). Worst case after trail: <strong style="color:var(--green)">₹0 loss</strong>.</div>
+        <div style="font-family:var(--mono);font-size:11px;color:var(--green);margin-top:8px;background:var(--surface3);padding:6px 10px;border-radius:6px">
+          Premium ₹378 × 20% = ₹75.6 saved → SL locks at ₹378 (entry)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXIT TRIGGERS -->
+  <div class="section">
+    <div class="section-title">Exit Triggers</div>
+    <div class="card">
+      <div class="exits">
+        <div class="exit-row">
+          <div class="exit-badge">🎯</div>
+          <div class="exit-name">Target Hit</div>
+          <div class="exit-cond">current_cost ≤ entry − target</div>
+          <div class="exit-result profit">PROFIT</div>
+        </div>
+        <div class="exit-row">
+          <div class="exit-badge">🛑</div>
+          <div class="exit-name">Stop Loss Hit</div>
+          <div class="exit-cond">current_cost > stop_loss</div>
+          <div class="exit-result loss">LOSS</div>
+        </div>
+        <div class="exit-row">
+          <div class="exit-badge">⏰</div>
+          <div class="exit-name">Expiry Cut-Time</div>
+          <div class="exit-cond">On expiry day, after 1:00 PM</div>
+          <div class="exit-result time">TIME</div>
+        </div>
+        <div class="exit-row">
+          <div class="exit-badge">🚫</div>
+          <div class="exit-name">Dead Zone</div>
+          <div class="exit-cond">Any day after 2:30 PM (low liquidity)</div>
+          <div class="exit-result time">TIME</div>
+        </div>
+        <div class="exit-row">
+          <div class="exit-badge">🌙</div>
+          <div class="exit-name">EOD Auto-Exit</div>
+          <div class="exit-cond">3:20 PM — before market close</div>
+          <div class="exit-result time">TIME</div>
+        </div>
+        <div class="exit-row">
+          <div class="exit-badge">⚠️</div>
+          <div class="exit-name">Emergency Exit</div>
+          <div class="exit-cond">User presses button in dashboard</div>
+          <div class="exit-result loss">MANUAL</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CRASH RECOVERY -->
+  <div class="section">
+    <div class="section-title">Crash Recovery</div>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:var(--green-bg);border:1px solid rgba(45,214,152,.2);border-radius:9px;padding:14px 16px">
+          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">① active_pos.json <span class="badge green">Priority</span></div>
+          <div style="font-size:11px;color:var(--t2)">Written on every trade entry and when trailing SL activates. Has the <strong style="color:var(--t1)">full position detail</strong> — tokens, entry prices, SL state, trail_locked flag.</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:6px">Deleted when position closes.</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px 16px">
+          <div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:8px">② trades.json <span class="badge amber">Fallback</span></div>
+          <div style="font-size:11px;color:var(--t2)">Contains all trade records. An entry with <strong style="color:var(--t1)">exit_time = null</strong> means trade is still open. Used if active_pos.json is missing.</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:6px">Always kept in sync — entry + exit both saved here.</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--t2);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 14px">
+        <strong style="color:var(--t1)">On restart:</strong> Bot reads active_pos.json → restores position → re-resolves tokens from AngelOne after login → continues monitoring with no data loss.
+      </div>
+    </div>
+  </div>
+
+  <!-- GOOGLE SHEETS -->
+  <div class="section">
+    <div class="section-title">Google Sheets — 22 Column Trade Log</div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Column</th><th>Written</th><th>Example</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">1</td><td>Trade ID</td><td>Entry</td><td class="mono c-blue">T1775708570</td></tr>
+          <tr><td class="mono">2</td><td>Entry Time</td><td>Entry</td><td class="mono">09-04-2026 09:52:50</td></tr>
+          <tr><td class="mono">3</td><td>Exit Time</td><td>Exit</td><td class="mono">09-04-2026 14:30:00</td></tr>
+          <tr><td class="mono">4–8</td><td>Setup / CE Strike / PE Strike / CE Symbol / PE Symbol</td><td>Entry</td><td class="mono">Short Strangle, 23850, 23750</td></tr>
+          <tr><td class="mono">9–10</td><td>Qty / Premium</td><td>Entry</td><td class="mono">195 / ₹378.45</td></tr>
+          <tr><td class="mono c-green">11</td><td><strong>CE Entry LTP</strong></td><td>Entry</td><td class="mono c-green">₹192.30</td></tr>
+          <tr><td class="mono c-green">12</td><td><strong>PE Entry LTP</strong></td><td>Entry</td><td class="mono c-green">₹186.15</td></tr>
+          <tr><td class="mono c-red">13</td><td><strong>CE Exit LTP</strong></td><td>Exit</td><td class="mono c-red">₹216.00</td></tr>
+          <tr><td class="mono c-red">14</td><td><strong>PE Exit LTP</strong></td><td>Exit</td><td class="mono c-red">₹154.55</td></tr>
+          <tr><td class="mono">15–17</td><td>Target / Initial SL / Final SL</td><td>Entry/Exit</td><td class="mono">₹68.12 / ₹473 / ₹378</td></tr>
+          <tr><td class="mono">18</td><td>Trail Locked</td><td>Exit</td><td class="mono c-amber">Yes / No</td></tr>
+          <tr><td class="mono c-green">19</td><td><strong>P&amp;L</strong></td><td>Exit</td><td class="mono c-green">+₹7,137</td></tr>
+          <tr><td class="mono">20</td><td>Exit Reason</td><td>Exit</td><td class="mono">TARGET / DEAD_ZONE / SL</td></tr>
+          <tr><td class="mono">21–22</td><td>Expiry / Duration</td><td>Entry/Exit</td><td class="mono">13-Apr-2026 / 295 min</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TELEGRAM ALERTS -->
+  <div class="section">
+    <div class="section-title">Telegram Alerts</div>
+    <div class="card">
+      <div class="alerts">
+        <div class="alert-row"><div class="alert-emoji">📊</div><div><div class="alert-title">Signal Ready (MANUAL)</div><div class="alert-desc">CE/PE strikes + premium. Awaiting your approval.</div></div></div>
+        <div class="alert-row"><div class="alert-emoji">✅</div><div><div class="alert-title">Trade Executed (AUTO)</div><div class="alert-desc">Both legs placed. Entry prices, target, SL.</div></div></div>
+        <div class="alert-row"><div class="alert-emoji">🔒</div><div><div class="alert-title">Trailing SL Locked</div><div class="alert-desc">Profit ≥ 20%. SL moved to breakeven.</div></div></div>
+        <div class="alert-row"><div class="alert-emoji">🎯</div><div><div class="alert-title">Target Hit</div><div class="alert-desc">P&L amount. Squaring off.</div></div></div>
+        <div class="alert-row"><div class="alert-emoji">🛑</div><div><div class="alert-title">Stop Loss Hit</div><div class="alert-desc">Loss amount. Squaring off immediately.</div></div></div>
+        <div class="alert-row"><div class="alert-emoji">⏰</div><div><div class="alert-title">Dead Zone / EOD Exit</div><div class="alert-desc">Time-based force exit. P&L shown.</div></div></div>
+        <div class="alert-row"><div class="alert-emoji">🚨</div><div><div class="alert-title">Emergency Exit</div><div class="alert-desc">Manual trigger from dashboard button.</div></div></div>
+        <div class="alert-row"><div class="alert-emoji">⏰</div><div><div class="alert-title">Expiry Cut-Time</div><div class="alert-desc">On expiry day before 1 PM, force exit.</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIG -->
+  <div class="section">
+    <div class="section-title">Key Configuration</div>
+    <div class="card">
+      <div class="cfg-grid">
+        <div class="cfg-item"><div class="cfg-key">capital</div><div class="cfg-val">₹15,00,000</div><div class="cfg-desc">Used for overall P&L % calculation</div></div>
+        <div class="cfg-item"><div class="cfg-key">base_lots / lot_size</div><div class="cfg-val">3 × 65 = 195</div><div class="cfg-desc">Qty per leg. lot_size auto-fetched from NSE daily</div></div>
+        <div class="cfg-item"><div class="cfg-key">min_premium</div><div class="cfg-val">₹40</div><div class="cfg-desc">Minimum LTP per leg to select a strike</div></div>
+        <div class="cfg-item"><div class="cfg-key">trail_trigger_pct</div><div class="cfg-val">20%</div><div class="cfg-desc">Profit % to activate breakeven trailing SL</div></div>
+        <div class="cfg-item"><div class="cfg-key">daily_loss_limit</div><div class="cfg-val">₹45,000</div><div class="cfg-desc">Bot stops trading if daily loss exceeds this</div></div>
+        <div class="cfg-item"><div class="cfg-key">max_trades_per_day</div><div class="cfg-val">3</div><div class="cfg-desc">Hard cap on trades per session</div></div>
+        <div class="cfg-item"><div class="cfg-key">entry_start / end</div><div class="cfg-val">9:30 – 11:00</div><div class="cfg-desc">Only look for signals in this window</div></div>
+        <div class="cfg-item"><div class="cfg-key">execution_mode</div><div class="cfg-val">AUTO / MANUAL</div><div class="cfg-desc">AUTO = instant execution; MANUAL = wait for button</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILES -->
+  <div class="section">
+    <div class="section-title">File Structure</div>
+    <div class="card">
+      <div class="files">
+        <div class="file-row"><div class="file-icon">🐍</div><div><div class="file-name">dev_server.py</div><div class="file-desc">Main server — Flask API + all trading logic (~2,400 lines). Signal engine, order placement, position monitor, P&L, Sheets, Telegram.</div></div></div>
+        <div class="file-row"><div class="file-icon">🌐</div><div><div class="file-name">nifty_dashboard.html</div><div class="file-desc">Single-file web dashboard. Real-time UI with CE/PE position card, trade log modal, settings panel. PWA-ready.</div></div></div>
+        <div class="file-row"><div class="file-icon">💾</div><div><div class="file-name">trades.json</div><div class="file-desc">All trade records (open + closed). Survives restarts. Source of truth for trade history and daily P&L recovery.</div></div></div>
+        <div class="file-row"><div class="file-icon">🔴</div><div><div class="file-name">active_pos.json</div><div class="file-desc">Full snapshot of current open position. Written on entry, updated on trailing SL. Deleted on exit. Used for crash recovery.</div></div></div>
+        <div class="file-row"><div class="file-icon">🔑</div><div><div class="file-name">.env</div><div class="file-desc">API keys: ANGEL_API_KEY, TELEGRAM_TOKEN, GSHEET_ID, OPENAI_API_KEY. Never committed to git.</div></div></div>
+        <div class="file-row"><div class="file-icon">📋</div><div><div class="file-name">gsheet_creds.json</div><div class="file-desc">Google Service Account credentials for Sheets API access. Never committed to git.</div></div></div>
+        <div class="file-row"><div class="file-icon">📱</div><div><div class="file-name">manifest.json + sw.js</div><div class="file-desc">PWA files — makes dashboard installable on mobile (Android + iOS). Service worker caches shell, API always live.</div></div></div>
+        <div class="file-row"><div class="file-icon">🚀</div><div><div class="file-name">setup_auto_start.bat</div><div class="file-desc">One-time Windows Task Scheduler setup. Runs FIFTO silently on every login. No console window.</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUICK START -->
+  <div class="section">
+    <div class="section-title">Quick Start</div>
+    <div class="card">
+      <div class="qs">
+        <div class="qs-step"><div class="qs-num">1</div><div class="qs-body"><div class="qs-title">Install Python dependencies</div><div class="qs-code">.venv/Scripts/pip install flask python-dotenv requests gspread google-auth smart-api-python pyotp</div></div></div>
+        <div class="qs-step"><div class="qs-num">2</div><div class="qs-body"><div class="qs-title">Fill in .env with your credentials</div><div class="qs-code">ANGEL_API_KEY, ANGEL_CLIENT_ID, ANGEL_PASSWORD, ANGEL_TOTP_SECRET, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, GSHEET_ID</div></div></div>
+        <div class="qs-step"><div class="qs-num">3</div><div class="qs-body"><div class="qs-title">Start the server</div><div class="qs-code">.venv/Scripts/python dev_server.py</div></div></div>
+        <div class="qs-step"><div class="qs-num">4</div><div class="qs-body"><div class="qs-title">Open dashboard in browser</div><div class="qs-code">http://localhost:8080</div></div></div>
+        <div class="qs-step"><div class="qs-num">5</div><div class="qs-body"><div class="qs-title">(Optional) Auto-start on Windows login</div><div class="qs-code">Run setup_auto_start.bat as Administrator</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center;padding:24px 0;color:var(--t3);font-size:11px">
+    FIFTO AI Trading &nbsp;•&nbsp; NIFTY Weekly Options &nbsp;•&nbsp; AngelOne Smart API &nbsp;•&nbsp;
+    <a href="/" style="color:var(--t3)">← Back to Dashboard</a>
+  </div>
+
+</div>
+</body>
+</html>
