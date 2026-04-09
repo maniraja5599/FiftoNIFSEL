@@ -492,6 +492,7 @@ config = {
     "min_premium":       40,
     "min_combined_premium": 150,   # combined CE+PE must be ≥ this for a valid entry
     "spot_momentum_limit":  0.005, # block entry if spot moved > 0.5% in last 15 min
+    "min_strike_oi":        300000, # minimum OI at CE/PE strike (3 lakh contracts)
     "profit_target_pct": 0.30,
     "sl_multiplier":     1.5,
     "trail_trigger_pct": 0.20,
@@ -551,6 +552,7 @@ state = {
         "atr_15m":    None,
         "net_delta":  None,
         "ema_trend_flat": None,
+        "trend":          "FLAT",
     },
     "checks": {
         "vix": False, "iv": None, "ema": None,
@@ -818,6 +820,51 @@ _angel_contract_cache = {"rows": [], "ts": 0}
 _candle_cache = {}
 _candle_backoff = {}
 _spot_history = []
+
+# ── Straddle premium history (for 20-day average filter) ──
+_STRADDLE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "straddle_history.json")
+
+def _load_straddle_history():
+    try:
+        if os.path.exists(_STRADDLE_FILE):
+            with open(_STRADDLE_FILE) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+def _save_straddle_history(history):
+    try:
+        with open(_STRADDLE_FILE, "w") as f:
+            json.dump(history[-30:], f)   # keep last 30 days
+    except Exception:
+        pass
+
+def _record_straddle_premium(premium):
+    """Record today's ATM straddle premium once per day."""
+    today = _date.today().isoformat()
+    history = _load_straddle_history()
+    if history and history[-1].get("date") == today:
+        history[-1]["premium"] = round(premium, 2)   # update today's value
+    else:
+        history.append({"date": today, "premium": round(premium, 2)})
+    _save_straddle_history(history)
+
+def _straddle_premium_ok(current_premium):
+    """Return True if current ATM straddle premium >= 80% of 20-day average.
+    Returns True if < 5 days of data (don't block early on)."""
+    history = _load_straddle_history()
+    if len(history) < 5:
+        return True   # not enough history yet — allow
+    avg = sum(d["premium"] for d in history[-20:]) / len(history[-20:])
+    threshold = avg * 0.80
+    ok = current_premium >= threshold
+    if not ok:
+        LOG_LINES.append(
+            f"[INFO]  [{_ts()}] Straddle filter: premium ₹{current_premium:.0f} < 80% of "
+            f"20d avg ₹{avg:.0f} (threshold ₹{threshold:.0f}) — skip"
+        )
+    return ok
 
 _NSE_HEADERS = {
     "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1318,6 +1365,42 @@ def _compute_ema_trend_flat(candles, atr_15m):
     return (spread <= atr_15m * 0.20) and (slope_gap <= atr_15m * 0.08)
 
 
+def _detect_trend(candles, atr_15m):
+    """Detect market trend direction from 15m candles.
+    Returns: 'UP', 'DOWN', or 'FLAT'
+    UP   = EMA9 > EMA21, both sloping up, spread > 0.3x ATR
+    DOWN = EMA9 < EMA21, both sloping down, spread > 0.3x ATR
+    FLAT = otherwise (use for Short Strangle)
+    """
+    if not candles or atr_15m in (None, 0):
+        return "FLAT"
+    closes = []
+    for row in candles:
+        try:
+            closes.append(float(row[4]))
+        except Exception:
+            continue
+    if len(closes) < 5:
+        return "FLAT"
+    fast_period = 9 if len(closes) >= 9 else max(3, len(closes) // 2)
+    slow_period = 21 if len(closes) >= 21 else min(len(closes), max(fast_period + 1, 4))
+    ema9  = _ema_series(closes, fast_period)
+    ema21 = _ema_series(closes, slow_period)
+    if len(ema9) < 3 or len(ema21) < 3:
+        return "FLAT"
+    e9, e9p  = ema9[-1], ema9[-3]
+    e21, e21p = ema21[-1], ema21[-3]
+    spread   = e9 - e21
+    slope9   = e9 - e9p
+    slope21  = e21 - e21p
+    min_spread = atr_15m * 0.30
+    if spread > min_spread and slope9 > 0 and slope21 > 0:
+        return "UP"
+    if spread < -min_spread and slope9 < 0 and slope21 < 0:
+        return "DOWN"
+    return "FLAT"
+
+
 def _compute_option_metrics(spot):
     data = _fetch_option_chain()
     empty = {"pcr": None, "iv_atm": None, "iv_percentile": None, "net_delta": None}
@@ -1420,12 +1503,14 @@ def _refresh_market_metrics():
     atr_15m = _calc_atr(candles_15m, 14)
     ema_flat = _compute_ema_trend_flat(candles_15m, atr_15m)
 
+    trend = _detect_trend(candles_15m, atr_15m)
     state["market"]["pcr"] = metrics["pcr"]
     state["market"]["iv_atm"] = metrics["iv_atm"]
     state["market"]["iv_percentile"] = metrics["iv_percentile"]
     state["market"]["atr_15m"] = atr_15m
     state["market"]["net_delta"] = metrics["net_delta"]
     state["market"]["ema_trend_flat"] = ema_flat
+    state["market"]["trend"] = trend
 
 
 # ── Strike selection ──
@@ -1573,8 +1658,8 @@ def _select_strikes_angelone(spot):
     }
 
 
-def _select_strikes(spot):
-    """Select SHORT STRANGLE strikes.
+def _select_strikes(spot, setup_type="strangle"):
+    """Select strikes for given setup_type: 'strangle', 'bull_put_spread', 'bear_call_spread'.
     Primary: AngelOne option chain. Fallback: AngelOne direct LTP lookup."""
     data = _fetch_option_chain()
     if data:
@@ -1585,8 +1670,22 @@ def _select_strikes(spot):
             recs        = [r for r in all_records if r.get("expiryDate") == nearest_expiry]
             atm         = round(spot / 50) * 50
             min_premium = config.get("min_premium", 40)
+            min_oi      = config.get("min_strike_oi", 300000)   # 3 lakh contracts
 
-            ce_strike = ce_ltp = None
+            # ── ATM straddle premium for 20-day filter ──
+            atm_rec = next((r for r in recs if r.get("strikePrice") == atm), None)
+            if atm_rec:
+                atm_ce_ltp = atm_rec.get("CE", {}).get("lastPrice", 0) or 0
+                atm_pe_ltp = atm_rec.get("PE", {}).get("lastPrice", 0) or 0
+                atm_straddle = atm_ce_ltp + atm_pe_ltp
+                if atm_straddle > 0:
+                    _record_straddle_premium(atm_straddle)
+                    if not _straddle_premium_ok(atm_straddle):
+                        LOG_LINES.append(f"[INFO]  [{_ts()}] Straddle avg filter blocked entry — premium too cheap")
+                        return None
+
+            # ── CE side ──
+            ce_strike = ce_ltp = ce_oi = None
             for offset in range(50, 500, 50):
                 s   = atm + offset
                 rec = next((r for r in recs if r.get("strikePrice") == s and r.get("CE")), None)
@@ -1599,11 +1698,13 @@ def _select_strikes(spot):
                             q = _safe_ltp_data("NFO", sym, tok)
                             if q.get("status"):
                                 ltp = q["data"]["ltp"]
+                    oi = float(rec["CE"].get("openInterest") or 0)
                     if ltp >= min_premium:
-                        ce_strike, ce_ltp = s, ltp
+                        ce_strike, ce_ltp, ce_oi = s, ltp, oi
                         break
 
-            pe_strike = pe_ltp = None
+            # ── PE side ──
+            pe_strike = pe_ltp = pe_oi = None
             for offset in range(50, 500, 50):
                 s   = atm - offset
                 rec = next((r for r in recs if r.get("strikePrice") == s and r.get("PE")), None)
@@ -1616,16 +1717,31 @@ def _select_strikes(spot):
                             q = _safe_ltp_data("NFO", sym, tok)
                             if q.get("status"):
                                 ltp = q["data"]["ltp"]
+                    oi = float(rec["PE"].get("openInterest") or 0)
                     if ltp >= min_premium:
-                        pe_strike, pe_ltp = s, ltp
+                        pe_strike, pe_ltp, pe_oi = s, ltp, oi
                         break
 
             if ce_strike and pe_strike:
                 combined = round(ce_ltp + pe_ltp, 2)
                 min_combined = config.get("min_combined_premium", 150)
                 if combined < min_combined:
-                    LOG_LINES.append(f"[INFO]  [{_ts()}] Strike scan: combined premium ₹{combined} < min ₹{min_combined}, skipping")
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] Strike scan: combined ₹{combined} < min ₹{min_combined}, skipping")
                     return None
+
+                # ── OI check at selected strikes ──
+                ce_oi_ok = (ce_oi or 0) >= min_oi
+                pe_oi_ok = (pe_oi or 0) >= min_oi
+                if not ce_oi_ok or not pe_oi_ok:
+                    LOG_LINES.append(
+                        f"[INFO]  [{_ts()}] OI filter: CE {ce_strike} OI={int(ce_oi or 0):,} "
+                        f"PE {pe_strike} OI={int(pe_oi or 0):,} (min {min_oi:,}) — skipping"
+                    )
+                    return None
+                LOG_LINES.append(
+                    f"[INFO]  [{_ts()}] OI OK: CE {ce_strike} OI={int(ce_oi):,} | PE {pe_strike} OI={int(pe_oi):,}"
+                )
+
                 return {
                     "expiry":    nearest_expiry,
                     "atm":       atm,
@@ -1634,6 +1750,8 @@ def _select_strikes(spot):
                     "ce_ltp":    ce_ltp,
                     "pe_ltp":    pe_ltp,
                     "premium":   combined,
+                    "ce_oi":     int(ce_oi or 0),
+                    "pe_oi":     int(pe_oi or 0),
                 }
 
     LOG_LINES.append(f"[INFO]  [{_ts()}] AngelOne option chain unavailable — using direct LTP lookup")
@@ -1808,10 +1926,142 @@ def _calc_sl_mult_by_dte(expiry_str):
 
 
 def _execute_trade(signal):
-    """Execute a SHORT STRANGLE — SELL CE + SELL PE via AngelOne."""
-    lot_size = state.get("lot_size") or config.get("lot_size", 75)
-    qty = config.get("base_lots", 1) * lot_size
+    """Execute trade — SHORT STRANGLE, BULL PUT SPREAD, or BEAR CALL SPREAD."""
+    lot_size   = state.get("lot_size") or config.get("lot_size", 75)
+    qty        = config.get("base_lots", 1) * lot_size
+    setup_type = signal.get("setup_type", "Short Strangle")
 
+    # ── Bull Put Spread: SELL PE + BUY lower PE ──
+    if setup_type == "Bull Put Spread":
+        pe_symbol = signal["pe_symbol"]
+        pe_token  = signal.get("pe_token") or _get_nfo_token(pe_symbol)
+        hedge_sym = signal.get("hedge_pe_symbol")
+        hedge_tok = signal.get("hedge_pe_token") or (hedge_sym and _get_nfo_token(hedge_sym))
+        if not pe_token:
+            LOG_LINES.append(f"[ERROR] [{_ts()}] Bull Put Spread: PE token missing {pe_symbol}")
+            state["signal_pending"] = False
+            return False
+        LOG_LINES.append(f"[TRADE] [{_ts()}] Executing BULL PUT SPREAD — Qty {qty}")
+        LOG_LINES.append(f"[TRADE] [{_ts()}] SELL {pe_symbol} @ ₹{signal['pe_ltp']:.2f}")
+        sell_oid = _place_order(pe_symbol, pe_token, qty, "SELL")
+        hedge_oid = None
+        if hedge_tok:
+            LOG_LINES.append(f"[TRADE] [{_ts()}] BUY {hedge_sym} (hedge)")
+            hedge_oid = _place_order(hedge_sym, hedge_tok, qty, "BUY")
+        if not sell_oid:
+            LOG_LINES.append(f"[ERROR] [{_ts()}] Bull Put Spread: SELL PE failed")
+            state["signal_pending"] = False
+            return False
+        premium    = signal["pe_ltp"]
+        target_pct = _calc_target_pct_by_dte(signal.get("expiry", ""))
+        sl_mult    = _calc_sl_mult_by_dte(signal.get("expiry", ""))
+        target     = round(premium * target_pct, 2)
+        sl         = round(premium * sl_mult, 2)
+        trade_id   = f"T{int(time.time())}"
+        state["active_position"]  = True
+        state["signal_pending"]   = False
+        state["pending_signal"]   = None
+        state["trades_today"]    += 1
+        pos = {
+            "trade_id":         trade_id,
+            "ce_strike":        None,
+            "pe_strike":        signal["pe_strike"],
+            "ce_symbol":        None,
+            "pe_symbol":        pe_symbol,
+            "ce_token":         None,
+            "pe_token":         pe_token,
+            "ce_order_id":      None,
+            "pe_order_id":      sell_oid,
+            "hedge_pe_symbol":  hedge_sym,
+            "hedge_pe_token":   hedge_tok,
+            "hedge_pe_order_id": hedge_oid,
+            "quantity":         qty,
+            "premium_received": premium,
+            "premium":          premium,
+            "pnl":              0.0,
+            "target":           target,
+            "sl":               sl,
+            "initial_sl":       sl,
+            "trail_locked":     False,
+            "setup_type":       setup_type,
+            "expiry":           signal.get("expiry", ""),
+            "entry_time":       datetime.now().isoformat(),
+            "ce_entry_ltp":     0,
+            "pe_entry_ltp":     signal["pe_ltp"],
+        }
+        state["position_detail"] = pos
+        state["last_signal"]["signal"] = "ACTIVE"
+        _save_active_position(pos)
+        LOG_LINES.append(f"[TRADE] [{_ts()}] Bull Put Spread entered | PE {signal['pe_strike']} | Premium ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}")
+        _notify("✅ Bull Put Spread Entered", f"SELL PE {signal['pe_strike']} @ ₹{premium:.0f}\nTarget ₹{target:.0f} | SL ₹{sl:.0f}", "success")
+        return True
+
+    # ── Bear Call Spread: SELL CE + BUY higher CE ──
+    if setup_type == "Bear Call Spread":
+        ce_symbol = signal["ce_symbol"]
+        ce_token  = signal.get("ce_token") or _get_nfo_token(ce_symbol)
+        hedge_sym = signal.get("hedge_ce_symbol")
+        hedge_tok = signal.get("hedge_ce_token") or (hedge_sym and _get_nfo_token(hedge_sym))
+        if not ce_token:
+            LOG_LINES.append(f"[ERROR] [{_ts()}] Bear Call Spread: CE token missing {ce_symbol}")
+            state["signal_pending"] = False
+            return False
+        LOG_LINES.append(f"[TRADE] [{_ts()}] Executing BEAR CALL SPREAD — Qty {qty}")
+        LOG_LINES.append(f"[TRADE] [{_ts()}] SELL {ce_symbol} @ ₹{signal['ce_ltp']:.2f}")
+        sell_oid = _place_order(ce_symbol, ce_token, qty, "SELL")
+        hedge_oid = None
+        if hedge_tok:
+            LOG_LINES.append(f"[TRADE] [{_ts()}] BUY {hedge_sym} (hedge)")
+            hedge_oid = _place_order(hedge_sym, hedge_tok, qty, "BUY")
+        if not sell_oid:
+            LOG_LINES.append(f"[ERROR] [{_ts()}] Bear Call Spread: SELL CE failed")
+            state["signal_pending"] = False
+            return False
+        premium    = signal["ce_ltp"]
+        target_pct = _calc_target_pct_by_dte(signal.get("expiry", ""))
+        sl_mult    = _calc_sl_mult_by_dte(signal.get("expiry", ""))
+        target     = round(premium * target_pct, 2)
+        sl         = round(premium * sl_mult, 2)
+        trade_id   = f"T{int(time.time())}"
+        state["active_position"]  = True
+        state["signal_pending"]   = False
+        state["pending_signal"]   = None
+        state["trades_today"]    += 1
+        pos = {
+            "trade_id":         trade_id,
+            "ce_strike":        signal["ce_strike"],
+            "pe_strike":        None,
+            "ce_symbol":        ce_symbol,
+            "pe_symbol":        None,
+            "ce_token":         ce_token,
+            "pe_token":         None,
+            "ce_order_id":      sell_oid,
+            "pe_order_id":      None,
+            "hedge_ce_symbol":  hedge_sym,
+            "hedge_ce_token":   hedge_tok,
+            "hedge_ce_order_id": hedge_oid,
+            "quantity":         qty,
+            "premium_received": premium,
+            "premium":          premium,
+            "pnl":              0.0,
+            "target":           target,
+            "sl":               sl,
+            "initial_sl":       sl,
+            "trail_locked":     False,
+            "setup_type":       setup_type,
+            "expiry":           signal.get("expiry", ""),
+            "entry_time":       datetime.now().isoformat(),
+            "ce_entry_ltp":     signal["ce_ltp"],
+            "pe_entry_ltp":     0,
+        }
+        state["position_detail"] = pos
+        state["last_signal"]["signal"] = "ACTIVE"
+        _save_active_position(pos)
+        LOG_LINES.append(f"[TRADE] [{_ts()}] Bear Call Spread entered | CE {signal['ce_strike']} | Premium ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}")
+        _notify("✅ Bear Call Spread Entered", f"SELL CE {signal['ce_strike']} @ ₹{premium:.0f}\nTarget ₹{target:.0f} | SL ₹{sl:.0f}", "success")
+        return True
+
+    # ── Default: Short Strangle ──
     ce_symbol = signal["ce_symbol"]
     pe_symbol = signal["pe_symbol"]
     ce_token  = signal.get("ce_token") or _get_nfo_token(ce_symbol)
@@ -2077,71 +2327,145 @@ def signal_engine():
 
                 now = time.time()
                 if now - last_signal_ts >= 300:   # max 1 signal per 5 min
-                    spot   = state["market"]["nifty_spot"]
+                    spot  = state["market"]["nifty_spot"]
+                    trend = state["market"].get("trend", "FLAT")
                     if spot:
                         strikes = _select_strikes(spot)
                         if strikes:
                             ce_sym   = _build_angel_symbol(strikes["ce_strike"], "CE", strikes["expiry"])
                             pe_sym   = _build_angel_symbol(strikes["pe_strike"], "PE", strikes["expiry"])
-                            # Use pre-fetched tokens from AngelOne fallback if available
                             ce_token = strikes.get("ce_token") or _get_nfo_token(ce_sym)
                             pe_token = strikes.get("pe_token") or _get_nfo_token(pe_sym)
 
-                            signal = {
-                                "signal":       "SELL",
-                                "confidence":   82,
-                                "reason":       f"All checks pass | Premium ₹{strikes['premium']:.0f}",
-                                "setup_type":   "Short Strangle",
-                                "ce_strike":    strikes["ce_strike"],
-                                "pe_strike":    strikes["pe_strike"],
-                                "ce_ltp":       strikes["ce_ltp"],
-                                "pe_ltp":       strikes["pe_ltp"],
-                                "ce_symbol":    ce_sym,
-                                "pe_symbol":    pe_sym,
-                                "ce_token":     ce_token,
-                                "pe_token":     pe_token,
-                                "premium":      strikes["premium"],
-                                "approx_entry": strikes["premium"],
-                                "approx_sl":    round(strikes["premium"] * _calc_sl_mult_by_dte(strikes["expiry"]), 2),
-                                "expiry":       strikes["expiry"],
-                            }
+                            # ── Choose setup based on trend ──
+                            # FLAT  → Short Strangle (sell both sides, collect premium)
+                            # UP    → Bull Put Spread (sell PE, hedge with lower PE)
+                            # DOWN  → Bear Call Spread (sell CE, hedge with higher CE)
+                            pcr = state["market"].get("pcr") or 1.0
+                            if trend == "UP" and pcr >= 1.0:
+                                setup_type = "Bull Put Spread"
+                                # Sell the chosen PE, buy PE 100 points lower as hedge
+                                hedge_pe_strike = strikes["pe_strike"] - 100
+                                hedge_pe_sym    = _build_angel_symbol(hedge_pe_strike, "PE", strikes["expiry"])
+                                hedge_pe_token  = _get_nfo_token(hedge_pe_sym)
+                                confidence      = 78
+                                reason = (
+                                    f"Trend UP (EMA bullish) | PCR {pcr:.2f} | "
+                                    f"Sell PE {strikes['pe_strike']} @ ₹{strikes['pe_ltp']:.0f} | "
+                                    f"Buy PE {hedge_pe_strike} hedge"
+                                )
+                                LOG_LINES.append(f"[TRADE] [{_ts()}] Trend UP — Bull Put Spread selected")
+                                signal = {
+                                    "signal":           "SELL",
+                                    "confidence":       confidence,
+                                    "reason":           reason,
+                                    "setup_type":       setup_type,
+                                    "ce_strike":        None,
+                                    "pe_strike":        strikes["pe_strike"],
+                                    "ce_ltp":           0,
+                                    "pe_ltp":           strikes["pe_ltp"],
+                                    "ce_symbol":        None,
+                                    "pe_symbol":        pe_sym,
+                                    "ce_token":         None,
+                                    "pe_token":         pe_token,
+                                    "hedge_pe_strike":  hedge_pe_strike,
+                                    "hedge_pe_symbol":  hedge_pe_sym,
+                                    "hedge_pe_token":   hedge_pe_token,
+                                    "premium":          strikes["pe_ltp"],
+                                    "approx_entry":     strikes["pe_ltp"],
+                                    "approx_sl":        round(strikes["pe_ltp"] * 1.5, 2),
+                                    "expiry":           strikes["expiry"],
+                                }
+                            elif trend == "DOWN" and pcr <= 1.0:
+                                setup_type = "Bear Call Spread"
+                                # Sell chosen CE, buy CE 100 points higher as hedge
+                                hedge_ce_strike = strikes["ce_strike"] + 100
+                                hedge_ce_sym    = _build_angel_symbol(hedge_ce_strike, "CE", strikes["expiry"])
+                                hedge_ce_token  = _get_nfo_token(hedge_ce_sym)
+                                confidence      = 78
+                                reason = (
+                                    f"Trend DOWN (EMA bearish) | PCR {pcr:.2f} | "
+                                    f"Sell CE {strikes['ce_strike']} @ ₹{strikes['ce_ltp']:.0f} | "
+                                    f"Buy CE {hedge_ce_strike} hedge"
+                                )
+                                LOG_LINES.append(f"[TRADE] [{_ts()}] Trend DOWN — Bear Call Spread selected")
+                                signal = {
+                                    "signal":           "SELL",
+                                    "confidence":       confidence,
+                                    "reason":           reason,
+                                    "setup_type":       setup_type,
+                                    "ce_strike":        strikes["ce_strike"],
+                                    "pe_strike":        None,
+                                    "ce_ltp":           strikes["ce_ltp"],
+                                    "pe_ltp":           0,
+                                    "ce_symbol":        ce_sym,
+                                    "pe_symbol":        None,
+                                    "ce_token":         ce_token,
+                                    "pe_token":         None,
+                                    "hedge_ce_strike":  hedge_ce_strike,
+                                    "hedge_ce_symbol":  hedge_ce_sym,
+                                    "hedge_ce_token":   hedge_ce_token,
+                                    "premium":          strikes["ce_ltp"],
+                                    "approx_entry":     strikes["ce_ltp"],
+                                    "approx_sl":        round(strikes["ce_ltp"] * 1.5, 2),
+                                    "expiry":           strikes["expiry"],
+                                }
+                            else:
+                                # Default: Short Strangle
+                                setup_type = "Short Strangle"
+                                confidence = 82
+                                reason = (
+                                    f"Trend FLAT | OI CE {strikes.get('ce_oi',0):,} PE {strikes.get('pe_oi',0):,} | "
+                                    f"Premium ₹{strikes['premium']:.0f}"
+                                )
+                                signal = {
+                                    "signal":       "SELL",
+                                    "confidence":   confidence,
+                                    "reason":       reason,
+                                    "setup_type":   setup_type,
+                                    "ce_strike":    strikes["ce_strike"],
+                                    "pe_strike":    strikes["pe_strike"],
+                                    "ce_ltp":       strikes["ce_ltp"],
+                                    "pe_ltp":       strikes["pe_ltp"],
+                                    "ce_symbol":    ce_sym,
+                                    "pe_symbol":    pe_sym,
+                                    "ce_token":     ce_token,
+                                    "pe_token":     pe_token,
+                                    "premium":      strikes["premium"],
+                                    "approx_entry": strikes["premium"],
+                                    "approx_sl":    round(strikes["premium"] * _calc_sl_mult_by_dte(strikes["expiry"]), 2),
+                                    "expiry":       strikes["expiry"],
+                                }
 
                             last_signal_ts = now
                             state["pending_signal"] = signal
                             state["last_signal"].update({
                                 "signal":       "SELL",
-                                "confidence":   82,
+                                "confidence":   signal["confidence"],
                                 "reason":       signal["reason"],
-                                "setup_type":   "Short Strangle",
-                                "ce_strike":    strikes["ce_strike"],
-                                "pe_strike":    strikes["pe_strike"],
-                                "premium":      strikes["premium"],
-                                "approx_entry": strikes["premium"],
+                                "setup_type":   signal["setup_type"],
+                                "ce_strike":    signal["ce_strike"],
+                                "pe_strike":    signal["pe_strike"],
+                                "premium":      signal["premium"],
+                                "approx_entry": signal["approx_entry"],
                                 "approx_sl":    signal["approx_sl"],
                             })
 
                             if state["execution_mode"] == "AUTO":
-                                LOG_LINES.append(f"[TRADE] [{_ts()}] Signal: SHORT STRANGLE | AUTO — executing now")
+                                LOG_LINES.append(f"[TRADE] [{_ts()}] Signal: {setup_type} | AUTO — executing now")
                                 _notify(
-                                    "📊 Signal — Auto Executing",
-                                    f"SHORT STRANGLE | CE {strikes['ce_strike']} | PE {strikes['pe_strike']}\n"
-                                    f"Premium ₹{strikes['premium']:.0f} | Placing orders now...",
+                                    f"📊 Signal — {setup_type} — Auto Executing",
+                                    f"{signal['reason']}\nPlacing orders now...",
                                     "info"
                                 )
                                 threading.Thread(target=_execute_trade, args=(signal,), daemon=True).start()
                             else:
                                 state["signal_pending"] = True
-                                LOG_LINES.append(f"[TRADE] [{_ts()}] Signal: SHORT STRANGLE | MANUAL — waiting for user")
+                                LOG_LINES.append(f"[TRADE] [{_ts()}] Signal: {setup_type} | MANUAL — waiting for user")
                                 _notify(
-                                    "📊 Signal Ready — Action Required",
-                                    f"SHORT STRANGLE | CE {strikes['ce_strike']} @ ₹{strikes['ce_ltp']:.0f} | PE {strikes['pe_strike']} @ ₹{strikes['pe_ltp']:.0f}\n"
-                                    f"Premium ₹{strikes['premium']:.0f} | Click Execute Trade to confirm.",
+                                    f"📊 Signal Ready — {setup_type}",
+                                    f"{signal['reason']}\nClick Execute Trade to confirm.",
                                     "warning"
-                                )
-                                LOG_LINES.append(
-                                    f"[TRADE] [{_ts()}] CE {strikes['ce_strike']} @ ₹{strikes['ce_ltp']:.0f} | "
-                                    f"PE {strikes['pe_strike']} @ ₹{strikes['pe_ltp']:.0f} | "
-                                    f"Premium ₹{strikes['premium']:.0f}"
                                 )
                         else:
                             LOG_LINES.append(f"[INFO]  [{_ts()}] Signal scan: no valid strikes (premium too low)")
