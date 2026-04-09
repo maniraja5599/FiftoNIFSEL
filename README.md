@@ -115,6 +115,28 @@ All trades are recorded in `state["trade_history"]` with:
 
 ## Automation
 
+### Auto-Start on Windows Login (Background)
+
+The server can run automatically in the background when you start your computer:
+
+**Setup (one-time):**
+1. Right-click `setup_auto_start.bat` → **Run as Administrator**
+2. Confirm the task was created successfully
+3. Next time you log in, FIFTO starts silently in background
+
+**Manage Auto-Start:**
+- **Disable:** Run `disable_auto_start.bat`
+- **Re-enable:** Run `enable_auto_start.bat`
+- **View/Manage:** Open Windows Task Scheduler → Find "FIFTO AI Trading Server"
+
+**Manual Start (foreground):**
+```bash
+.venv\Scripts\python.exe dev_server.py
+```
+Or double-click `start_fifto.bat`
+
+**Access Dashboard:** http://localhost:8080 (always, whether running manually or auto-started)
+
 The system runs fully automatically:
 1. **Signal Engine** - Checks conditions every 5 minutes during entry window
 2. **Position Monitor** - Checks SL/target every 30 seconds
@@ -125,13 +147,17 @@ The system runs fully automatically:
 
 ```
 fifito-copilot-trade/
-├── dev_server.py          # Main Flask server (all logic)
-├── nifty_dashboard.html   # Dashboard UI
-├── config.py              # Configuration
-├── .env                   # Secrets (not in git)
+├── dev_server.py              # Main Flask server (all logic)
+├── nifty_dashboard.html       # Dashboard UI
+├── config.py                  # Configuration
+├── .env                       # Secrets (not in git)
 ├── .gitignore
-├── start_fifto.bat        # Windows startup script
-├── logs/                  # Log files
+├── start_fifto.bat            # Windows startup script (foreground)
+├── start_silent.vbs           # Silent background startup
+├── setup_auto_start.bat       # Create Windows auto-start task
+├── enable_auto_start.bat      # Re-enable auto-start
+├── disable_auto_start.bat     # Disable auto-start
+├── logs/                      # Log files
 └── README.md
 ```
 

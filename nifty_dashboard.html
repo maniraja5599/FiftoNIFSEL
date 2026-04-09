@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FIFTO AI Trading</title>
+<title>FIFTO</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%230c0c0f'/%3E%3Ctext x='7' y='44' font-family='Arial Black,sans-serif' font-size='28' font-weight='900' fill='%232dd698'%3EFI%3C/text%3E%3Ctext x='35' y='44' font-family='Arial Black,sans-serif' font-size='28' font-weight='900' fill='%23f75252'%3EFTO%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -274,8 +275,8 @@ body {
 .kpi-row {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
 }
 .kpi {
   background: var(--surface);
@@ -327,14 +328,78 @@ body {
   line-height: 1;
   margin: 2px 0 4px;
 }
-.pos-fields {
+/* ── Active Position redesign ── */
+.pos-legs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-top: 16px;
-  padding-top: 14px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.pos-leg {
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.pos-leg-head {
+  padding: 7px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.pos-leg-head.ce { background: rgba(247,82,82,.12);  color: var(--red); }
+.pos-leg-head.pe { background: rgba(45,214,152,.10); color: var(--green); }
+.pos-leg-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pos-leg-row { display: flex; justify-content: space-between; align-items: baseline; }
+.pos-leg-lbl { font-size: 10px; color: var(--t3); }
+.pos-leg-val { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--t1); }
+.pos-leg-ltp-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  margin: 2px 0;
+}
+.pos-leg-ltp-now { font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.pos-leg-ltp-chg { font-size: 10px; font-weight: 600; border-radius: 4px; padding: 2px 6px; }
+.pos-leg-ltp-chg.up  { background: rgba(247,82,82,.15);  color: var(--red); }
+.pos-leg-ltp-chg.dn  { background: rgba(45,214,152,.12); color: var(--green); }
+/* summary bar */
+.pos-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+.pos-sum-cell {
+  background: var(--surface2);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pos-sum-lbl { font-size: 9px; text-transform: uppercase; letter-spacing: .07em; color: var(--t3); font-weight: 700; }
+.pos-sum-val { font-family: var(--mono); font-size: 13px; font-weight: 700; }
+.pos-sum-sub { font-size: 10px; color: var(--t3); }
+/* footer */
+.pos-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--line);
 }
+.pos-ft-cell { display: flex; flex-direction: column; gap: 2px; }
+.pos-ft-lbl { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .07em; }
+.pos-ft-val { font-size: 11px; font-weight: 600; font-family: var(--mono); color: var(--t1); }
+/* keep old selectors alive (js still sets them) */
+.pos-fields { display: none; }
 .pos-field-label { font-size: 10px; color: var(--t2); margin-bottom: 3px; }
 .pos-field-val   { font-family: var(--mono); font-size: 14px; font-weight: 500; }
 
@@ -729,23 +794,26 @@ html.light .toggle-name      { color: #111827; }
 /* ══════════════ DTE RING KPI ══════════════ */
 .dte-kpi {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 10px 8px;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
   position: relative;
+}
+.dte-kpi > .kpi-label {
+  display: none;
 }
 .dte-ring-wrap {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
 }
 .dte-ring-wrap svg {
   transform: rotate(-90deg);
-  width: 64px;
-  height: 64px;
+  width: 48px;
+  height: 48px;
 }
 .dte-ring-bg { fill: none; stroke: var(--line2); stroke-width: 5; }
 .dte-ring-fg {
@@ -758,7 +826,7 @@ html.light .toggle-name      { color: #111827; }
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%,-50%);
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 800;
   font-family: var(--mono);
   line-height: 1;
@@ -767,14 +835,14 @@ html.light .toggle-name      { color: #111827; }
 .dte-label-row {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1px;
+  align-items: flex-start;
+  gap: 2px;
 }
 .dte-day-label {
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: .1em;
-  color: var(--t3);
+  color: var(--t2);
   font-weight: 700;
 }
 .dte-expiry-str {
@@ -787,6 +855,16 @@ html.light .toggle-name      { color: #111827; }
   font-size: 9px;
   color: var(--t3);
   margin-top: 2px;
+}
+.kpi-sheet-link {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .2s, background .2s;
+  cursor: pointer;
+}
+.kpi-sheet-link:hover {
+  border-color: rgba(45,214,152,.4);
+  background: var(--surface2);
 }
 /* Urgency colours */
 .dte-num.dte-safe   { color: var(--green); }
@@ -883,7 +961,7 @@ html.light .toggle-name      { color: #111827; }
 ══════════════════════════════════════════════ */
 @media (max-width: 1100px) {
   .dash-grid { grid-template-columns: 1fr; }
-  .kpi-row   { grid-template-columns: repeat(2, 1fr); }
+  .kpi-row   { grid-template-columns: repeat(3, 1fr); }
   .right-col { flex-direction: row; flex-wrap: wrap; }
   .right-col > .card { flex: 1 1 220px; }
 }
@@ -1018,6 +1096,63 @@ html.light .toggle-name      { color: #111827; }
   .dash-grid  { padding: 8px; gap: 8px; }
   .signal-meta { grid-template-columns: 1fr 1fr; }
 }
+
+/* ══════════════ TRADE DETAIL MODAL ══════════════ */
+.td-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.65);
+  z-index: 9000;
+  align-items: flex-end;
+  justify-content: center;
+}
+.td-overlay.open { display: flex; }
+.td-modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  width: 100%;
+  max-width: 640px;
+  padding: 20px 22px 28px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp .22s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.td-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.td-title { font-size: 14px; font-weight: 700; color: var(--t1); }
+.td-close {
+  background: none; border: none; color: var(--t3);
+  font-size: 20px; cursor: pointer; line-height: 1; padding: 2px 6px;
+}
+.td-close:hover { color: var(--t1); }
+.td-section {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--t3); font-weight: 700; margin: 14px 0 8px;
+}
+.td-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+.td-row { display: flex; flex-direction: column; gap: 2px; }
+.td-label { font-size: 9px; color: var(--t3); text-transform: uppercase; letter-spacing: .06em; }
+.td-val { font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--t1); }
+.td-val.c-green { color: var(--green); }
+.td-val.c-red   { color: var(--red); }
+.td-val.c-amber { color: var(--amber); }
+.td-divider { border: none; border-top: 1px solid var(--line); margin: 12px 0 4px; }
+.trade-tbl tbody tr { cursor: pointer; }
+.trade-tbl tbody tr:hover td { background: var(--surface2); }
 </style>
 </head>
 <body>
@@ -1177,6 +1312,12 @@ html.light .toggle-name      { color: #111827; }
               <span class="regime-badge X" id="regime-badge">—</span>
             </div>
           </div>
+          <!-- Google Sheet link -->
+          <a class="kpi kpi-sheet-link" id="kpi-sheet-link" href="#" target="_blank" rel="noopener" title="Open Trade Log in Google Sheets">
+            <div class="kpi-label">Trade Log</div>
+            <div class="kpi-val" style="font-size:28px; line-height:1.1">📊</div>
+            <div class="kpi-sub">Google Sheets</div>
+          </a>
           <!-- DTE countdown ring -->
           <div class="kpi dte-kpi" id="kpi-dte-card">
             <div class="kpi-label">Days to Expiry</div>
@@ -1191,8 +1332,8 @@ html.light .toggle-name      { color: #111827; }
             <div class="dte-label-row">
               <div class="dte-day-label" id="dte-day-label">DTE</div>
               <div class="dte-expiry-str" id="dte-expiry-str">—</div>
+              <div class="dte-trades-sub" id="dte-trades-sub">0 / 3 trades today</div>
             </div>
-            <div class="dte-trades-sub" id="dte-trades-sub">0 / 3 trades today</div>
           </div>
         </div>
 
@@ -1209,53 +1350,103 @@ html.light .toggle-name      { color: #111827; }
               Waiting for a valid setup...
             </div>
             <div id="has-pos" style="display:none">
-              <div class="pnl-display" id="pnl-big">₹ 0</div>
-              <div style="font-size:10px; color:var(--t2)">unrealised P&amp;L</div>
-              <div class="pos-fields">
-                <div>
-                  <div class="pos-field-label">CE Strike (sold)</div>
-                  <div class="pos-field-val c-red" id="ce-strike">—</div>
+              <!-- Unrealised P&L -->
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px">
+                <div class="pnl-display" id="pnl-big">₹ 0</div>
+                <div style="font-size:10px;color:var(--t2)">unrealised P&amp;L</div>
+              </div>
+
+              <!-- CE / PE legs -->
+              <div class="pos-legs">
+                <!-- CE leg -->
+                <div class="pos-leg">
+                  <div class="pos-leg-head ce">
+                    <span>CE — SOLD</span>
+                    <span id="ce-strike" style="font-size:13px;letter-spacing:0">—</span>
+                  </div>
+                  <div class="pos-leg-body">
+                    <div class="pos-leg-row">
+                      <span class="pos-leg-lbl">Entry LTP</span>
+                      <span class="pos-leg-val" id="ce-entry-ltp">—</span>
+                    </div>
+                    <div class="pos-leg-ltp-row">
+                      <span class="pos-leg-lbl">Current LTP</span>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <span class="pos-leg-ltp-now c-red" id="ce-current-ltp">—</span>
+                        <span class="pos-leg-ltp-chg" id="ce-ltp-chg"></span>
+                      </div>
+                    </div>
+                    <div class="pos-leg-row" style="padding-top:2px">
+                      <span class="pos-leg-lbl">Qty / Lots</span>
+                      <span class="pos-leg-val" id="pos-qty-ce" style="font-size:11px;color:var(--t2)">—</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div class="pos-field-label">PE Strike (sold)</div>
-                  <div class="pos-field-val c-green" id="pe-strike">—</div>
+                <!-- PE leg -->
+                <div class="pos-leg">
+                  <div class="pos-leg-head pe">
+                    <span>PE — SOLD</span>
+                    <span id="pe-strike" style="font-size:13px;letter-spacing:0">—</span>
+                  </div>
+                  <div class="pos-leg-body">
+                    <div class="pos-leg-row">
+                      <span class="pos-leg-lbl">Entry LTP</span>
+                      <span class="pos-leg-val" id="pe-entry-ltp">—</span>
+                    </div>
+                    <div class="pos-leg-ltp-row">
+                      <span class="pos-leg-lbl">Current LTP</span>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <span class="pos-leg-ltp-now c-green" id="pe-current-ltp">—</span>
+                        <span class="pos-leg-ltp-chg" id="pe-ltp-chg"></span>
+                      </div>
+                    </div>
+                    <div class="pos-leg-row" style="padding-top:2px">
+                      <span class="pos-leg-lbl">Qty / Lots</span>
+                      <span class="pos-leg-val" id="pos-qty-pe" style="font-size:11px;color:var(--t2)">—</span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div class="pos-field-label">CE Entry LTP</div>
-                  <div class="pos-field-val c-red" id="ce-entry-ltp">—</div>
+              </div>
+
+              <!-- Summary bar: Premium | Target | Stop Loss -->
+              <div class="pos-summary">
+                <div class="pos-sum-cell">
+                  <div class="pos-sum-lbl">Premium Received</div>
+                  <div class="pos-sum-val" id="premium">—</div>
+                  <div class="pos-sum-sub" id="premium-total">—</div>
                 </div>
-                <div>
-                  <div class="pos-field-label">PE Entry LTP</div>
-                  <div class="pos-field-val c-green" id="pe-entry-ltp">—</div>
+                <div class="pos-sum-cell">
+                  <div class="pos-sum-lbl">Target</div>
+                  <div class="pos-sum-val c-green" id="target">—</div>
+                  <div class="pos-sum-sub c-green" id="target-sub">—</div>
                 </div>
-                <div>
-                  <div class="pos-field-label">CE Current LTP</div>
-                  <div class="pos-field-val c-red" id="ce-current-ltp">—</div>
+                <div class="pos-sum-cell">
+                  <div class="pos-sum-lbl">Stop Loss</div>
+                  <div class="pos-sum-val c-red" id="stop-loss">—</div>
+                  <div class="pos-sum-sub c-red" id="sl-sub">—</div>
                 </div>
-                <div>
-                  <div class="pos-field-label">PE Current LTP</div>
-                  <div class="pos-field-val c-green" id="pe-current-ltp">—</div>
+              </div>
+
+              <!-- Footer: entry time | expiry | R:R -->
+              <div class="pos-footer">
+                <div class="pos-ft-cell">
+                  <div class="pos-ft-lbl">Entry Time</div>
+                  <div class="pos-ft-val" id="entry-time">—</div>
                 </div>
-                <div>
-                  <div class="pos-field-label">Premium</div>
-                  <div class="pos-field-val" id="premium">—</div>
+                <div class="pos-ft-cell">
+                  <div class="pos-ft-lbl">Expiry</div>
+                  <div class="pos-ft-val" id="pos-expiry">—</div>
                 </div>
-                <div>
-                  <div class="pos-field-label">Target</div>
-                  <div class="pos-field-val c-green" id="target">—</div>
+                <div class="pos-ft-cell">
+                  <div class="pos-ft-lbl">Risk / Reward</div>
+                  <div class="pos-ft-val" id="rr-ratio">—</div>
                 </div>
-                <div>
-                  <div class="pos-field-label">Stop Loss</div>
-                  <div class="pos-field-val c-red" id="stop-loss">—</div>
-                </div>
-                <div>
-                  <div class="pos-field-label">Risk/Reward</div>
-                  <div class="pos-field-val" id="rr-ratio">—</div>
-                </div>
-                <div>
-                  <div class="pos-field-label">Entry Time</div>
-                  <div class="pos-field-val" id="entry-time">—</div>
-                </div>
+              </div>
+
+              <!-- hidden legacy fields kept for JS compatibility -->
+              <div class="pos-fields" style="display:none">
+                <div><div class="pos-field-val" id="ce-strike-h">—</div></div>
+                <div><div class="pos-field-val" id="pe-strike-h">—</div></div>
               </div>
             </div>
           </div>
@@ -2059,6 +2250,12 @@ async function loadConfig() {
     // Quick Config panel
     loadQuickConfig(cfg);
 
+    // Google Sheet link
+    if (cfg.gsheet_id) {
+      const sheetLink = document.getElementById('kpi-sheet-link');
+      if (sheetLink) sheetLink.href = 'https://docs.google.com/spreadsheets/d/' + cfg.gsheet_id;
+    }
+
     // Execution
     if (cfg.execution_mode) {
       const mode = cfg.execution_mode.toUpperCase();
@@ -2187,48 +2384,83 @@ function applyState(d) {
   posPill.textContent = hasPOS ? '● Active' : 'No position';
   posPill.style.color = hasPOS ? 'var(--green)' : 'var(--t3)';
   if (hasPOS) {
-    const p = d.position_detail;
-    document.getElementById('ce-strike').textContent       = p.ce_strike || '—';
-    document.getElementById('pe-strike').textContent       = p.pe_strike || '—';
-    document.getElementById('ce-entry-ltp').textContent    = p.ce_entry_price != null ? '₹' + p.ce_entry_price.toFixed(2) : '—';
-    document.getElementById('pe-entry-ltp').textContent    = p.pe_entry_price != null ? '₹' + p.pe_entry_price.toFixed(2) : '—';
-    document.getElementById('ce-current-ltp').textContent  = p.current_ce_ltp != null ? '₹' + p.current_ce_ltp.toFixed(2) : '—';
-    document.getElementById('pe-current-ltp').textContent  = p.current_pe_ltp != null ? '₹' + p.current_pe_ltp.toFixed(2) : '—';
-    if (p.premium_received) {
-      const total = p.premium_received * (p.quantity || 1);
-      document.getElementById('premium').textContent = '₹' + p.premium_received.toFixed(1) + '  (₹' + total.toLocaleString('en-IN', {maximumFractionDigits:0}) + ' total)';
-    } else {
-      document.getElementById('premium').textContent = '—';
+    const p   = d.position_detail;
+    const qty = p.quantity || 1;
+    const ep  = p.premium_received || 0;
+
+    // ── Strikes ──
+    document.getElementById('ce-strike').textContent = p.ce_strike || '—';
+    document.getElementById('pe-strike').textContent = p.pe_strike || '—';
+
+    // ── Entry LTPs ──
+    document.getElementById('ce-entry-ltp').textContent = p.ce_entry_price != null ? '₹' + p.ce_entry_price.toFixed(2) : '—';
+    document.getElementById('pe-entry-ltp').textContent = p.pe_entry_price != null ? '₹' + p.pe_entry_price.toFixed(2) : '—';
+
+    // ── Qty / Lots ──
+    const lotSize = d.lot_size || 1;
+    const lots    = qty > 0 && lotSize > 0 ? Math.round(qty / lotSize) : '—';
+    const qtyStr  = lots !== '—' ? lots + ' lots × ' + lotSize + ' = ' + qty : qty + ' qty';
+    document.getElementById('pos-qty-ce').textContent = qtyStr;
+    document.getElementById('pos-qty-pe').textContent = qtyStr;
+
+    // ── Current LTPs + change badge ──
+    const ceLtp = p.current_ce_ltp;
+    const peLtp = p.current_pe_ltp;
+    document.getElementById('ce-current-ltp').textContent = ceLtp != null ? '₹' + ceLtp.toFixed(2) : '—';
+    document.getElementById('pe-current-ltp').textContent = peLtp != null ? '₹' + peLtp.toFixed(2) : '—';
+
+    // CE: sold call → rising LTP is bad (cost goes up)
+    if (ceLtp != null && p.ce_entry_price != null) {
+      const d = ceLtp - p.ce_entry_price;
+      const el = document.getElementById('ce-ltp-chg');
+      el.textContent = (d >= 0 ? '▲ +' : '▼ ') + d.toFixed(2);
+      el.className = 'pos-leg-ltp-chg ' + (d > 0 ? 'up' : 'dn');
     }
-    const qty   = p.quantity || 1;
-    const entry = p.premium_received;
-    // Target: p.target = profit pts (e.g. 76.8); exit level = entry - p.target (e.g. 349.6)
-    if (p.target && entry) {
-      const tgtExitLevel = entry - p.target;
-      const tgtAmt = p.target * qty;
-      document.getElementById('target').textContent =
-        p.target.toFixed(1) + ' pts  (exit ₹' + tgtExitLevel.toFixed(1) + '  +₹' + tgtAmt.toLocaleString('en-IN', {maximumFractionDigits:0}) + ')';
-    } else {
-      document.getElementById('target').textContent = p.target ? p.target.toFixed(1) + ' pts' : '—';
+    // PE: sold put → falling LTP is good (cost goes down)
+    if (peLtp != null && p.pe_entry_price != null) {
+      const d = peLtp - p.pe_entry_price;
+      const el = document.getElementById('pe-ltp-chg');
+      el.textContent = (d >= 0 ? '▲ +' : '▼ ') + d.toFixed(2);
+      el.className = 'pos-leg-ltp-chg ' + (d > 0 ? 'up' : 'dn');
     }
-    // SL: loss pts = p.sl (exit level) − entry (e.g. 533 - 426.4 = 106.6)
-    if (p.sl && entry) {
-      const slPts = p.sl - entry;
+
+    // ── Summary bar ──
+    if (ep) {
+      const total = ep * qty;
+      document.getElementById('premium').textContent       = '₹' + ep.toFixed(2);
+      const lotsLabel = lots !== '—' ? lots + 'L × ' + lotSize : qty + ' qty';
+      document.getElementById('premium-total').textContent = '₹' + total.toLocaleString('en-IN', {maximumFractionDigits:0}) + ' (' + lotsLabel + ')';
+    }
+    if (p.target && ep) {
+      const exitLvl = ep - p.target;
+      const tgtAmt  = p.target * qty;
+      document.getElementById('target').textContent     = p.target.toFixed(1) + ' pts';
+      document.getElementById('target-sub').textContent = 'exit ₹' + exitLvl.toFixed(1) + '  (+₹' + tgtAmt.toLocaleString('en-IN',{maximumFractionDigits:0}) + ')';
+    }
+    if (p.sl && ep) {
+      const slPts = p.sl - ep;
       const slAmt = slPts * qty;
-      document.getElementById('stop-loss').textContent =
-        slPts.toFixed(1) + ' pts  (exit ₹' + p.sl.toFixed(1) + '  -₹' + slAmt.toLocaleString('en-IN', {maximumFractionDigits:0}) + ')';
-    } else {
-      document.getElementById('stop-loss').textContent = p.sl ? (p.sl - (entry||0)).toFixed(1) + ' pts' : '—';
+      document.getElementById('stop-loss').textContent = slPts.toFixed(1) + ' pts';
+      document.getElementById('sl-sub').textContent    = 'exit ₹' + p.sl.toFixed(1) + '  (-₹' + slAmt.toLocaleString('en-IN',{maximumFractionDigits:0}) + ')';
     }
-    // Risk/Reward: reward pts (p.target) vs risk pts (p.sl - entry)
-    if (p.target && p.sl && entry) {
-      const slPts = p.sl - entry;
+
+    // ── Footer ──
+    // Entry time — strip date if today
+    let etStr = p.entry_time || '—';
+    try {
+      const et = new Date(typeof p.entry_time === 'string' && !p.entry_time.includes('T')
+        ? p.entry_time.replace(/(\d{2})-(\d{2})-(\d{4})\s+/, '$3-$2-$1T')
+        : p.entry_time);
+      etStr = et.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    } catch {}
+    document.getElementById('entry-time').textContent = etStr;
+    document.getElementById('pos-expiry').textContent = p.expiry || '—';
+
+    if (p.target && p.sl && ep) {
+      const slPts = p.sl - ep;
       const rr = p.target > 0 ? (slPts / p.target).toFixed(2) : '—';
-      document.getElementById('rr-ratio').textContent = '1 : ' + rr + '  (reward ' + p.target.toFixed(1) + ' / risk ' + slPts.toFixed(1) + ' pts)';
-    } else {
-      document.getElementById('rr-ratio').textContent = '—';
+      document.getElementById('rr-ratio').textContent = '1 : ' + rr;
     }
-    document.getElementById('entry-time').textContent = p.entry_time || '—';
   }
 
   const sig = d.last_signal;
@@ -2400,6 +2632,9 @@ async function fetchLogs() {
   } catch {}
 }
 
+// ── Trade detail cache (keyed by trade_id) ──
+const _tradeCache = {};
+
 async function fetchTrades() {
   try {
     const d = await (await fetch('/api/trades')).json();
@@ -2408,24 +2643,113 @@ async function fetchTrades() {
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:24px;font-family:var(--ui)">No trades yet</td></tr>';
       return;
     }
+    d.trades.forEach(t => { _tradeCache[t.trade_id] = t; });
     tbody.innerHTML = d.trades.slice().reverse().map(t => {
-      const pnl = t.final_pnl || 0;
-      const pnlHtml = pnl >= 0
-        ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
-        : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
-      const exitTime = t.exit_time ? t.exit_time.substring(11,19) : '—';
-      return `<tr>
+      const pnl = t.final_pnl != null ? t.final_pnl : null;
+      const isOpen = pnl == null;
+      const pnlHtml = isOpen
+        ? `<span style="color:var(--amber)">Open</span>`
+        : pnl >= 0
+          ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
+          : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
+      const exitTime = t.exit_time ? t.exit_time.toString().substring(11,19) : '—';
+      return `<tr onclick="showTradeDetail('${t.trade_id}')" title="Click for full details">
         <td>${exitTime}</td>
         <td>${t.setup_type || '—'}</td>
         <td>${t.ce_strike || '—'}</td>
         <td>${t.pe_strike || '—'}</td>
         <td>₹${(t.premium_received||0).toFixed(0)}</td>
-        <td style="font-size:10px;color:var(--t3)">${t.exit_reason || '—'}</td>
+        <td style="font-size:10px;color:var(--t3)">${t.exit_reason || (isOpen ? 'ACTIVE' : '—')}</td>
         <td>${pnlHtml}</td>
-        <td><button onclick="deleteTrade('${t.trade_id}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:2px 6px" title="Delete">✕</button></td>
+        <td><button onclick="event.stopPropagation();deleteTrade('${t.trade_id}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:2px 6px" title="Delete">✕</button></td>
       </tr>`;
     }).join('');
   } catch {}
+}
+
+function _fmt(v, prefix='₹', decimals=2) {
+  if (v == null || v === '') return '—';
+  const n = parseFloat(v);
+  return isNaN(n) ? String(v) : prefix + n.toLocaleString('en-IN', {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
+}
+
+function showTradeDetail(tradeId) {
+  const t = _tradeCache[tradeId];
+  if (!t) return;
+  const pnl = t.final_pnl != null ? t.final_pnl : null;
+  const isOpen = pnl == null;
+  const pnlColor = isOpen ? 'c-amber' : pnl >= 0 ? 'c-green' : 'c-red';
+  const pnlStr  = isOpen ? 'Open / Unrealised' : (pnl >= 0 ? '+' : '−') + '₹' + Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0});
+
+  const combined = (parseFloat(t.ce_entry_ltp)||0) + (parseFloat(t.pe_entry_ltp)||0);
+  const combinedExit = (parseFloat(t.ce_exit_ltp)||0) + (parseFloat(t.pe_exit_ltp)||0);
+
+  const entryTime = t.entry_time ? t.entry_time.toString().replace('T',' ').substring(0,19) : '—';
+  const exitTime  = t.exit_time  ? t.exit_time.toString().replace('T',' ').substring(0,19) : '—';
+  const dur = t.duration_mins != null ? t.duration_mins + ' min' : '—';
+
+  document.getElementById('td-title').textContent = (t.setup_type || 'Trade') + ' — ' + (t.trade_id || '');
+  document.getElementById('td-body').innerHTML = `
+    <div class="td-section">Timing</div>
+    <div class="td-grid">
+      <div class="td-row"><div class="td-label">Entry Time</div><div class="td-val">${entryTime}</div></div>
+      <div class="td-row"><div class="td-label">Exit Time</div><div class="td-val">${exitTime}</div></div>
+      <div class="td-row"><div class="td-label">Duration</div><div class="td-val">${dur}</div></div>
+      <div class="td-row"><div class="td-label">Exit Reason</div><div class="td-val">${t.exit_reason || (isOpen?'ACTIVE':'—')}</div></div>
+    </div>
+
+    <hr class="td-divider">
+    <div class="td-section">Strikes &amp; Symbols</div>
+    <div class="td-grid">
+      <div class="td-row"><div class="td-label">CE Strike</div><div class="td-val">${t.ce_strike || '—'}</div></div>
+      <div class="td-row"><div class="td-label">PE Strike</div><div class="td-val">${t.pe_strike || '—'}</div></div>
+      <div class="td-row"><div class="td-label">CE Symbol</div><div class="td-val" style="font-size:11px">${t.ce_symbol || '—'}</div></div>
+      <div class="td-row"><div class="td-label">PE Symbol</div><div class="td-val" style="font-size:11px">${t.pe_symbol || '—'}</div></div>
+      <div class="td-row"><div class="td-label">Expiry</div><div class="td-val">${t.expiry || '—'}</div></div>
+      <div class="td-row"><div class="td-label">Quantity</div><div class="td-val">${t.quantity || '—'}</div></div>
+    </div>
+
+    <hr class="td-divider">
+    <div class="td-section">Entry Prices</div>
+    <div class="td-grid">
+      <div class="td-row"><div class="td-label">CE Entry LTP</div><div class="td-val">${_fmt(t.ce_entry_ltp)}</div></div>
+      <div class="td-row"><div class="td-label">PE Entry LTP</div><div class="td-val">${_fmt(t.pe_entry_ltp)}</div></div>
+      <div class="td-row"><div class="td-label">Combined Premium</div><div class="td-val">${combined > 0 ? '₹' + combined.toFixed(2) : _fmt(t.premium_received)}</div></div>
+      <div class="td-row"><div class="td-label">Lots / Qty</div><div class="td-val">${t.quantity || '—'}</div></div>
+    </div>
+
+    <hr class="td-divider">
+    <div class="td-section">Exit Prices</div>
+    <div class="td-grid">
+      <div class="td-row"><div class="td-label">CE Exit LTP</div><div class="td-val">${_fmt(t.ce_exit_ltp)}</div></div>
+      <div class="td-row"><div class="td-label">PE Exit LTP</div><div class="td-val">${_fmt(t.pe_exit_ltp)}</div></div>
+      <div class="td-row"><div class="td-label">Combined Exit</div><div class="td-val">${combinedExit > 0 ? '₹' + combinedExit.toFixed(2) : '—'}</div></div>
+      <div class="td-row"><div class="td-label">Buyback Cost</div><div class="td-val">${combinedExit > 0 ? '₹' + (combinedExit * (t.quantity||0)).toLocaleString('en-IN',{maximumFractionDigits:0}) : '—'}</div></div>
+    </div>
+
+    <hr class="td-divider">
+    <div class="td-section">Risk / Reward</div>
+    <div class="td-grid">
+      <div class="td-row"><div class="td-label">Target</div><div class="td-val c-green">${_fmt(t.target)}</div></div>
+      <div class="td-row"><div class="td-label">Initial SL</div><div class="td-val c-red">${_fmt(t.initial_sl || t.stop_loss)}</div></div>
+      <div class="td-row"><div class="td-label">Final SL</div><div class="td-val c-amber">${_fmt(t.stop_loss)}</div></div>
+      <div class="td-row"><div class="td-label">Trail SL Locked</div><div class="td-val">${t.trail_locked ? '✓ Yes' : 'No'}</div></div>
+    </div>
+
+    <hr class="td-divider">
+    <div class="td-section">Result</div>
+    <div style="text-align:center; padding:10px 0">
+      <div style="font-size:28px; font-weight:800; font-family:var(--mono)" class="${pnlColor}">${pnlStr}</div>
+      ${!isOpen && t.quantity && t.premium_received ? `<div style="font-size:11px;color:var(--t3);margin-top:4px">Max possible: ₹${(parseFloat(t.premium_received)*t.quantity).toLocaleString('en-IN',{maximumFractionDigits:0})}</div>` : ''}
+    </div>
+  `;
+  document.getElementById('td-overlay').classList.add('open');
+}
+
+function closeTdModal(e) {
+  if (!e || e.target === document.getElementById('td-overlay')) {
+    document.getElementById('td-overlay').classList.remove('open');
+  }
 }
 
 async function deleteTrade(tradeId) {
@@ -2744,6 +3068,17 @@ setInterval(fetchTrades, 15000);
   <button class="ctrl-btn danger" id="m-btn-exit"    onclick="emergencyExit()">⚠ Exit</button>
   <button class="ctrl-btn danger" id="m-btn-stop"    onclick="stopAgent()">■ Stop</button>
   <button class="ctrl-btn ok"     id="m-btn-start"   onclick="startAgent()" style="display:none">▶ Start</button>
+</div>
+
+<!-- ══════════ TRADE DETAIL MODAL ══════════ -->
+<div class="td-overlay" id="td-overlay" onclick="closeTdModal(event)">
+  <div class="td-modal" id="td-modal">
+    <div class="td-head">
+      <span class="td-title" id="td-title">Trade Detail</span>
+      <button class="td-close" onclick="closeTdModal()">✕</button>
+    </div>
+    <div id="td-body"></div>
+  </div>
 </div>
 
 </body>

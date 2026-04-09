@@ -11,7 +11,34 @@ from dotenv import load_dotenv
 import requests as _requests
 
 # ── Trade persistence ──
-TRADES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.json")
+TRADES_FILE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.json")
+ACTIVE_POS_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "active_pos.json")
+
+def _save_active_position(pos):
+    """Write current open position to active_pos.json for crash-safe recovery."""
+    try:
+        with open(ACTIVE_POS_FILE, "w") as f:
+            json.dump(pos, f, indent=2, default=str)
+    except Exception:
+        pass
+
+def _clear_active_position():
+    """Delete active_pos.json when position is closed."""
+    try:
+        if os.path.exists(ACTIVE_POS_FILE):
+            os.remove(ACTIVE_POS_FILE)
+    except Exception:
+        pass
+
+def _load_active_position_from_file():
+    """Load position from active_pos.json if it exists (crash recovery)."""
+    if os.path.exists(ACTIVE_POS_FILE):
+        try:
+            with open(ACTIVE_POS_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
 
 def _load_trades_from_disk():
     """Load saved trades from local JSON on startup."""
@@ -38,8 +65,17 @@ def _save_trade_local(trade_record):
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Local trade save failed: {e}")
 
+_SHEET_HEADERS = [
+    "Trade ID", "Entry Time", "Exit Time", "Setup",
+    "CE Strike", "PE Strike", "CE Symbol", "PE Symbol",
+    "Qty", "Premium", "CE Entry LTP", "PE Entry LTP",
+    "CE Exit LTP", "PE Exit LTP",
+    "Target", "Initial SL", "Final SL", "Trail Locked",
+    "P&L", "Exit Reason", "Expiry", "Duration (min)"
+]
+
 def _get_or_create_sheet():
-    """Return the Trades worksheet, creating it with headers if needed."""
+    """Return the Trades worksheet, creating/upgrading headers if needed."""
     import gspread
     from google.oauth2.service_account import Credentials
     creds_file = os.path.join(BASE, "gsheet_creds.json")
@@ -51,15 +87,19 @@ def _get_or_create_sheet():
     gc     = gspread.authorize(creds)
     sh     = gc.open_by_key(sheet_id)
     try:
-        return sh.worksheet("Trades")
+        ws = sh.worksheet("Trades")
+        # Upgrade header row if sheet has fewer columns than expected
+        try:
+            existing_headers = ws.row_values(1)
+            if len(existing_headers) < len(_SHEET_HEADERS):
+                ws.resize(cols=len(_SHEET_HEADERS))
+                ws.update(range_name="A1", values=[_SHEET_HEADERS])
+        except Exception:
+            pass
+        return ws
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(title="Trades", rows=1000, cols=17)
-        ws.append_row([
-            "Trade ID", "Entry Time", "Exit Time", "Setup",
-            "CE Strike", "PE Strike", "CE Symbol", "PE Symbol",
-            "Qty", "Premium", "Target", "Stop Loss", "P&L", "Exit Reason", "Expiry",
-            "CE Entry LTP", "PE Entry LTP"
-        ])
+        ws = sh.add_worksheet(title="Trades", rows=1000, cols=len(_SHEET_HEADERS))
+        ws.update(range_name="A1", values=[_SHEET_HEADERS])
         return ws
 
 def _save_entry_sheets(trade_record):
@@ -71,7 +111,7 @@ def _save_entry_sheets(trade_record):
         ws.append_row([
             trade_record.get("trade_id", ""),
             trade_record.get("entry_time", ""),
-            "",                                   # exit time — blank at entry
+            "",                                         # exit time — blank at entry
             trade_record.get("setup_type", ""),
             trade_record.get("ce_strike", ""),
             trade_record.get("pe_strike", ""),
@@ -79,19 +119,24 @@ def _save_entry_sheets(trade_record):
             trade_record.get("pe_symbol", ""),
             trade_record.get("quantity", ""),
             trade_record.get("premium_received", ""),
-            trade_record.get("target", ""),
-            trade_record.get("stop_loss", ""),
-            "",                                   # P&L — blank at entry
-            "",                                   # exit reason — blank at entry
-            trade_record.get("expiry", ""),
             trade_record.get("ce_entry_ltp", ""),
             trade_record.get("pe_entry_ltp", ""),
+            "",                                         # CE exit LTP — blank at entry
+            "",                                         # PE exit LTP — blank at entry
+            trade_record.get("target", ""),
+            trade_record.get("initial_sl", trade_record.get("stop_loss", "")),
+            trade_record.get("stop_loss", ""),
+            "",                                         # trail locked — blank at entry
+            "",                                         # P&L — blank at entry
+            "",                                         # exit reason — blank at entry
+            trade_record.get("expiry", ""),
+            "",                                         # duration — blank at entry
         ])
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets entry write failed: {e}")
 
 def _update_exit_sheets(trade_record):
-    """Update the existing row with exit time, P&L, and exit reason."""
+    """Overwrite the entire row on exit — single API call, all 22 columns filled."""
     try:
         import gspread
         ws = _get_or_create_sheet()
@@ -99,15 +144,38 @@ def _update_exit_sheets(trade_record):
             return
         cell = ws.find(trade_record.get("trade_id", ""), in_column=1)
         if not cell:
-            # Row missing — append full record as fallback
+            # Row missing — append full completed row as fallback
             _save_entry_sheets(trade_record)
             cell = ws.find(trade_record.get("trade_id", ""), in_column=1)
             if not cell:
                 return
         r = cell.row
-        ws.update_cell(r, 3,  trade_record.get("exit_time", ""))
-        ws.update_cell(r, 13, trade_record.get("final_pnl", ""))
-        ws.update_cell(r, 14, trade_record.get("exit_reason", ""))
+        # Write all 22 columns in one batch update (fast, atomic)
+        full_row = [
+            trade_record.get("trade_id", ""),                                       # 1
+            trade_record.get("entry_time", ""),                                     # 2
+            trade_record.get("exit_time", ""),                                      # 3
+            trade_record.get("setup_type", ""),                                     # 4
+            trade_record.get("ce_strike", ""),                                      # 5
+            trade_record.get("pe_strike", ""),                                      # 6
+            trade_record.get("ce_symbol", ""),                                      # 7
+            trade_record.get("pe_symbol", ""),                                      # 8
+            trade_record.get("quantity", ""),                                       # 9
+            trade_record.get("premium_received", ""),                               # 10
+            trade_record.get("ce_entry_ltp", ""),                                   # 11 CE Entry LTP
+            trade_record.get("pe_entry_ltp", ""),                                   # 12 PE Entry LTP
+            trade_record.get("ce_exit_ltp", ""),                                    # 13 CE Exit LTP
+            trade_record.get("pe_exit_ltp", ""),                                    # 14 PE Exit LTP
+            trade_record.get("target", ""),                                         # 15
+            trade_record.get("initial_sl", trade_record.get("stop_loss", "")),      # 16 Initial SL
+            trade_record.get("stop_loss", ""),                                      # 17 Final SL
+            "Yes" if trade_record.get("trail_locked") else "No",                    # 18 Trail Locked
+            trade_record.get("final_pnl", ""),                                      # 19 P&L
+            trade_record.get("exit_reason", ""),                                    # 20 Exit Reason
+            trade_record.get("expiry", ""),                                         # 21
+            trade_record.get("duration_mins", ""),                                  # 22 Duration
+        ]
+        ws.update(range_name=f"A{r}:V{r}", values=[full_row])
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets exit update failed: {e}")
 
@@ -131,13 +199,18 @@ def _persist_entry(pos):
         "expiry":          pos.get("expiry", ""),
         "ce_entry_ltp":    pos.get("ce_entry_price", ""),
         "pe_entry_ltp":    pos.get("pe_entry_price", ""),
+        "initial_sl":      pos.get("initial_sl", pos.get("sl", "")),
+        "target_pct":      pos.get("target_pct", ""),
+        "sl_mult":         pos.get("sl_mult", ""),
     }
     _save_trade_local(entry_record)
+    _save_active_position(pos)                  # write full pos dict (has tokens, ltps, etc.)
     threading.Thread(target=_save_entry_sheets, args=(entry_record,), daemon=True).start()
 
 def _persist_trade(trade_record):
-    """Called at trade exit — update local record + update Sheets row."""
+    """Called at trade exit — update local record + update Sheets row, remove active_pos."""
     _save_trade_local(trade_record)
+    _clear_active_position()                    # position closed — remove active_pos.json
     threading.Thread(target=_update_exit_sheets, args=(trade_record,), daemon=True).start()
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -332,6 +405,7 @@ config = {
     "dead_zone_start":   "14:30",
     "expiry_cut_time":   "13:00",
     "execution_mode":    "AUTO",
+    "gsheet_id":         os.getenv("GSHEET_ID", ""),
 }
 
 # ── Agent state ──
@@ -421,17 +495,40 @@ def _restore_daily_pnl():
         state["daily_pnl"]  = round(total, 2)
         LOG_LINES.append(f"[INFO]  [{_ts()}] Restored daily P&L from disk: ₹{total:,.0f} ({count} closed trade{'s' if count>1 else ''})")
 
-# ── Restore open position from trades.json on startup ──
+# ── Restore open position from active_pos.json or trades.json on startup ──
 def _restore_open_position():
-    """If trades.json has a trade with no exit_time, restore it as the active position."""
-    trades = _load_trades_from_disk()
+    """Restore active position: prefer active_pos.json (full detail), fall back to trades.json."""
     today = datetime.now().date()
+
+    # ── Priority 1: active_pos.json (written on every entry + trailing SL update) ──
+    saved = _load_active_position_from_file()
+    if saved:
+        try:
+            raw_et = saved.get("entry_time", "")
+            entry_dt = datetime.fromisoformat(raw_et) if "T" in str(raw_et) else datetime.strptime(str(raw_et).strip(), "%d-%m-%Y  %H:%M:%S")
+            if entry_dt.date() == today:
+                # Null out tokens — re-resolved after AngelOne login
+                saved["ce_token"] = None
+                saved["pe_token"] = None
+                saved["pnl"] = 0
+                state["active_position"] = True
+                state["trades_today"]   += 1
+                state["position_detail"] = saved
+                state["last_signal"]["signal"] = "ACTIVE"
+                LOG_LINES.append(f"[INFO]  [{_ts()}] Restored full position from active_pos.json: {saved.get('ce_symbol')} / {saved.get('pe_symbol')}")
+                return
+        except Exception:
+            pass  # fall through to trades.json
+
+    # ── Priority 2: trades.json open record (exit_time = None) ──
+    trades = _load_trades_from_disk()
     for t in reversed(trades):
         if t.get("exit_time") is None and t.get("entry_time"):
             try:
-                entry_dt = datetime.fromisoformat(t["entry_time"])
+                raw_et = t["entry_time"]
+                entry_dt = datetime.fromisoformat(raw_et) if "T" in str(raw_et) else datetime.strptime(str(raw_et).strip(), "%d-%m-%Y  %H:%M:%S")
                 if entry_dt.date() != today:
-                    continue  # only restore today's open position
+                    continue
             except Exception:
                 continue
             state["active_position"] = True
@@ -443,14 +540,14 @@ def _restore_open_position():
                 "pe_strike":        t.get("pe_strike"),
                 "ce_symbol":        t.get("ce_symbol", ""),
                 "pe_symbol":        t.get("pe_symbol", ""),
-                "ce_token":         None,   # filled in after AngelOne login
+                "ce_token":         None,
                 "pe_token":         None,
                 "ce_entry_price":   t.get("ce_entry_ltp") or (t.get("premium_received") / 2 if t.get("premium_received") else None),
                 "pe_entry_price":   t.get("pe_entry_ltp") or (t.get("premium_received") / 2 if t.get("premium_received") else None),
                 "premium_received": t.get("premium_received"),
                 "target":           t.get("target"),
                 "sl":               t.get("stop_loss"),
-                "initial_sl":       t.get("stop_loss"),
+                "initial_sl":       t.get("initial_sl", t.get("stop_loss")),
                 "quantity":         t.get("quantity"),
                 "setup_type":       t.get("setup_type", "Short Strangle"),
                 "expiry":           t.get("expiry", ""),
@@ -459,7 +556,7 @@ def _restore_open_position():
                 "trail_locked":     False,
             }
             state["last_signal"]["signal"] = "ACTIVE"
-            LOG_LINES.append(f"[INFO]  [{_ts()}] Restored open position from disk: {t.get('ce_symbol')} / {t.get('pe_symbol')}")
+            LOG_LINES.append(f"[INFO]  [{_ts()}] Restored position from trades.json: {t.get('ce_symbol')} / {t.get('pe_symbol')}")
             break
 
 LOG_LINES = [
@@ -1734,6 +1831,14 @@ def _square_off_position():
     state["daily_pnl"]   = state["closed_pnl"]
     # trades_today already incremented at entry — do NOT increment again here
 
+    # Calculate trade duration
+    try:
+        _et = pos["entry_time"]
+        _entry_dt = datetime.fromisoformat(str(_et)) if "T" in str(_et) else datetime.strptime(str(_et).strip(), "%d-%m-%Y  %H:%M:%S")
+        _dur_mins = round((exit_time - _entry_dt).total_seconds() / 60)
+    except Exception:
+        _dur_mins = None
+
     # Record complete trade in history — reuse trade_id from entry
     trade_record = {
         "trade_id":        pos.get("trade_id", f"T{int(time.time())}"),
@@ -1746,11 +1851,18 @@ def _square_off_position():
         "pe_symbol":       pos["pe_symbol"],
         "quantity":        qty,
         "premium_received": pos["premium_received"],
+        "ce_entry_ltp":    pos.get("ce_entry_price", ""),
+        "pe_entry_ltp":    pos.get("pe_entry_price", ""),
+        "ce_exit_ltp":     pos.get("current_ce_ltp", ""),
+        "pe_exit_ltp":     pos.get("current_pe_ltp", ""),
         "target":          pos["target"],
+        "initial_sl":      pos.get("initial_sl", pos.get("sl", "")),
         "stop_loss":       pos["sl"],
+        "trail_locked":    pos.get("trail_locked", False),
         "final_pnl":       final_pnl,
         "exit_reason":     pos.get("exit_reason", "UNKNOWN"),
         "expiry":          pos.get("expiry", ""),
+        "duration_mins":   _dur_mins,
     }
     # Upsert in memory (entry row may already exist)
     tid = trade_record["trade_id"]
@@ -1959,6 +2071,7 @@ def position_monitor():
                                 f"CE {pos['ce_strike']} | PE {pos['pe_strike']}",
                                 "success"
                             )
+                            _save_active_position(pos)  # persist updated SL
 
                         # Target = 30% profit (current_cost ≤ entry - target)
                         if current_cost <= entry_prem - pos["target"]:
