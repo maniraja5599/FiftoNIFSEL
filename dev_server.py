@@ -320,6 +320,122 @@ load_dotenv(os.path.join(BASE, ".env"))
 
 app  = Flask(__name__)
 
+# ── Upstox fallback ──────────────────────────────────────────────────────────
+_UPSTOX_API_KEY    = os.getenv("UPSTOX_API_KEY", "")
+_UPSTOX_API_SECRET = os.getenv("UPSTOX_API_SECRET", "")
+_UPSTOX_REDIRECT   = os.getenv("UPSTOX_REDIRECT_URI", "http://localhost:8080/")
+_upstox_token      = os.getenv("UPSTOX_ACCESS_TOKEN", "").strip()
+
+# Upstox instrument keys for common symbols
+_UPSTOX_KEYS = {
+    "NIFTY_SPOT": "NSE_INDEX|Nifty 50",
+    "VIX":        "NSE_INDEX|India VIX",
+}
+
+def _upstox_headers():
+    return {
+        "Authorization": f"Bearer {_upstox_token}",
+        "Accept":        "application/json",
+    }
+
+def _upstox_available():
+    return bool(_upstox_token)
+
+def _upstox_ltp(instrument_key: str) -> dict:
+    """Fetch LTP via Upstox market-quotes API.
+    Returns {status: True, data: {ltp: float}} or {status: False}."""
+    if not _upstox_available():
+        return {"status": False, "message": "Upstox token not set"}
+    try:
+        url = "https://api.upstox.com/v2/market-quote/ltp"
+        r = _requests.get(url, headers=_upstox_headers(),
+                          params={"instrument_key": instrument_key}, timeout=5)
+        if r.status_code == 200:
+            data = r.json().get("data", {})
+            # data is keyed by instrument_key (colon-encoded)
+            key = list(data.keys())[0] if data else None
+            if key:
+                ltp = data[key].get("last_price")
+                if ltp is not None:
+                    return {"status": True, "data": {"ltp": float(ltp)}}
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox LTP failed: {r.status_code} {r.text[:120]}")
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox LTP error: {e}")
+    return {"status": False, "message": "Upstox LTP fetch failed"}
+
+def _upstox_nfo_key(symbol: str) -> str:
+    """Convert AngelOne NFO symbol (e.g. NIFTY25APR22500CE) to Upstox instrument key."""
+    # Upstox uses NSE_FO|<symbol> for NFO options
+    return f"NSE_FO|{symbol}"
+
+def _upstox_ltp_nfo(symbol: str) -> dict:
+    """Fetch LTP for an NFO options symbol via Upstox."""
+    return _upstox_ltp(_upstox_nfo_key(symbol))
+
+def _upstox_candles(interval: str = "30minute", days: int = 5) -> list:
+    """Fetch NIFTY 50 historical candles from Upstox.
+    Returns list of [datetime_str, open, high, low, close, volume] rows."""
+    if not _upstox_available():
+        return []
+    # Map AngelOne interval names → Upstox interval names
+    interval_map = {
+        "FIFTEEN_MINUTE": "30minute",   # closest available free tier
+        "ONE_MINUTE":     "1minute",
+        "FIVE_MINUTE":    "5minute",
+        "ONE_DAY":        "day",
+    }
+    upstox_interval = interval_map.get(interval, "30minute")
+    from_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    to_date   = datetime.now().strftime("%Y-%m-%d")
+    try:
+        url = (f"https://api.upstox.com/v2/historical-candle/NSE_INDEX%7CNifty%2050"
+               f"/{upstox_interval}/{to_date}/{from_date}")
+        r = _requests.get(url, headers=_upstox_headers(), timeout=10)
+        if r.status_code == 200:
+            candles = r.json().get("data", {}).get("candles", [])
+            # Upstox format: [timestamp, open, high, low, close, volume, oi]
+            # AngelOne format: [datetime_str, open, high, low, close, volume]
+            rows = []
+            for c in candles:
+                try:
+                    dt_str = c[0][:16].replace("T", " ")
+                    rows.append([dt_str, c[1], c[2], c[3], c[4], c[5]])
+                except Exception:
+                    pass
+            if rows:
+                LOG_LINES.append(f"[INFO]  [{_ts()}] Upstox candles fetched: {len(rows)} rows ({upstox_interval})")
+            return rows
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox candles failed: {r.status_code} {r.text[:120]}")
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox candles error: {e}")
+    return []
+
+def _upstox_save_token(token: str):
+    """Persist Upstox access token to .env file."""
+    global _upstox_token
+    _upstox_token = token
+    env_path = os.path.join(BASE, ".env")
+    try:
+        with open(env_path, "r") as f:
+            content = f.read()
+        if "UPSTOX_ACCESS_TOKEN=" in content:
+            lines = content.splitlines()
+            new_lines = []
+            for line in lines:
+                if line.startswith("UPSTOX_ACCESS_TOKEN="):
+                    new_lines.append(f"UPSTOX_ACCESS_TOKEN={token}")
+                else:
+                    new_lines.append(line)
+            content = "\n".join(new_lines) + "\n"
+        else:
+            content += f"\nUPSTOX_ACCESS_TOKEN={token}\n"
+        with open(env_path, "w") as f:
+            f.write(content)
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Upstox access token saved to .env")
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Could not save Upstox token: {e}")
+# ── End Upstox ───────────────────────────────────────────────────────────────
+
 # ── AngelOne connection state ──
 connection = {
     "status":        "disconnected",
@@ -1295,8 +1411,6 @@ def _ema_series(values, period):
 
 
 def _fetch_nifty_candles(interval="FIFTEEN_MINUTE", lookback_days=5):
-    if not angel_obj:
-        return []
     cache_key = (interval, lookback_days)
     cache_ttl = 900 if interval == "FIFTEEN_MINUTE" else 180
     now_ts = time.time()
@@ -1314,15 +1428,24 @@ def _fetch_nifty_candles(interval="FIFTEEN_MINUTE", lookback_days=5):
         "fromdate": (now - timedelta(days=lookback_days)).strftime("%Y-%m-%d %H:%M"),
         "todate": now.strftime("%Y-%m-%d %H:%M"),
     }
-    try:
-        resp = angel_obj.getCandleData(params)
-        if resp and resp.get("status") and resp.get("data"):
-            _candle_backoff.pop(cache_key, None)
-            _candle_cache[cache_key] = {"ts": now_ts, "data": resp["data"]}
-            return resp["data"]
-    except Exception as e:
-        LOG_LINES.append(f"[WARN]  [{_ts()}] Candle fetch error ({interval}): {e}")
-        _candle_backoff[cache_key] = now_ts + cache_ttl
+    if angel_obj:
+        try:
+            resp = angel_obj.getCandleData(params)
+            if resp and resp.get("status") and resp.get("data"):
+                _candle_backoff.pop(cache_key, None)
+                _candle_cache[cache_key] = {"ts": now_ts, "data": resp["data"]}
+                return resp["data"]
+        except Exception as e:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] AngelOne candle fetch error ({interval}): {e}")
+            _candle_backoff[cache_key] = now_ts + cache_ttl
+
+    # ── AngelOne failed — try Upstox fallback ──
+    if _upstox_available():
+        ux_candles = _upstox_candles(interval, lookback_days)
+        if ux_candles:
+            _candle_cache[cache_key] = {"ts": now_ts, "data": ux_candles}
+            return ux_candles
+
     if cached:
         return cached["data"]
     return []
@@ -1483,23 +1606,40 @@ def _compute_option_metrics(spot):
 
 def _safe_ltp_data(exchange, symbol, token):
     """Fetch LTP for a single instrument via AngelOne getMarketData.
+    Falls back to Upstox if AngelOne fails.
     Returns a dict shaped like {status: bool, data: {ltp: float}} or {status: False}."""
-    try:
-        resp = angel_obj.getMarketData("LTP", {exchange: [str(token)]})
-        if not resp or not resp.get("status"):
-            return {"status": False, "message": resp.get("message", "no data") if resp else "no response"}
-        raw = resp.get("data") or {}
-        # getMarketData returns data as {"fetched": [...], "unfetched": [...]}
-        rows = raw if isinstance(raw, list) else raw.get("fetched", [])
-        if not rows:
-            return {"status": False, "message": "empty data"}
-        row = rows[0]
-        ltp = row.get("ltp") or row.get("lastPrice") or row.get("close")
-        if ltp is None:
-            return {"status": False, "message": "ltp missing in response"}
-        return {"status": True, "data": {"ltp": float(ltp)}}
-    except Exception as e:
-        return {"status": False, "message": str(e)}
+    # ── Try AngelOne first ──
+    angel_result = {"status": False, "message": "angel_obj not ready"}
+    if angel_obj:
+        try:
+            resp = angel_obj.getMarketData("LTP", {exchange: [str(token)]})
+            if resp and resp.get("status"):
+                raw  = resp.get("data") or {}
+                rows = raw if isinstance(raw, list) else raw.get("fetched", [])
+                if rows:
+                    row = rows[0]
+                    ltp = row.get("ltp") or row.get("lastPrice") or row.get("close")
+                    if ltp is not None:
+                        return {"status": True, "data": {"ltp": float(ltp)}}
+            angel_result = {"status": False, "message": resp.get("message", "no data") if resp else "no response"}
+        except Exception as e:
+            angel_result = {"status": False, "message": str(e)}
+
+    # ── AngelOne failed — try Upstox fallback ──
+    if _upstox_available():
+        if exchange == "NSE" and token == "26000":
+            ux = _upstox_ltp("NSE_INDEX|Nifty 50")
+        elif exchange == "NSE" and token == "99926017":
+            ux = _upstox_ltp("NSE_INDEX|India VIX")
+        elif exchange == "NFO" and symbol:
+            ux = _upstox_ltp_nfo(symbol)
+        else:
+            ux = {"status": False}
+        if ux.get("status"):
+            LOG_LINES.append(f"[INFO]  [{_ts()}] Upstox fallback LTP OK: {symbol} ₹{ux['data']['ltp']}")
+            return ux
+
+    return angel_result
 
 
 def _refresh_market_metrics():
@@ -2766,11 +2906,58 @@ def fetch_market_data():
 
 @app.route("/")
 def index():
-    from flask import make_response
+    from flask import make_response, redirect
+    # ── Upstox OAuth callback: ?code=xxx lands here ──
+    code = request.args.get("code")
+    if code and _UPSTOX_API_KEY:
+        try:
+            r = _requests.post(
+                "https://api.upstox.com/v2/login/authorization/token",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
+                    "code":          code,
+                    "client_id":     _UPSTOX_API_KEY,
+                    "client_secret": _UPSTOX_API_SECRET,
+                    "redirect_uri":  _UPSTOX_REDIRECT,
+                    "grant_type":    "authorization_code",
+                },
+                timeout=10,
+            )
+            if r.status_code == 200:
+                token = r.json().get("access_token", "")
+                if token:
+                    _upstox_save_token(token)
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] Upstox login successful ✓")
+                    return redirect("/?upstox=ok")
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox token exchange failed: {r.text[:200]}")
+        except Exception as e:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox token exchange error: {e}")
     resp = make_response(send_from_directory(BASE, "nifty_dashboard.html"))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+@app.route("/api/upstox/login-url")
+def upstox_login_url():
+    """Return the Upstox OAuth login URL for the dashboard to open."""
+    if not _UPSTOX_API_KEY:
+        return jsonify({"ok": False, "msg": "Upstox API key not configured"})
+    import urllib.parse
+    url = (
+        "https://api.upstox.com/v2/login/authorization/dialog"
+        f"?response_type=code"
+        f"&client_id={_UPSTOX_API_KEY}"
+        f"&redirect_uri={urllib.parse.quote(_UPSTOX_REDIRECT, safe='')}"
+    )
+    return jsonify({"ok": True, "url": url})
+
+@app.route("/api/upstox/status")
+def upstox_status():
+    """Return Upstox connection status."""
+    return jsonify({
+        "configured": bool(_UPSTOX_API_KEY),
+        "connected":  _upstox_available(),
+    })
 
 @app.route("/fifto_logo.png")
 def logo():

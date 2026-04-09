@@ -1467,6 +1467,21 @@ html.light .toggle-name      { color: #111827; }
       <button class="conn-reconnect-btn" onclick="reconnect()" style="margin-top:6px">↺ Reconnect</button>
     </div>
 
+    <!-- Upstox fallback status -->
+    <div class="conn-widget" id="upstox-widget" style="margin-left:8px;min-width:160px">
+      <div class="conn-header">
+        <span class="conn-label">Upstox</span>
+        <span class="conn-status">
+          <span class="conn-dot disconnected" id="upstox-dot"></span>
+          <span id="upstox-status-label" style="color:var(--red)">Fallback</span>
+        </span>
+      </div>
+      <div style="font-size:10px;color:var(--t3);margin-bottom:8px">Data fallback when AngelOne fails</div>
+      <button class="conn-reconnect-btn" id="upstox-login-btn" onclick="upstoxLogin()" style="margin-top:2px;background:var(--green);color:#000">
+        ⚡ Connect Upstox
+      </button>
+    </div>
+
     <div style="padding: 0 10px 10px; display:flex; flex-direction:column; gap:6px; border-top: 1px solid var(--line); padding-top:10px;">
       <button class="ctrl-btn ok" id="btn-approve-buy" onclick="approveBuy()">▶ Approve Buy</button>
       <button class="ctrl-btn danger" id="btn-emergency-exit" onclick="emergencyExit()">⚠ Emergency Exit</button>
@@ -3504,6 +3519,44 @@ async function pollConnection() {
   }
 }
 
+// ── Upstox fallback ──
+async function pollUpstoxStatus() {
+  try {
+    const u = await (await fetch('/api/upstox/status')).json();
+    const dot   = document.getElementById('upstox-dot');
+    const label = document.getElementById('upstox-status-label');
+    const btn   = document.getElementById('upstox-login-btn');
+    if (u.connected) {
+      dot.className      = 'conn-dot connected';
+      label.textContent  = 'Connected';
+      label.style.color  = 'var(--green)';
+      if (btn) { btn.textContent = '✓ Connected'; btn.style.background = 'var(--surface2)'; btn.style.color = 'var(--green)'; }
+    } else {
+      dot.className      = 'conn-dot disconnected';
+      label.textContent  = 'Offline';
+      label.style.color  = 'var(--red)';
+      if (btn) { btn.textContent = '⚡ Connect Upstox'; btn.style.background = 'var(--green)'; btn.style.color = '#000'; }
+    }
+  } catch {}
+}
+
+async function upstoxLogin() {
+  try {
+    const r = await (await fetch('/api/upstox/login-url')).json();
+    if (r.ok && r.url) {
+      window.open(r.url, '_blank', 'width=500,height=700');
+    } else {
+      alert('Upstox not configured: ' + (r.msg || 'unknown error'));
+    }
+  } catch(e) { alert('Error: ' + e); }
+}
+
+// Check if we just returned from Upstox OAuth
+if (new URLSearchParams(location.search).get('upstox') === 'ok') {
+  history.replaceState({}, '', '/');
+  setTimeout(() => showToast('Upstox Connected', 'Fallback data source is now active', 'success'), 500);
+}
+
 // ── Toast + Chrome Notifications ──
 const TOAST_ICONS = { success:'✅', danger:'🛑', warning:'⚠️', info:'📊' };
 
@@ -3723,11 +3776,13 @@ history.replaceState({ page: 'dashboard' }, '', '#dashboard');
 
 poll();
 pollConnection();
+pollUpstoxStatus();
 loadConfig();
 ensureLogin();
 pollNotifications();
 setInterval(poll, 3000);
 setInterval(pollConnection, 5000);
+setInterval(pollUpstoxStatus, 15000);
 setInterval(fetchLogs, 10000);
 setInterval(pollNotifications, 3000);
 fetchTrades();

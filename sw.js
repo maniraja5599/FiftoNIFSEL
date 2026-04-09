@@ -1,4 +1,4 @@
-const CACHE  = 'fifto-v6';
+const CACHE  = 'fifto-v7';
 const STATIC = [
   '/',
   '/manifest.json',
