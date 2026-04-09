@@ -1,0 +1,31 @@
+{
+  "name": "FIFTO AI Trading",
+  "short_name": "FIFTO",
+  "description": "NIFTY Options AI Trading Dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0c0f",
+  "theme_color": "#0c0c0f",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-mask.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

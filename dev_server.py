@@ -2243,6 +2243,30 @@ def logo():
     p = os.path.join(BASE, "fifto_logo.png")
     return send_from_directory(BASE, "fifto_logo.png") if os.path.exists(p) else ("", 404)
 
+@app.route("/manifest.json")
+def pwa_manifest():
+    return send_from_directory(BASE, "manifest.json", mimetype="application/manifest+json")
+
+@app.route("/sw.js")
+def pwa_sw():
+    from flask import make_response
+    resp = make_response(send_from_directory(BASE, "sw.js", mimetype="application/javascript"))
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+@app.route("/icon-192.svg")
+def icon192():
+    return send_from_directory(BASE, "icon-192.svg", mimetype="image/svg+xml")
+
+@app.route("/icon-512.svg")
+def icon512():
+    return send_from_directory(BASE, "icon-512.svg", mimetype="image/svg+xml")
+
+@app.route("/icon-mask.svg")
+def iconmask():
+    return send_from_directory(BASE, "icon-mask.svg", mimetype="image/svg+xml")
+
 @app.route("/api/state")
 def api_state():
     # Inject live DTE on every poll — cheap calculation
