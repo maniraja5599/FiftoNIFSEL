@@ -786,7 +786,9 @@ def _spot_stable():
 
 
 def _all_checks_pass():
-    """All mandatory checks must be True. Optional checks (pcr/iv/ema) pass when None (data unavailable)."""
+    """All mandatory checks must be True. Optional checks (pcr/iv/ema) pass when None (data unavailable).
+    When market is trending (UP/DOWN), EMA-flat check is skipped — trend setups are valid in trending markets.
+    """
     c = state["checks"]
     # Mandatory: VIX range, not a holiday, margin available, daily loss gate
     mandatory = (
@@ -800,10 +802,17 @@ def _all_checks_pass():
     # Mandatory: spot must not be in sharp momentum
     if not _spot_stable():
         return False
-    # Optional: PCR / IV / EMA — if data is available it must pass; None = skip
-    for key in ("pcr", "iv", "ema"):
+    # Optional: PCR / IV — if data is available it must pass; None = skip
+    for key in ("pcr", "iv"):
         val = c.get(key)
-        if val is False:   # explicitly failed (not just missing)
+        if val is False:
+            return False
+    # EMA flat check: only enforce for Short Strangle (FLAT trend).
+    # If trend is UP or DOWN, skip EMA flat — spread setups thrive in trending markets.
+    trend = state["market"].get("trend", "FLAT")
+    if trend == "FLAT":
+        ema_val = c.get("ema")
+        if ema_val is False:   # explicitly not flat — skip strangle in trending market
             return False
     return True
 
