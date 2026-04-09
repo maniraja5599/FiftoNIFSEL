@@ -2635,6 +2635,139 @@ def api_delete_trade(trade_id):
     LOG_LINES.append(f"[INFO]  [{_ts()}] Trade {trade_id} deleted")
     return jsonify({"ok": True})
 
+@app.route("/api/analytics")
+def api_analytics():
+    """Compute performance analytics from closed trade history."""
+    from collections import defaultdict
+    closed = [
+        t for t in state.get("trade_history", [])
+        if t.get("exit_time") and t.get("final_pnl") is not None
+    ]
+    if not closed:
+        return jsonify({"has_data": False})
+
+    pnls   = [float(t.get("final_pnl", 0)) for t in closed]
+    wins   = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p <= 0]
+
+    total       = len(pnls)
+    win_count   = len(wins)
+    loss_count  = len(losses)
+    win_rate    = round(win_count / total * 100, 1) if total else 0
+    gross_profit = sum(wins)
+    gross_loss   = abs(sum(losses))
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else 999.0
+    avg_win   = round(gross_profit / win_count, 2)  if win_count  else 0
+    avg_loss  = round(gross_loss  / loss_count, 2)  if loss_count else 0
+    rr_ratio  = round(avg_win / avg_loss, 2)         if avg_loss   else 0
+
+    # Equity curve & max drawdown
+    equity = []
+    running = 0.0
+    for p in pnls:
+        running += p
+        equity.append(running)
+    peak   = equity[0] if equity else 0
+    max_dd = 0.0
+    for e in equity:
+        if e > peak:
+            peak = e
+        dd = peak - e
+        if dd > max_dd:
+            max_dd = dd
+
+    total_pnl  = round(sum(pnls), 2)
+    max_dd     = round(max_dd, 2)
+    capital    = float(config.get("capital", 1500000))
+    max_dd_pct = round(max_dd / capital * 100, 2) if capital else 0
+    calmar     = round(total_pnl / max_dd, 2) if max_dd > 0 else 0
+
+    # Drawdown efficiency = profit factor / (1 + max_dd_pct/100)
+    dd_efficiency = round(profit_factor / (1 + max_dd_pct / 100), 2) if max_dd_pct > 0 else profit_factor
+
+    # Avg hold time
+    durations = [t.get("duration_mins") for t in closed if t.get("duration_mins") is not None]
+    avg_duration = round(sum(durations) / len(durations), 1) if durations else 0
+
+    best_trade  = round(max(pnls), 2) if pnls else 0
+    worst_trade = round(min(pnls), 2) if pnls else 0
+
+    # Current streak
+    streak = 0
+    streak_type = None
+    for p in reversed(pnls):
+        cur = "win" if p > 0 else "loss"
+        if streak_type is None:
+            streak_type = cur
+            streak = 1
+        elif cur == streak_type:
+            streak += 1
+        else:
+            break
+
+    # Exit reason breakdown
+    reasons = {}
+    for t in closed:
+        r = (t.get("exit_reason") or "Unknown").strip()
+        if r not in reasons:
+            reasons[r] = {"count": 0, "pnl": 0.0, "wins": 0}
+        reasons[r]["count"] += 1
+        reasons[r]["pnl"]   += float(t.get("final_pnl", 0))
+        if float(t.get("final_pnl", 0)) > 0:
+            reasons[r]["wins"] += 1
+    for r in reasons:
+        reasons[r]["pnl"] = round(reasons[r]["pnl"], 2)
+
+    # Equity curve points (for chart)
+    eq_points = []
+    running = 0.0
+    for t in closed[-60:]:
+        running += float(t.get("final_pnl", 0))
+        eq_points.append({
+            "pnl":        round(float(t.get("final_pnl", 0)), 2),
+            "cumulative": round(running, 2),
+            "date":       str(t.get("entry_time", ""))[:10],
+        })
+
+    # Weekly P&L (last 8 calendar weeks)
+    weekly = defaultdict(float)
+    for t in closed:
+        raw = str(t.get("entry_time", ""))[:10]
+        try:
+            dt = datetime.fromisoformat(raw)
+            wk = dt.strftime("%Y-W%W")
+            weekly[wk] += float(t.get("final_pnl", 0))
+        except Exception:
+            pass
+    weekly_sorted = {k: round(v, 2) for k, v in sorted(weekly.items())[-8:]}
+
+    return jsonify({
+        "has_data":        True,
+        "total_trades":    total,
+        "win_count":       win_count,
+        "loss_count":      loss_count,
+        "win_rate":        win_rate,
+        "gross_profit":    round(gross_profit, 2),
+        "gross_loss":      round(gross_loss, 2),
+        "profit_factor":   profit_factor,
+        "avg_win":         avg_win,
+        "avg_loss":        avg_loss,
+        "rr_ratio":        rr_ratio,
+        "total_pnl":       total_pnl,
+        "max_drawdown":    max_dd,
+        "max_drawdown_pct": max_dd_pct,
+        "calmar_ratio":    calmar,
+        "dd_efficiency":   dd_efficiency,
+        "avg_duration_mins": avg_duration,
+        "best_trade":      best_trade,
+        "worst_trade":     worst_trade,
+        "current_streak":  streak,
+        "streak_type":     streak_type,
+        "exit_reasons":    reasons,
+        "equity_curve":    eq_points,
+        "weekly_pnl":      weekly_sorted,
+    })
+
 @app.route("/api/test_telegram", methods=["POST"])
 def api_test_telegram():
     token   = config.get("telegram_token", "")

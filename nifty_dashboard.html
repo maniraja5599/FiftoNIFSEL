@@ -1286,6 +1286,7 @@ html.light .toggle-name      { color: #111827; }
     <button class="nav-tab active" onclick="showPage('dashboard', this)">Dashboard</button>
     <button class="nav-tab" onclick="showPage('positions', this)">Positions</button>
     <button class="nav-tab" onclick="showPage('trades', this)">Trade Log</button>
+    <button class="nav-tab" onclick="showPage('analytics', this)">Analytics</button>
     <button class="nav-tab" onclick="showPage('settings', this)">Settings</button>
     <a class="nav-tab" href="/overview" target="_blank" style="text-decoration:none;">Overview</a>
   </nav>
@@ -1794,6 +1795,165 @@ html.light .toggle-name      { color: #111827; }
       </div>
     </div>
 
+    <!-- ═══ ANALYTICS PAGE ═══ -->
+    <div class="page" id="page-analytics">
+      <div style="padding:18px; display:flex; flex-direction:column; gap:16px;">
+
+        <!-- Reload button -->
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;font-weight:600;color:var(--t1)">Performance Analytics</span>
+          <button class="btn-ghost" style="padding:4px 14px;font-size:11px" onclick="fetchAnalytics()">Refresh</button>
+        </div>
+
+        <!-- No-data state -->
+        <div id="analytics-empty" style="display:none">
+          <div class="card" style="text-align:center;padding:48px 24px;color:var(--t3)">
+            <div style="font-size:28px;margin-bottom:12px">📊</div>
+            <div style="font-size:14px;font-weight:500">No closed trades yet</div>
+            <div style="font-size:12px;margin-top:6px">Analytics will appear once you have completed trades.</div>
+          </div>
+        </div>
+
+        <!-- Content (hidden until data loads) -->
+        <div id="analytics-content" style="display:none; flex-direction:column; gap:16px;">
+
+          <!-- Row 1: Key metrics -->
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
+
+            <div class="card" style="padding:16px;text-align:center">
+              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Win Rate</div>
+              <div id="an-win-rate" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--green)">—%</div>
+              <div id="an-win-loss" style="font-size:11px;color:var(--t3);margin-top:4px">— W / — L</div>
+            </div>
+
+            <div class="card" style="padding:16px;text-align:center">
+              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Profit Factor</div>
+              <div id="an-pf" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--blue)">—</div>
+              <div style="font-size:11px;color:var(--t3);margin-top:4px">Gross P / Gross L</div>
+            </div>
+
+            <div class="card" style="padding:16px;text-align:center">
+              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Max Drawdown</div>
+              <div id="an-mdd" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--red)">—</div>
+              <div id="an-mdd-pct" style="font-size:11px;color:var(--t3);margin-top:4px">—% of capital</div>
+            </div>
+
+            <div class="card" style="padding:16px;text-align:center">
+              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">DD Efficiency</div>
+              <div id="an-dde" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--purple)">—</div>
+              <div style="font-size:11px;color:var(--t3);margin-top:4px">PF ÷ (1 + DD%)</div>
+            </div>
+
+            <div class="card" style="padding:16px;text-align:center">
+              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Avg R:R</div>
+              <div id="an-rr" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--amber)">—</div>
+              <div style="font-size:11px;color:var(--t3);margin-top:4px">Avg Win / Avg Loss</div>
+            </div>
+
+            <div class="card" style="padding:16px;text-align:center">
+              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Calmar Ratio</div>
+              <div id="an-calmar" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--t1)">—</div>
+              <div style="font-size:11px;color:var(--t3);margin-top:4px">Total PnL / Max DD</div>
+            </div>
+
+          </div>
+
+          <!-- Row 2: Trade stats -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Trade Statistics</span></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0">
+
+              <div style="padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Total Trades</div>
+                <div id="an-total" style="font-size:18px;font-weight:600;font-family:var(--mono);margin-top:4px">—</div>
+              </div>
+              <div style="padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Avg Win</div>
+                <div id="an-avg-win" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green);margin-top:4px">—</div>
+              </div>
+              <div style="padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Avg Loss</div>
+                <div id="an-avg-loss" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red);margin-top:4px">—</div>
+              </div>
+              <div style="padding:12px 16px;border-bottom:1px solid var(--line)">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Avg Hold Time</div>
+                <div id="an-duration" style="font-size:18px;font-weight:600;font-family:var(--mono);margin-top:4px">—</div>
+              </div>
+
+              <div style="padding:12px 16px;border-right:1px solid var(--line)">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Best Trade</div>
+                <div id="an-best" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green);margin-top:4px">—</div>
+              </div>
+              <div style="padding:12px 16px;border-right:1px solid var(--line)">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Worst Trade</div>
+                <div id="an-worst" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red);margin-top:4px">—</div>
+              </div>
+              <div style="padding:12px 16px;border-right:1px solid var(--line)">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Gross Profit</div>
+                <div id="an-gp" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green);margin-top:4px">—</div>
+              </div>
+              <div style="padding:12px 16px">
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Gross Loss</div>
+                <div id="an-gl" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red);margin-top:4px">—</div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Streak badge + Total PnL -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card" style="padding:16px;display:flex;align-items:center;gap:16px">
+              <div id="an-streak-icon" style="font-size:32px">🔥</div>
+              <div>
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Current Streak</div>
+                <div id="an-streak" style="font-size:20px;font-weight:700;font-family:var(--mono);margin-top:2px">—</div>
+                <div id="an-streak-type" style="font-size:11px;color:var(--t2);margin-top:2px">—</div>
+              </div>
+            </div>
+            <div class="card" style="padding:16px;display:flex;align-items:center;gap:16px">
+              <div style="font-size:32px">💰</div>
+              <div>
+                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Total P&amp;L (All Time)</div>
+                <div id="an-total-pnl" style="font-size:20px;font-weight:700;font-family:var(--mono);margin-top:2px">—</div>
+                <div style="font-size:11px;color:var(--t2);margin-top:2px">Closed trades only</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Equity Curve -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Equity Curve</span><span id="an-eq-sub" style="font-size:11px;color:var(--t3)">Last 60 trades</span></div>
+            <div style="padding:12px 0 4px">
+              <svg id="an-equity-svg" width="100%" height="140" viewBox="0 0 800 140" preserveAspectRatio="none" style="display:block"></svg>
+            </div>
+          </div>
+
+          <!-- Weekly P&L bars -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Weekly P&amp;L</span><span style="font-size:11px;color:var(--t3)">Last 8 weeks</span></div>
+            <div style="padding:8px 0 4px">
+              <svg id="an-weekly-svg" width="100%" height="100" viewBox="0 0 800 100" preserveAspectRatio="none" style="display:block"></svg>
+              <div id="an-weekly-labels" style="display:flex;justify-content:space-around;padding:4px 8px 0;font-size:10px;color:var(--t3);font-family:var(--mono)"></div>
+            </div>
+          </div>
+
+          <!-- Exit reason breakdown -->
+          <div class="card">
+            <div class="card-head"><span class="card-label">Exit Reason Breakdown</span></div>
+            <table class="trade-tbl">
+              <thead>
+                <tr><th>Exit Reason</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Total P&amp;L</th></tr>
+              </thead>
+              <tbody id="an-exit-tbody">
+                <tr><td colspan="5" style="text-align:center;color:var(--t3);padding:20px">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div><!-- /analytics-content -->
+      </div>
+    </div>
+
     <!-- ═══ SETTINGS PAGE ═══ -->
     <div class="page" id="page-settings">
       <div class="settings-layout">
@@ -2216,8 +2376,9 @@ function showPage(id, navBtn, sideBtn, mobileBtn) {
   if (mobileBtn) { mobileBtn.classList.add('active'); }
   else           { document.querySelector(`.mobile-nav-item[data-page="${id}"]`)?.classList.add('active'); }
   // Sync desktop topbar tab
-  if (!navBtn) { document.querySelectorAll('.nav-tab').forEach((t,i) => { const pages=['dashboard','positions','trades','settings']; if(pages[i]===id) t.classList.add('active'); else t.classList.remove('active'); }); }
-  if (id === 'trades') fetchTrades();
+  if (!navBtn) { document.querySelectorAll('.nav-tab').forEach((t,i) => { const pages=['dashboard','positions','trades','analytics','settings']; if(pages[i]===id) t.classList.add('active'); else t.classList.remove('active'); }); }
+  if (id === 'trades')    fetchTrades();
+  if (id === 'analytics') fetchAnalytics();
 }
 
 // ── Settings panel navigation ──
@@ -3289,6 +3450,174 @@ async function pollNotifications() {
   } catch {}
 }
 
+// ── Analytics ──
+function _inr(v, showPlus=false) {
+  if (v == null || v === '') return '—';
+  const n = parseFloat(v);
+  if (isNaN(n)) return '—';
+  const s = '₹' + Math.abs(n).toLocaleString('en-IN', {maximumFractionDigits:0});
+  return n >= 0 ? (showPlus && n > 0 ? '+' + s : s) : '−' + s;
+}
+function _clr(v, invert=false) {
+  const n = parseFloat(v);
+  if (isNaN(n) || n === 0) return 'var(--t2)';
+  const pos = n > 0;
+  return (pos !== invert) ? 'var(--green)' : 'var(--red)';
+}
+
+function _drawEquityCurve(points) {
+  const svg = document.getElementById('an-equity-svg');
+  if (!points || points.length < 2) { svg.innerHTML = '<text x="400" y="75" text-anchor="middle" fill="var(--t3)" font-size="13">Not enough data</text>'; return; }
+  const vals = points.map(p => p.cumulative);
+  const minV = Math.min(...vals, 0);
+  const maxV = Math.max(...vals, 0);
+  const range = maxV - minV || 1;
+  const W = 800, H = 140, pad = 12;
+  const x = (i) => pad + (i / (vals.length - 1)) * (W - 2*pad);
+  const y = (v) => H - pad - ((v - minV) / range) * (H - 2*pad);
+  // Zero line
+  const zy = y(0);
+  let path = `M ${x(0)} ${y(vals[0])}`;
+  for (let i = 1; i < vals.length; i++) path += ` L ${x(i)} ${y(vals[i])}`;
+  // Area fill (gradient simulation: two paths)
+  let areaPos = `M ${x(0)} ${zy} L ${x(0)} ${y(vals[0])}`;
+  let areaNeg = `M ${x(0)} ${zy} L ${x(0)} ${y(vals[0])}`;
+  for (let i = 1; i < vals.length; i++) { areaPos += ` L ${x(i)} ${y(vals[i])}`; areaNeg += ` L ${x(i)} ${y(vals[i])}`; }
+  areaPos += ` L ${x(vals.length-1)} ${zy} Z`;
+  areaNeg += ` L ${x(vals.length-1)} ${zy} Z`;
+
+  const lastVal = vals[vals.length-1];
+  const lineColor = lastVal >= 0 ? 'var(--green)' : 'var(--red)';
+
+  svg.innerHTML = `
+    <defs>
+      <clipPath id="cp-pos"><rect x="${pad}" y="${pad}" width="${W-2*pad}" height="${Math.max(zy-pad,0)}"/></clipPath>
+      <clipPath id="cp-neg"><rect x="${pad}" y="${zy}" width="${W-2*pad}" height="${Math.max(H-zy-pad,0)}"/></clipPath>
+    </defs>
+    <line x1="${pad}" y1="${zy}" x2="${W-pad}" y2="${zy}" stroke="var(--line2)" stroke-width="1"/>
+    <path d="${areaPos}" clip-path="url(#cp-pos)" fill="rgba(45,214,152,0.12)"/>
+    <path d="${areaNeg}" clip-path="url(#cp-neg)" fill="rgba(247,82,82,0.12)"/>
+    <path d="${path}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${x(vals.length-1)}" cy="${y(vals[vals.length-1])}" r="4" fill="${lineColor}"/>
+  `;
+}
+
+function _drawWeeklyBars(weekly) {
+  const svg = document.getElementById('an-weekly-svg');
+  const lblDiv = document.getElementById('an-weekly-labels');
+  const keys = Object.keys(weekly);
+  const vals = keys.map(k => weekly[k]);
+  if (!vals.length) { svg.innerHTML = ''; lblDiv.innerHTML = ''; return; }
+  const maxAbs = Math.max(...vals.map(Math.abs), 1);
+  const W = 800, H = 100, midY = H / 2;
+  const barW = Math.floor((W / vals.length) * 0.6);
+  const gap  = W / vals.length;
+  let bars = '';
+  vals.forEach((v, i) => {
+    const cx = gap * i + gap / 2;
+    const barH = Math.abs(v) / maxAbs * (H / 2 - 6);
+    const color = v >= 0 ? 'var(--green)' : 'var(--red)';
+    const ry = v >= 0 ? midY - barH : midY;
+    bars += `<rect x="${cx - barW/2}" y="${ry}" width="${barW}" height="${Math.max(barH,2)}" rx="2" fill="${color}" fill-opacity="0.7"/>`;
+  });
+  svg.innerHTML = `
+    <line x1="0" y1="${midY}" x2="${W}" y2="${midY}" stroke="var(--line2)" stroke-width="1"/>
+    ${bars}
+  `;
+  lblDiv.innerHTML = keys.map(k => `<span>${k.replace(/\d{4}-W/,'W')}</span>`).join('');
+}
+
+async function fetchAnalytics() {
+  try {
+    const d = await (await fetch('/api/analytics')).json();
+    const content = document.getElementById('analytics-content');
+    const empty   = document.getElementById('analytics-empty');
+    if (!d.has_data) {
+      content.style.display = 'none';
+      empty.style.display   = 'block';
+      return;
+    }
+    empty.style.display   = 'none';
+    content.style.display = 'flex';
+
+    // Key metrics
+    const wrEl = document.getElementById('an-win-rate');
+    wrEl.textContent = d.win_rate + '%';
+    wrEl.style.color = d.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('an-win-loss').textContent = `${d.win_count} W / ${d.loss_count} L`;
+
+    const pfEl = document.getElementById('an-pf');
+    pfEl.textContent = d.profit_factor >= 999 ? '∞' : d.profit_factor.toFixed(2);
+    pfEl.style.color = d.profit_factor >= 1 ? 'var(--blue)' : 'var(--red)';
+
+    document.getElementById('an-mdd').textContent = _inr(d.max_drawdown);
+    document.getElementById('an-mdd-pct').textContent = d.max_drawdown_pct + '% of capital';
+
+    const ddeEl = document.getElementById('an-dde');
+    ddeEl.textContent = d.dd_efficiency.toFixed(2);
+    ddeEl.style.color = d.dd_efficiency >= 1 ? 'var(--purple)' : 'var(--red)';
+
+    document.getElementById('an-rr').textContent = d.rr_ratio.toFixed(2) + 'x';
+    document.getElementById('an-calmar').textContent = d.calmar_ratio >= 0 ? '+' + d.calmar_ratio.toFixed(2) : d.calmar_ratio.toFixed(2);
+
+    // Trade stats
+    document.getElementById('an-total').textContent = d.total_trades;
+    document.getElementById('an-avg-win').textContent  = _inr(d.avg_win);
+    document.getElementById('an-avg-loss').textContent = '−' + _inr(d.avg_loss);
+    document.getElementById('an-duration').textContent = d.avg_duration_mins + ' min';
+    const bestEl  = document.getElementById('an-best');
+    const worstEl = document.getElementById('an-worst');
+    bestEl.textContent  = '+' + _inr(d.best_trade);
+    bestEl.style.color  = 'var(--green)';
+    worstEl.textContent = '−' + _inr(Math.abs(d.worst_trade));
+    worstEl.style.color = 'var(--red)';
+    document.getElementById('an-gp').textContent = _inr(d.gross_profit);
+    document.getElementById('an-gl').textContent = '−' + _inr(d.gross_loss);
+
+    // Streak
+    const streakEl = document.getElementById('an-streak');
+    const streakIcon = document.getElementById('an-streak-icon');
+    const streakType = document.getElementById('an-streak-type');
+    streakEl.textContent = d.current_streak + ' in a row';
+    streakEl.style.color = d.streak_type === 'win' ? 'var(--green)' : 'var(--red)';
+    streakIcon.textContent = d.streak_type === 'win' ? '🔥' : '❄️';
+    streakType.textContent = d.streak_type === 'win' ? 'Winning streak' : 'Losing streak';
+
+    // Total PnL
+    const tpEl = document.getElementById('an-total-pnl');
+    tpEl.textContent = (d.total_pnl >= 0 ? '+' : '−') + _inr(Math.abs(d.total_pnl));
+    tpEl.style.color = d.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // Charts
+    _drawEquityCurve(d.equity_curve || []);
+    _drawWeeklyBars(d.weekly_pnl || {});
+
+    // Exit reasons table
+    const tbody = document.getElementById('an-exit-tbody');
+    const reasons = d.exit_reasons || {};
+    const rKeys = Object.keys(reasons).sort((a,b) => reasons[b].count - reasons[a].count);
+    if (rKeys.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t3);padding:20px">—</td></tr>';
+    } else {
+      tbody.innerHTML = rKeys.map(r => {
+        const rec = reasons[r];
+        const wr  = rec.count > 0 ? Math.round(rec.wins / rec.count * 100) : 0;
+        const pnlColor = rec.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        const pnlStr = (rec.pnl >= 0 ? '+' : '−') + '₹' + Math.abs(rec.pnl).toLocaleString('en-IN', {maximumFractionDigits:0});
+        return `<tr>
+          <td>${r}</td>
+          <td style="text-align:center">${rec.count}</td>
+          <td style="text-align:center;color:var(--green)">${rec.wins}</td>
+          <td style="text-align:center">${wr}%</td>
+          <td style="text-align:right;color:${pnlColor};font-family:var(--mono)">${pnlStr}</td>
+        </tr>`;
+      }).join('');
+    }
+  } catch(e) {
+    console.error('Analytics fetch failed', e);
+  }
+}
+
 poll();
 pollConnection();
 loadConfig();
@@ -3300,6 +3629,7 @@ setInterval(fetchLogs, 10000);
 setInterval(pollNotifications, 3000);
 fetchTrades();
 setInterval(fetchTrades, 15000);
+setInterval(fetchAnalytics, 30000);
 
 // ── PWA Service Worker ──
 if ('serviceWorker' in navigator) {
@@ -3326,6 +3656,10 @@ if ('serviceWorker' in navigator) {
   <button class="mobile-nav-item" data-page="trades" onclick="showPage('trades',null,null,this)">
     <span class="mobile-nav-icon">📋</span>
     <span>Trades</span>
+  </button>
+  <button class="mobile-nav-item" data-page="analytics" onclick="showPage('analytics',null,null,this)">
+    <span class="mobile-nav-icon">📊</span>
+    <span>Analytics</span>
   </button>
   <button class="mobile-nav-item" data-page="settings" onclick="showPage('settings',null,null,this)">
     <span class="mobile-nav-icon">⚙</span>
