@@ -232,7 +232,9 @@ body {
 }
 .sidebar-item:hover  { color: var(--t1); background: var(--surface2); border-left-color: var(--t3); }
 .sidebar-item.active { color: var(--t1); background: var(--surface2); border-left-color: var(--blue); }
-.sidebar-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.sidebar-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; filter: grayscale(0.3) opacity(0.75); transition: filter .15s, transform .15s; }
+.sidebar-item:hover  .sidebar-icon { filter: grayscale(0) opacity(1); transform: scale(1.1); }
+.sidebar-item.active .sidebar-icon { filter: grayscale(0) opacity(1) drop-shadow(0 0 3px currentColor); transform: scale(1.12); }
 
 .sidebar-group-label {
   font-size: 9px;
@@ -903,7 +905,7 @@ html.light .toggle-name      { color: #111827; }
 /* ══════════════════════════════════════════════
    MOBILE NAV & CTRL BAR — hidden on desktop
 ══════════════════════════════════════════════ */
-.mobile-nav, .mobile-ctrl-bar { display: none; }
+.mobile-nav, .mobile-ctrl-bar, .mobile-ctrl-fab { display: none; }
 
 /* ══════════════ TOAST NOTIFICATIONS ══════════════ */
 #toast-container {
@@ -967,8 +969,23 @@ html.light .toggle-name      { color: #111827; }
   transition: color .15s;
   flex-shrink: 0;
 }
-.mobile-nav-item.active { color: var(--blue); }
-.mobile-nav-icon { font-size: 18px; line-height: 1; }
+.mobile-nav-item.active { color: var(--t1); }
+.mobile-nav-icon {
+  font-size: 20px;
+  line-height: 1;
+  transition: transform .15s, filter .15s;
+  filter: grayscale(0.45) opacity(0.65);
+}
+.mobile-nav-item.active .mobile-nav-icon {
+  filter: grayscale(0) opacity(1) drop-shadow(0 0 4px currentColor);
+  transform: scale(1.15);
+}
+/* Per-icon accent colors (active label) */
+.mobile-nav-item.active[data-page="dashboard"] { color: #4f8ef7; }
+.mobile-nav-item.active[data-page="positions"] { color: #2dd698; }
+.mobile-nav-item.active[data-page="trades"]    { color: #f5a623; }
+.mobile-nav-item.active[data-page="analytics"] { color: #c757d8; }
+.mobile-nav-item.active[data-page="settings"]  { color: #06b6d4; }
 
 /* ══════════════════════════════════════════════
    TABLET (≤ 1100px)
@@ -1001,7 +1018,7 @@ html.light .toggle-name      { color: #111827; }
   /* ── Layout ── */
   .body    { overflow: visible; flex-direction: column; }
   .sidebar { display: none; }
-  .content { height: auto; overflow: visible; padding-bottom: 116px; }
+  .content { height: auto; overflow: visible; padding-bottom: 70px; }
   .page    { height: auto; overflow: visible; }
 
   /* ── Dashboard grid ── */
@@ -1079,22 +1096,54 @@ html.light .toggle-name      { color: #111827; }
     safe-area-inset-bottom: env(safe-area-inset-bottom);
   }
 
-  /* ── Mobile control bar (above nav) ── */
-  .mobile-ctrl-bar {
+  /* ── Mobile control FAB ── */
+  .mobile-ctrl-bar { display: none; }
+
+  .mobile-ctrl-fab {
     display: flex;
     position: fixed;
-    bottom: 56px; left: 0; right: 0;
-    padding: 6px 10px;
-    gap: 6px;
-    background: var(--surface);
-    border-top: 1px solid var(--line);
-    z-index: 199;
+    bottom: 66px;
+    right: 12px;
+    z-index: 210;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 7px;
   }
-  .mobile-ctrl-bar .ctrl-btn {
-    flex: 1;
-    padding: 7px 8px;
-    font-size: 10px;
-    gap: 4px;
+  .ctrl-fab-btn {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: none;
+    background: var(--blue);
+    color: #fff;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    transition: transform .15s, background .15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .ctrl-fab-btn:active { transform: scale(.9); }
+  .ctrl-fab-btn.open  { background: var(--red); }
+  .ctrl-fab-menu {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 130px;
+    animation: fab-in .18s ease;
+  }
+  .ctrl-fab-menu.open { display: flex; }
+  @keyframes fab-in {
+    from { opacity: 0; transform: translateY(10px) scale(.95); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .ctrl-fab-menu .ctrl-btn {
+    padding: 8px 10px;
+    font-size: 11px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
   }
 
   /* ── Tables: responsive ── */
@@ -1400,21 +1449,21 @@ html.light .toggle-name      { color: #111827; }
   <nav class="sidebar">
     <div class="sidebar-group-label">Overview</div>
     <button class="sidebar-item active" onclick="showPage('dashboard', null, this)">
-      <span class="sidebar-icon">◈</span> Dashboard
+      <span class="sidebar-icon">🎯</span> Dashboard
     </button>
     <button class="sidebar-item" onclick="showPage('positions', null, this)">
-      <span class="sidebar-icon">◧</span> Positions
+      <span class="sidebar-icon">💼</span> Positions
     </button>
     <button class="sidebar-item" onclick="showPage('trades', null, this)">
-      <span class="sidebar-icon">≡</span> Trade Log
+      <span class="sidebar-icon">📝</span> Trade Log
     </button>
     <button class="sidebar-item" onclick="showPage('analytics', null, this)">
-      <span class="sidebar-icon">◎</span> Analytics
+      <span class="sidebar-icon">🔬</span> Analytics
     </button>
 
     <div class="sidebar-group-label">System</div>
     <button class="sidebar-item" onclick="showPage('settings', null, this)">
-      <span class="sidebar-icon">⚙</span> Settings
+      <span class="sidebar-icon">⚙️</span> Settings
     </button>
 
     <div style="flex:1"></div>
@@ -1464,7 +1513,7 @@ html.light .toggle-name      { color: #111827; }
         </div>
       </div>
       <div id="conn-error" style="font-size:10px;color:var(--red);margin-top:4px;display:none"></div>
-      <button class="conn-reconnect-btn" onclick="reconnect()" style="margin-top:6px">↺ Reconnect</button>
+      <button class="conn-reconnect-btn" onclick="reconnect()" style="margin-top:6px">🔄 Reconnect</button>
     </div>
 
     <!-- Upstox fallback status -->
@@ -1483,10 +1532,10 @@ html.light .toggle-name      { color: #111827; }
     </div>
 
     <div style="padding: 0 10px 10px; display:flex; flex-direction:column; gap:6px; border-top: 1px solid var(--line); padding-top:10px;">
-      <button class="ctrl-btn ok" id="btn-approve-buy" onclick="approveBuy()">▶ Approve Buy</button>
-      <button class="ctrl-btn danger" id="btn-emergency-exit" onclick="emergencyExit()">⚠ Emergency Exit</button>
-      <button class="ctrl-btn danger" id="btn-stop-agent" onclick="stopAgent()">■ Stop Agent</button>
-      <button class="ctrl-btn ok" id="btn-start-agent" onclick="startAgent()" style="display:none;">▶ Start Agent</button>
+      <button class="ctrl-btn ok" id="btn-approve-buy" onclick="approveBuy()">✅ Approve Buy</button>
+      <button class="ctrl-btn danger" id="btn-emergency-exit" onclick="emergencyExit()">🚨 Emergency Exit</button>
+      <button class="ctrl-btn danger" id="btn-stop-agent" onclick="stopAgent()">⏹ Stop Agent</button>
+      <button class="ctrl-btn ok" id="btn-start-agent" onclick="startAgent()" style="display:none;">▶️ Start Agent</button>
     </div>
   </nav>
 
@@ -1523,7 +1572,7 @@ html.light .toggle-name      { color: #111827; }
           <!-- Google Sheet link -->
           <a class="kpi kpi-sheet-link" id="kpi-sheet-link" href="#" target="_blank" rel="noopener" title="Open Trade Log in Google Sheets">
             <div class="kpi-label">Trade Log</div>
-            <div class="kpi-val" style="font-size:28px; line-height:1.1">📊</div>
+            <div class="kpi-val" style="font-size:28px; line-height:1.1">📝</div>
             <div class="kpi-sub">Google Sheets</div>
           </a>
           <!-- DTE countdown ring -->
@@ -2055,13 +2104,13 @@ html.light .toggle-name      { color: #111827; }
 
         <!-- Settings nav -->
         <nav class="settings-nav">
-          <button class="settings-nav-item active" onclick="showSettingsPanel('credentials', this)">🔑 Credentials</button>
-          <button class="settings-nav-item" onclick="showSettingsPanel('trading', this)">📊 Trading</button>
-          <button class="settings-nav-item" onclick="showSettingsPanel('risk', this)">🛡 Risk Limits</button>
-          <button class="settings-nav-item" onclick="showSettingsPanel('regime', this)">📈 Regime</button>
-          <button class="settings-nav-item" onclick="showSettingsPanel('timing', this)">⏱ Timing</button>
+          <button class="settings-nav-item active" onclick="showSettingsPanel('credentials', this)">🔐 Credentials</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('trading', this)">💹 Trading</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('risk', this)">🛡️ Risk Limits</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('regime', this)">📐 Regime</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('timing', this)">⏰ Timing</button>
           <button class="settings-nav-item" onclick="showSettingsPanel('notifications', this)">🔔 Notifications</button>
-          <button class="settings-nav-item" onclick="showSettingsPanel('execution', this)">⚡ Execution</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('execution', this)">🚀 Execution</button>
         </nav>
 
         <!-- Settings panels -->
@@ -3318,14 +3367,14 @@ function updateButtonStates() {
 
   if (buyBtn) {
     buyBtn.disabled = buttonStates.approveBuy;
-    buyBtn.textContent = buttonStates.approveBuy ? '✓ Buy Approved' : '▶ Approve Buy';
+    buyBtn.textContent = buttonStates.approveBuy ? '✅ Buy Approved' : '✅ Approve Buy';
     if (buttonStates.approveBuy) buyBtn.classList.add('processing');
     else buyBtn.classList.remove('processing');
   }
 
   if (exitBtn) {
     exitBtn.disabled = buttonStates.emergencyExit;
-    exitBtn.textContent = buttonStates.emergencyExit ? '✓ Positions Closed' : '⚠ Emergency Exit';
+    exitBtn.textContent = buttonStates.emergencyExit ? '✅ Positions Closed' : '🚨 Emergency Exit';
     if (buttonStates.emergencyExit) exitBtn.classList.add('processing');
     else exitBtn.classList.remove('processing');
   }
@@ -3336,42 +3385,42 @@ function updateButtonStates() {
       stopBtn.style.display = 'none';
       startBtn.style.display = 'flex';
       startBtn.disabled = buttonStates.startAgent;
-      startBtn.textContent = buttonStates.startAgent ? '✓ Agent Starting...' : '▶ Start Agent';
+      startBtn.textContent = buttonStates.startAgent ? '⏳ Agent Starting...' : '▶️ Start Agent';
       if (buttonStates.startAgent) startBtn.classList.add('processing');
       else startBtn.classList.remove('processing');
     } else {
       startBtn.style.display = 'none';
       stopBtn.style.display = 'flex';
       stopBtn.disabled = false;
-      stopBtn.textContent = '■ Stop Agent';
+      stopBtn.textContent = '⏹ Stop Agent';
       stopBtn.classList.remove('processing');
     }
   }
 
-  // ── Sync mobile control bar ──
+  // ── Sync mobile FAB buttons ──
   const mBuy   = document.getElementById('m-btn-approve');
   const mExit  = document.getElementById('m-btn-exit');
   const mStop  = document.getElementById('m-btn-stop');
   const mStart = document.getElementById('m-btn-start');
   if (mBuy) {
     mBuy.disabled    = buttonStates.approveBuy;
-    mBuy.textContent = buttonStates.approveBuy ? '✓ Approved' : '▶ Approve';
+    mBuy.textContent = buttonStates.approveBuy ? '✅ Approved' : '✅ Approve';
   }
   if (mExit) {
     mExit.disabled    = buttonStates.emergencyExit;
-    mExit.textContent = buttonStates.emergencyExit ? '✓ Closed' : '⚠ Exit';
+    mExit.textContent = buttonStates.emergencyExit ? '✅ Closed' : '🚨 Exit';
   }
   if (mStop && mStart) {
     if (!agentRunning) {
       mStop.style.display  = 'none';
       mStart.style.display = 'flex';
       mStart.disabled      = buttonStates.startAgent;
-      mStart.textContent   = buttonStates.startAgent ? '...' : '▶ Start';
+      mStart.textContent   = buttonStates.startAgent ? '⏳ Starting...' : '▶️ Start';
     } else {
       mStart.style.display = 'none';
       mStop.style.display  = 'flex';
       mStop.disabled       = false;
-      mStop.textContent    = '■ Stop';
+      mStop.textContent    = '⏹ Stop';
     }
   }
 }
@@ -3427,6 +3476,26 @@ async function startAgent() {
     updateButtonStates();
   }, 2000);
 }
+
+function toggleCtrlFab() {
+  const menu   = document.getElementById('ctrl-fab-menu');
+  const toggle = document.getElementById('ctrl-fab-toggle');
+  const open   = menu.classList.toggle('open');
+  toggle.classList.toggle('open', open);
+  toggle.textContent = open ? '✕' : '⚡';
+}
+function closeCtrlFab() {
+  const menu   = document.getElementById('ctrl-fab-menu');
+  const toggle = document.getElementById('ctrl-fab-toggle');
+  menu.classList.remove('open');
+  toggle.classList.remove('open');
+  toggle.textContent = '⚡';
+}
+// Close FAB when tapping outside
+document.addEventListener('click', e => {
+  const fab = document.getElementById('mobile-ctrl-fab');
+  if (fab && !fab.contains(e.target)) closeCtrlFab();
+});
 
 async function reconnect() { await fetch('/api/reconnect', {method:'POST'}); }
 
@@ -3835,33 +3904,36 @@ if ('serviceWorker' in navigator) {
 <!-- ══════════ MOBILE BOTTOM NAV ══════════ -->
 <nav class="mobile-nav" id="mobile-nav">
   <button class="mobile-nav-item active" data-page="dashboard" onclick="showPage('dashboard',null,null,this)">
-    <span class="mobile-nav-icon">◉</span>
+    <span class="mobile-nav-icon">🎯</span>
     <span>Dashboard</span>
   </button>
   <button class="mobile-nav-item" data-page="positions" onclick="showPage('positions',null,null,this)">
-    <span class="mobile-nav-icon">☰</span>
+    <span class="mobile-nav-icon">💼</span>
     <span>Positions</span>
   </button>
   <button class="mobile-nav-item" data-page="trades" onclick="showPage('trades',null,null,this)">
-    <span class="mobile-nav-icon">📋</span>
+    <span class="mobile-nav-icon">📝</span>
     <span>Trades</span>
   </button>
   <button class="mobile-nav-item" data-page="analytics" onclick="showPage('analytics',null,null,this)">
-    <span class="mobile-nav-icon">📊</span>
+    <span class="mobile-nav-icon">🔬</span>
     <span>Analytics</span>
   </button>
   <button class="mobile-nav-item" data-page="settings" onclick="showPage('settings',null,null,this)">
-    <span class="mobile-nav-icon">⚙</span>
+    <span class="mobile-nav-icon">⚙️</span>
     <span>Settings</span>
   </button>
 </nav>
 
-<!-- ══════════ MOBILE CONTROL BAR ══════════ -->
-<div class="mobile-ctrl-bar" id="mobile-ctrl-bar">
-  <button class="ctrl-btn ok"     id="m-btn-approve" onclick="approveBuy()">▶ Approve</button>
-  <button class="ctrl-btn danger" id="m-btn-exit"    onclick="emergencyExit()">⚠ Exit</button>
-  <button class="ctrl-btn danger" id="m-btn-stop"    onclick="stopAgent()">■ Stop</button>
-  <button class="ctrl-btn ok"     id="m-btn-start"   onclick="startAgent()" style="display:none">▶ Start</button>
+<!-- ══════════ MOBILE CONTROL FAB ══════════ -->
+<div class="mobile-ctrl-fab" id="mobile-ctrl-fab">
+  <div class="ctrl-fab-menu" id="ctrl-fab-menu">
+    <button class="ctrl-btn ok"     id="m-btn-approve" onclick="approveBuy();closeCtrlFab()">✅ Approve</button>
+    <button class="ctrl-btn danger" id="m-btn-exit"    onclick="emergencyExit();closeCtrlFab()">🚨 Exit</button>
+    <button class="ctrl-btn danger" id="m-btn-stop"    onclick="stopAgent();closeCtrlFab()">⏹ Stop</button>
+    <button class="ctrl-btn ok"     id="m-btn-start"   onclick="startAgent();closeCtrlFab()" style="display:none">▶️ Start</button>
+  </div>
+  <button class="ctrl-fab-btn" id="ctrl-fab-toggle" onclick="toggleCtrlFab()">⚡</button>
 </div>
 
 <!-- ══════════ TRADE DETAIL MODAL ══════════ -->
