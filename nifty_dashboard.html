@@ -2514,11 +2514,11 @@ function showSettingsPanel(id, btn) {
 }
 
 function isAuthenticated() {
-  return sessionStorage.getItem('fifto-authenticated') === 'true';
+  return localStorage.getItem('fifto-authenticated') === 'true';
 }
 
 function setAuthenticated() {
-  sessionStorage.setItem('fifto-authenticated', 'true');
+  localStorage.setItem('fifto-authenticated', 'true');
   document.getElementById('login-overlay')?.classList.remove('open');
 }
 
