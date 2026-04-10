@@ -2408,6 +2408,16 @@ html.light .toggle-name      { color: #111827; }
 </div><!-- /body -->
 
 <script>
+// ── XSS-safe HTML escaping ──
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── Theme ──
 function toggleTheme() {
   const html = document.documentElement;
@@ -3080,7 +3090,7 @@ function renderPositions(d) {
 
   const entryTime = formatDateTime(p.entry_time);
 
-  const tid = p.trade_id || '';
+  const tid = escHtml(p.trade_id || '');
   tbody.innerHTML = `<tr onclick="${tid ? `showTradeDetail('${tid}')` : ''}" style="${tid ? 'cursor:pointer' : ''}" title="${tid ? 'Click for full details' : ''}">
     <td>${entryTime}</td>
     <td>${p.setup_type || 'Short Strangle'}</td>
@@ -3117,7 +3127,7 @@ async function fetchLogs() {
     const area = document.getElementById('log-area');
     area.innerHTML = d.lines.map(l => {
       const cls = l.includes('[INFO]')?'I': l.includes('[WARN]')?'W': l.includes('[ERROR]')?'E': l.includes('[TRADE]')?'T':'';
-      return `<div class="ll ${cls}">${l.trim()}</div>`;
+      return `<div class="ll ${cls}">${escHtml(l.trim())}</div>`;
     }).join('');
     area.scrollTop = area.scrollHeight;
   } catch {}
@@ -3144,15 +3154,16 @@ async function fetchTrades() {
           ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
           : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
       const exitTime = t.exit_time ? formatDateTime(t.exit_time) : '—';
-      return `<tr onclick="showTradeDetail('${t.trade_id}')" title="Click for full details">
+      const tid = escHtml(t.trade_id || '');
+      return `<tr onclick="showTradeDetail('${tid}')" title="Click for full details">
         <td>${exitTime}</td>
-        <td>${t.setup_type || '—'}</td>
-        <td>${t.ce_strike || '—'}</td>
-        <td>${t.pe_strike || '—'}</td>
+        <td>${escHtml(t.setup_type || '—')}</td>
+        <td>${escHtml(t.ce_strike || '—')}</td>
+        <td>${escHtml(t.pe_strike || '—')}</td>
         <td>₹${(t.premium_received||0).toFixed(0)}</td>
-        <td style="font-size:10px;color:var(--t3)">${t.exit_reason || (isOpen ? 'ACTIVE' : '—')}</td>
+        <td style="font-size:10px;color:var(--t3)">${escHtml(t.exit_reason || (isOpen ? 'ACTIVE' : '—'))}</td>
         <td>${pnlHtml}</td>
-        <td><button onclick="event.stopPropagation();deleteTrade('${t.trade_id}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:2px 6px" title="Delete">✕</button></td>
+        <td><button onclick="event.stopPropagation();deleteTrade('${tid}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:2px 6px" title="Delete">✕</button></td>
       </tr>`;
     }).join('');
   } catch {}
@@ -3522,7 +3533,8 @@ async function pollConnection() {
 // ── Upstox fallback ──
 async function pollUpstoxStatus() {
   try {
-    const u = await (await fetch('/api/upstox/status')).json();
+    const response = await fetch('/api/upstox/status');
+    const u = response.headers.get('content-type')?.includes('application/json') ? await response.json() : { connected: false };
     const dot   = document.getElementById('upstox-dot');
     const label = document.getElementById('upstox-status-label');
     const btn   = document.getElementById('upstox-login-btn');
@@ -3537,18 +3549,37 @@ async function pollUpstoxStatus() {
       label.style.color  = 'var(--red)';
       if (btn) { btn.textContent = '⚡ Connect Upstox'; btn.style.background = 'var(--green)'; btn.style.color = '#000'; }
     }
-  } catch {}
+  } catch (e) {
+    console.error('Upstox status poll failed', e);
+  }
 }
 
 async function upstoxLogin() {
+  const popup = window.open('', '_blank', 'width=500,height=700');
   try {
-    const r = await (await fetch('/api/upstox/login-url')).json();
-    if (r.ok && r.url) {
-      window.open(r.url, '_blank', 'width=500,height=700');
+    const response = await fetch('/api/upstox/login-url');
+    const contentType = response.headers.get('content-type') || '';
+    let r;
+    if (contentType.includes('application/json')) {
+      r = await response.json();
     } else {
+      const text = await response.text();
+      throw new Error('Invalid response from Upstox login URL: ' + text);
+    }
+    if (r.ok && r.url) {
+      if (popup) {
+        popup.location = r.url;
+      } else {
+        alert('Popup blocked. Please allow popups and try again.');
+      }
+    } else {
+      if (popup) { popup.close(); }
       alert('Upstox not configured: ' + (r.msg || 'unknown error'));
     }
-  } catch(e) { alert('Error: ' + e); }
+  } catch (e) {
+    if (popup) { popup.close(); }
+    alert('Upstox connect error: ' + e.message);
+  }
 }
 
 // Check if we just returned from Upstox OAuth

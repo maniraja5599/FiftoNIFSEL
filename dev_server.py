@@ -1793,6 +1793,9 @@ def _select_strikes_angelone(spot):
         LOG_LINES.append(f"[INFO]  [{_ts()}] AngelOne strike scan: combined premium ₹{combined} < min ₹{min_combined}, skipping")
         return None
 
+    # OI data is unavailable in this fallback path (direct LTP lookup, no option chain).
+    # Warn prominently so the operator knows liquidity has not been verified.
+    LOG_LINES.append(f"[WARN]  [{_ts()}] AngelOne fallback: OI data NOT available — liquidity unverified for CE {ce_strike} / PE {pe_strike}")
     LOG_LINES.append(f"[INFO]  [{_ts()}] Strikes via AngelOne: CE {ce_strike} @ ₹{ce_ltp:.0f} | PE {pe_strike} @ ₹{pe_ltp:.0f}")
     return {
         "expiry":    expiry_str,
@@ -2093,14 +2096,22 @@ def _execute_trade(signal):
         LOG_LINES.append(f"[TRADE] [{_ts()}] Executing BULL PUT SPREAD — Qty {qty}")
         LOG_LINES.append(f"[TRADE] [{_ts()}] SELL {pe_symbol} @ ₹{signal['pe_ltp']:.2f}")
         sell_oid = _place_order(pe_symbol, pe_token, qty, "SELL")
-        hedge_oid = None
-        if hedge_tok:
-            LOG_LINES.append(f"[TRADE] [{_ts()}] BUY {hedge_sym} (hedge)")
-            hedge_oid = _place_order(hedge_sym, hedge_tok, qty, "BUY")
         if not sell_oid:
             LOG_LINES.append(f"[ERROR] [{_ts()}] Bull Put Spread: SELL PE failed")
             state["signal_pending"] = False
             return False
+        hedge_oid = None
+        if hedge_tok:
+            LOG_LINES.append(f"[TRADE] [{_ts()}] BUY {hedge_sym} (hedge)")
+            hedge_oid = _place_order(hedge_sym, hedge_tok, qty, "BUY")
+            if not hedge_oid:
+                LOG_LINES.append(f"[ERROR] [{_ts()}] Bull Put Spread: hedge BUY failed — buying back sold PE to avoid naked short")
+                buyback = _place_order(pe_symbol, pe_token, qty, "BUY")
+                if not buyback:
+                    LOG_LINES.append(f"[ERROR] [{_ts()}] PE BUYBACK FAILED — NAKED SHORT! MANUAL INTERVENTION REQUIRED")
+                    _notify("🚨 Spread Partial Fill Crisis", f"PE {pe_symbol} sold but hedge failed AND PE buyback failed.\nManual intervention required immediately.", "danger")
+                state["signal_pending"] = False
+                return False
         premium    = signal["pe_ltp"]
         target_pct = _calc_target_pct_by_dte(signal.get("expiry", ""))
         sl_mult    = _calc_sl_mult_by_dte(signal.get("expiry", ""))
@@ -2158,14 +2169,22 @@ def _execute_trade(signal):
         LOG_LINES.append(f"[TRADE] [{_ts()}] Executing BEAR CALL SPREAD — Qty {qty}")
         LOG_LINES.append(f"[TRADE] [{_ts()}] SELL {ce_symbol} @ ₹{signal['ce_ltp']:.2f}")
         sell_oid = _place_order(ce_symbol, ce_token, qty, "SELL")
-        hedge_oid = None
-        if hedge_tok:
-            LOG_LINES.append(f"[TRADE] [{_ts()}] BUY {hedge_sym} (hedge)")
-            hedge_oid = _place_order(hedge_sym, hedge_tok, qty, "BUY")
         if not sell_oid:
             LOG_LINES.append(f"[ERROR] [{_ts()}] Bear Call Spread: SELL CE failed")
             state["signal_pending"] = False
             return False
+        hedge_oid = None
+        if hedge_tok:
+            LOG_LINES.append(f"[TRADE] [{_ts()}] BUY {hedge_sym} (hedge)")
+            hedge_oid = _place_order(hedge_sym, hedge_tok, qty, "BUY")
+            if not hedge_oid:
+                LOG_LINES.append(f"[ERROR] [{_ts()}] Bear Call Spread: hedge BUY failed — buying back sold CE to avoid naked short")
+                buyback = _place_order(ce_symbol, ce_token, qty, "BUY")
+                if not buyback:
+                    LOG_LINES.append(f"[ERROR] [{_ts()}] CE BUYBACK FAILED — NAKED SHORT! MANUAL INTERVENTION REQUIRED")
+                    _notify("🚨 Spread Partial Fill Crisis", f"CE {ce_symbol} sold but hedge failed AND CE buyback failed.\nManual intervention required immediately.", "danger")
+                state["signal_pending"] = False
+                return False
         premium    = signal["ce_ltp"]
         target_pct = _calc_target_pct_by_dte(signal.get("expiry", ""))
         sl_mult    = _calc_sl_mult_by_dte(signal.get("expiry", ""))
@@ -2383,28 +2402,48 @@ def _square_off_position():
     LOG_LINES.append(f"[TRADE] [{_ts()}] Squaring off {setup}...")
 
     # Buy back only the legs that were actually sold
+    _exit_failures = []
     if setup == "Bull Put Spread":
         # Buy back sold PE leg
         if pos.get("pe_symbol") and pos.get("pe_token"):
-            _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
+            oid = _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
+            if not oid:
+                _exit_failures.append(f"BUY {pos['pe_symbol']} failed")
         # Sell the hedge PE leg (we bought it at entry, sell it at exit)
         if pos.get("hedge_pe_symbol") and pos.get("hedge_pe_token"):
-            _place_order(pos["hedge_pe_symbol"], pos["hedge_pe_token"], qty, "SELL")
+            oid = _place_order(pos["hedge_pe_symbol"], pos["hedge_pe_token"], qty, "SELL")
+            if not oid:
+                _exit_failures.append(f"SELL hedge {pos['hedge_pe_symbol']} failed")
     elif setup == "Bear Call Spread":
         # Buy back sold CE leg
         if pos.get("ce_symbol") and pos.get("ce_token"):
-            _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
+            oid = _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
+            if not oid:
+                _exit_failures.append(f"BUY {pos['ce_symbol']} failed")
         # Sell the hedge CE leg
         if pos.get("hedge_ce_symbol") and pos.get("hedge_ce_token"):
-            _place_order(pos["hedge_ce_symbol"], pos["hedge_ce_token"], qty, "SELL")
+            oid = _place_order(pos["hedge_ce_symbol"], pos["hedge_ce_token"], qty, "SELL")
+            if not oid:
+                _exit_failures.append(f"SELL hedge {pos['hedge_ce_symbol']} failed")
     else:
         # Short Strangle — buy back both legs
+        ce_exit_oid = None
+        pe_exit_oid = None
         if pos.get("ce_symbol") and pos.get("ce_token"):
-            _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
+            ce_exit_oid = _place_order(pos["ce_symbol"], pos["ce_token"], qty, "BUY")
+            if not ce_exit_oid:
+                _exit_failures.append(f"BUY {pos['ce_symbol']} failed")
         if pos.get("pe_symbol") and pos.get("pe_token"):
-            _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
+            pe_exit_oid = _place_order(pos["pe_symbol"], pos["pe_token"], qty, "BUY")
+            if not pe_exit_oid:
+                _exit_failures.append(f"BUY {pos['pe_symbol']} failed")
 
-    final_pnl = round(pos.get("pnl", 0) * pos.get("quantity", 1), 2)
+    if _exit_failures:
+        msg = " | ".join(_exit_failures)
+        LOG_LINES.append(f"[ERROR] [{_ts()}] EXIT ORDER FAILURE — {msg} — MANUAL INTERVENTION REQUIRED")
+        _notify("🚨 Exit Order Failed", f"{msg}\nVerify broker position. Manual close may be required.", "danger")
+
+    final_pnl = round(pos.get("pnl", 0), 2)   # pos["pnl"] is already qty-multiplied
     state["closed_pnl"] += final_pnl        # accumulate realized P&L for the day
     state["daily_pnl"]   = state["closed_pnl"]
     # trades_today already incremented at entry — do NOT increment again here
@@ -2940,24 +2979,32 @@ def index():
 @app.route("/api/upstox/login-url")
 def upstox_login_url():
     """Return the Upstox OAuth login URL for the dashboard to open."""
-    if not _UPSTOX_API_KEY:
-        return jsonify({"ok": False, "msg": "Upstox API key not configured"})
-    import urllib.parse
-    url = (
-        "https://api.upstox.com/v2/login/authorization/dialog"
-        f"?response_type=code"
-        f"&client_id={_UPSTOX_API_KEY}"
-        f"&redirect_uri={urllib.parse.quote(_UPSTOX_REDIRECT, safe='')}"
-    )
-    return jsonify({"ok": True, "url": url})
+    try:
+        if not _UPSTOX_API_KEY:
+            return jsonify({"ok": False, "msg": "Upstox API key not configured"})
+        import urllib.parse
+        url = (
+            "https://api.upstox.com/v2/login/authorization/dialog"
+            f"?response_type=code"
+            f"&client_id={_UPSTOX_API_KEY}"
+            f"&redirect_uri={urllib.parse.quote(_UPSTOX_REDIRECT, safe='')}"
+        )
+        return jsonify({"ok": True, "url": url})
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox login-url error: {e}")
+        return jsonify({"ok": False, "msg": "Unable to get Upstox login URL"}), 500
 
 @app.route("/api/upstox/status")
 def upstox_status():
     """Return Upstox connection status."""
-    return jsonify({
-        "configured": bool(_UPSTOX_API_KEY),
-        "connected":  _upstox_available(),
-    })
+    try:
+        return jsonify({
+            "configured": bool(_UPSTOX_API_KEY),
+            "connected":  _upstox_available(),
+        })
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox status error: {e}")
+        return jsonify({"configured": False, "connected": False, "msg": "Upstox status unavailable"}), 500
 
 @app.route("/fifto_logo.png")
 def logo():
