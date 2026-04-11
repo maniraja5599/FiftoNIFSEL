@@ -219,7 +219,7 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
   <div class="hero">
     <div class="hero-tag">NIFTY Options AI Trading System</div>
     <div class="hero-title"><span class="fi">FI</span><span class="fto">FTO</span> AI Trading</div>
-    <div class="hero-sub">A fully-automated Short Strangle bot on NIFTY — signals, order execution, monitoring and exits, all on autopilot.</div>
+    <div class="hero-sub">A fully-automated NIFTY options bot — 3 setup types (Strangle, Bull Put Spread, Bear Call Spread), 16 entry conditions, DTE-tiered targets and SL, trailing breakeven lock.</div>
     <div class="hero-stats">
       <div class="hero-stat"><div class="hero-stat-val" style="color:var(--green)">₹15L</div><div class="hero-stat-lbl">Capital</div></div>
       <div class="hero-stat"><div class="hero-stat-val">3 Lots</div><div class="hero-stat-lbl">Per Trade</div></div>
@@ -229,10 +229,147 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
     </div>
   </div>
 
+  <!-- RECENT UPDATES -->
+  <div class="section">
+    <div class="section-title">Recent Updates</div>
+
+    <!-- Fast P&L Refresh -->
+    <div class="card" style="border-left:3px solid var(--green);margin-bottom:10px">
+      <div class="card-title">
+        <span style="font-size:18px">⚡</span>
+        Fast P&amp;L Refresh — every 5 seconds
+        <span class="badge green">New</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7">
+        A new background thread (<code>fast_ltp_refresh</code>) fetches position LTPs every <strong>5 seconds</strong>, so P&amp;L on the dashboard updates smoothly. The position monitor still runs every 30 s for SL/target checks — the 5 s thread is only for price display.
+      </div>
+    </div>
+
+    <!-- Selectable LTP Source -->
+    <div class="card" style="border-left:3px solid var(--blue);margin-bottom:10px">
+      <div class="card-title">
+        <span style="font-size:18px">🔀</span>
+        Selectable LTP Data Source
+        <span class="badge blue">New</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:10px">
+        You can now choose which broker feeds live prices. Three modes, switchable from the <strong>Open Positions tab</strong> or via API:
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px">
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+          <div style="font-weight:700;color:var(--t1);margin-bottom:4px">Auto <span class="badge green" style="font-size:9px">Default</span></div>
+          <div style="color:var(--t3)">Tries AngelOne first. Falls back to Upstox if AngelOne fails. Best for reliability.</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+          <div style="font-weight:700;color:var(--t1);margin-bottom:4px">AngelOne only</div>
+          <div style="color:var(--t3)">Uses AngelOne exclusively. No fallback. Use if Upstox token is stale.</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
+          <div style="font-weight:700;color:var(--t1);margin-bottom:4px">Upstox only</div>
+          <div style="color:var(--t3)">Uses Upstox exclusively. No fallback. Use if AngelOne is rate-limiting.</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--t3)">
+        API: <code style="color:var(--blue)">POST /api/ltp-source</code> with <code style="color:var(--amber)">{source: "auto" | "angel" | "upstox"}</code> &nbsp;·&nbsp; The dashboard shows which broker served the last price and when.
+      </div>
+    </div>
+
+    <!-- 30-day IV Percentile -->
+    <div class="card" style="border-left:3px solid var(--amber);margin-bottom:10px">
+      <div class="card-title">
+        <span style="font-size:18px">📊</span>
+        IV Check — 30-Day Historical Percentile
+        <span class="badge amber">Improved</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:10px">
+        The IV entry condition now uses a real 30-day rolling percentile instead of a fixed threshold. Each day's closing ATM IV is saved to <code>iv_history.json</code>. The logic:
+      </div>
+      <div class="flow" style="gap:0">
+        <div class="flow-step">
+          <div class="flow-num">≥10</div>
+          <div class="flow-body">
+            <div class="flow-label">Enough history → percentile check</div>
+            <div class="flow-desc">Uses 30-day percentile. Pass condition: <strong>IV percentile &gt; 40</strong> (current IV is in the top 60% of recent range). This adapts to changing market regimes.</div>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">&lt;10</div>
+          <div class="flow-body">
+            <div class="flow-label">Thin history → fallback check</div>
+            <div class="flow-desc">Falls back to raw ATM IV. Pass condition: <strong>IV ATM &gt; 10%</strong>. Label in dashboard shows "(fallback)" so you know which mode is active.</div>
+          </div>
+        </div>
+        <div class="flow-step" style="border-bottom:none">
+          <div class="flow-num">—</div>
+          <div class="flow-body">
+            <div class="flow-label">No IV data at all → skipped</div>
+            <div class="flow-desc">Check is skipped (shown as <span style="color:var(--t3)">—</span> in dashboard). Trade can still enter if all other checks pass.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- No-position pre-conditions card -->
+    <div class="card" style="border-left:3px solid var(--purple);margin-bottom:10px">
+      <div class="card-title">
+        <span style="font-size:18px">🔍</span>
+        "Why No Trade?" — Live Pre-condition Checklist
+        <span class="badge" style="background:var(--purple-bg);color:var(--purple);border:1px solid rgba(155,114,245,.2)">New</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7">
+        When no position is open, the <strong>Active Position card</strong> now shows every entry condition with a live pass/fail indicator. No more guessing why the bot hasn't entered.
+      </div>
+      <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 10px">
+          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Pre-conditions</div>
+          <div style="color:var(--t2)">Agent running · Market open · Entry window · Trades left today</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 10px">
+          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Setup checks</div>
+          <div style="color:var(--t2)">VIX · PCR · IV% · EMA flat/trend · Margin · Daily loss gate</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--t3)">
+        Each row shows: <span style="color:var(--green)">OK</span> / <span style="color:var(--red)">FAIL</span> / <span style="color:var(--t3)">—</span> (no data), plus the live value (e.g. VIX 14.3, PCR 0.97). A reason line at the top shows the last signal engine message.
+      </div>
+    </div>
+
+    <!-- P&L Summary Bar -->
+    <div class="card" style="border-left:3px solid var(--green)">
+      <div class="card-title">
+        <span style="font-size:18px">💰</span>
+        P&amp;L Summary Bar in Open Positions
+        <span class="badge green">New</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:10px">
+        The <strong>Open Positions tab</strong> now has a summary bar at the top with three numbers side by side:
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:11px;text-align:center">
+        <div style="background:var(--surface2);padding:10px 8px">
+          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Running P&amp;L</div>
+          <div style="font-family:var(--mono);font-weight:700;color:var(--green)">Live, updates every 5s</div>
+        </div>
+        <div style="background:var(--surface2);padding:10px 8px">
+          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target P&amp;L</div>
+          <div style="font-family:var(--mono);font-weight:700;color:var(--green)">Max profit at target</div>
+        </div>
+        <div style="background:var(--surface2);padding:10px 8px">
+          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss P&amp;L</div>
+          <div style="font-family:var(--mono);font-weight:700;color:var(--red)">Max loss at SL</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--t3)">
+        Below the P&amp;L bar is the data source selector (Auto / AngelOne / Upstox) showing which broker served the last price update and at what time.
+      </div>
+    </div>
+  </div>
+
   <!-- WHAT IS A SHORT STRANGLE -->
   <div class="section">
-    <div class="section-title">The Strategy</div>
+    <div class="section-title">The Strategy — 3 Setup Types</div>
     <div class="card">
+      <!-- Short Strangle -->
+      <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">① Short Strangle <span class="badge green">Neutral</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
         <div style="background:var(--red-bg);border:1px solid rgba(247,82,82,.2);border-radius:9px;padding:14px 16px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:6px">CE Leg — SELL Call</div>
@@ -245,7 +382,7 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
           <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23750 PE @ ₹186<br>Profit if NIFTY stays above 23750</div>
         </div>
       </div>
-      <div style="text-align:center;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px">
+      <div style="text-align:center;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:20px">
         <div style="font-size:11px;color:var(--t3);margin-bottom:8px">PROFIT ZONE — NIFTY stays between the two strikes</div>
         <div style="display:flex;align-items:center;justify-content:center;gap:0">
           <div style="font-size:11px;color:var(--red);font-weight:700">23750 PE</div>
@@ -254,6 +391,44 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
         </div>
         <div style="font-size:11px;color:var(--green);margin-top:8px;font-weight:600">Combined Premium = ₹192 + ₹186 = ₹378 collected</div>
         <div style="font-size:11px;color:var(--t3);margin-top:4px">Max profit: ₹378 × 195 = ₹73,710 &nbsp;|&nbsp; Both options expire worthless</div>
+      </div>
+
+      <!-- Bull Put Spread -->
+      <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">② Bull Put Spread <span class="badge blue">Bullish</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div style="background:var(--green-bg);border:1px solid rgba(45,214,152,.2);border-radius:9px;padding:14px 16px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:6px">Sell Leg — SELL OTM Put</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">Higher strike put (closer to ATM)</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23700 PE @ ₹120<br>Premium received</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px 16px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-bottom:6px">Hedge Leg — BUY Lower Put</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">Lower strike put (deeper OTM)</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23600 PE @ ₹65<br>Premium paid (caps max loss)</div>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:20px">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--green)">Net Premium = ₹120 − ₹65 = ₹55 collected &nbsp;|&nbsp; Max loss capped at spread width − net premium</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:6px">Target, SL and trail SL are all calculated on the <strong style="color:var(--t1)">net spread premium (₹55)</strong>, not the sold leg alone.</div>
+      </div>
+
+      <!-- Bear Call Spread -->
+      <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">③ Bear Call Spread <span class="badge amber">Bearish</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div style="background:var(--red-bg);border:1px solid rgba(247,82,82,.2);border-radius:9px;padding:14px 16px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:6px">Sell Leg — SELL OTM Call</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">Lower strike call (closer to ATM)</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23900 CE @ ₹100<br>Premium received</div>
+        </div>
+        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px 16px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-bottom:6px">Hedge Leg — BUY Higher Call</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t1)">Higher strike call (deeper OTM)</div>
+          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 24000 CE @ ₹50<br>Premium paid (caps max loss)</div>
+        </div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--amber)">Net Premium = ₹100 − ₹50 = ₹50 collected &nbsp;|&nbsp; Max loss capped at spread width − net premium</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:6px">Target, SL and trail SL are all calculated on the <strong style="color:var(--t1)">net spread premium (₹50)</strong>, not the sold leg alone.</div>
       </div>
     </div>
   </div>
@@ -267,32 +442,32 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
           <div class="flow-num">1</div>
           <div class="flow-body">
             <div class="flow-label">9:30 AM — Signal Engine Scans <span class="badge green">Every 5 min</span></div>
-            <div class="flow-desc">Checks all 8 conditions (VIX, margin, holiday, spot stability…). If all pass, finds the best CE + PE strikes with enough premium.</div>
-            <div class="flow-code">ATM = round(spot/50)×50 → walk up/down until LTP ≥ ₹40</div>
+            <div class="flow-desc">Checks all 16 conditions across 5 groups: pre-conditions → loss gates → market checks → trend detection → strike filters. Determines setup type (Strangle/Bull Put Spread/Bear Call Spread) from EMA trend + PCR. Margin check is display-only and does not block entry.</div>
+            <div class="flow-code">ATM = round(spot/50)×50 → walk up/down until LTP ≥ ₹40 → OI ≥ 3L → combined ≥ ₹150 (strangle)</div>
           </div>
         </div>
         <div class="flow-step">
           <div class="flow-num">2</div>
           <div class="flow-body">
             <div class="flow-label">Order Placement <span class="badge blue">AngelOne API</span></div>
-            <div class="flow-desc">SELL CE + SELL PE simultaneously. If one leg fails, the other is immediately bought back (partial fill recovery). On success, premium is locked in.</div>
-            <div class="flow-code">SELL NIFTY13APR2623850CE qty=195 + SELL NIFTY13APR2623750PE qty=195</div>
+            <div class="flow-desc">Three setup types supported. Strangle: SELL CE + SELL PE. Bull Put Spread: SELL PE + BUY lower PE. Bear Call Spread: SELL CE + BUY higher CE. If any leg fails, filled legs are immediately bought back (partial fill recovery). For spreads, the hedge LTP is fetched right after placement to compute the actual <strong>net spread premium</strong>.</div>
+            <div class="flow-code">Strangle: SELL 23850CE + SELL 23750PE &nbsp;|&nbsp; Bull Put: SELL 23700PE + BUY 23600PE</div>
           </div>
         </div>
         <div class="flow-step">
           <div class="flow-num">3</div>
           <div class="flow-body">
-            <div class="flow-label">Position Monitoring <span class="badge amber">Every 30 sec</span></div>
-            <div class="flow-desc">Fetches live LTP for both legs. Calculates open P&L. At 20% profit, trailing SL locks to breakeven. Watches for target / SL / time exits.</div>
-            <div class="flow-code">open_pnl = (entry_premium − current_cost) × 195</div>
+            <div class="flow-label">Position Monitoring <span class="badge amber">Every 5 sec (LTP) / 30 sec (SL check)</span></div>
+            <div class="flow-desc">Fetches live LTP for all legs including hedge. For spreads, current cost = short leg LTP − hedge leg LTP (net). Calculates open P&L. At 20% profit, trailing SL locks to breakeven. Watches for target / SL / time exits.</div>
+            <div class="flow-code">Strangle: current_cost = CE_ltp + PE_ltp &nbsp;|&nbsp; Spread: current_cost = sell_ltp − hedge_ltp</div>
           </div>
         </div>
         <div class="flow-step">
           <div class="flow-num">4</div>
           <div class="flow-body">
-            <div class="flow-label">Exit — BUY Back Both Legs</div>
-            <div class="flow-desc">Square off triggered by target hit, SL hit, dead zone (2:30 PM), or EOD (3:20 PM). Telegram alert sent. Trade recorded to local JSON + Google Sheets.</div>
-            <div class="flow-code">BUY CE + BUY PE → final_pnl saved → active_pos.json deleted</div>
+            <div class="flow-label">Exit — Square Off All Legs</div>
+            <div class="flow-desc">Square off triggered by target hit, SL hit, dead zone (2:30 PM), or EOD (3:20 PM). For spreads: BUY back the sold leg + SELL the hedge leg. Telegram alert sent. Trade recorded to local JSON + Google Sheets.</div>
+            <div class="flow-code">Spread exit: BUY sold_leg + SELL hedge_leg → net P&L saved → active_pos.json deleted</div>
           </div>
         </div>
         <div class="flow-step">
@@ -354,50 +529,235 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
 
   <!-- ENTRY CONDITIONS -->
   <div class="section">
-    <div class="section-title">Entry Conditions — All Must Pass</div>
-    <div class="card">
-      <div class="checks">
-        <div class="check-item">
-          <div class="check-icon">🌡️</div>
-          <div class="check-body"><div class="check-name">VIX Range</div><div class="check-desc">13 ≤ VIX ≤ 28<br>Too low = no premium; Too high = risky</div></div>
+    <div class="section-title">Entry Conditions — Complete Checklist</div>
+
+    <!-- Legend -->
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;font-size:11px">
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--red);display:inline-block"></span> Hard block — trade cannot enter</span>
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--amber);display:inline-block"></span> Optional — skipped when data unavailable</span>
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--blue);display:inline-block"></span> Display only — shown on dashboard, does not block</span>
+      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--purple);display:inline-block"></span> Strike-level filter — runs inside _select_strikes()</span>
+    </div>
+
+    <!-- GROUP 1: Pre-conditions -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">① Pre-conditions — Checked Before Any Scan</div>
+      <table class="tbl" style="width:100%">
+        <thead><tr><th>Condition</th><th>Rule</th><th>Type</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>🤖 Agent Running</td>
+            <td class="mono">bot_running = True</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Start/stop button on dashboard. Telegram <code>/run</code> / <code>/stop</code>. No scan happens when stopped.</td>
+          </tr>
+          <tr>
+            <td>🏦 Market Open</td>
+            <td class="mono">Mon–Fri, 9:15–15:30</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Weekday check + time range. Signal engine sleeps 5 min between checks when market is closed. No orders possible outside market hours.</td>
+          </tr>
+          <tr>
+            <td>⏰ Entry Window</td>
+            <td class="mono">9:30 AM – 11:00 AM</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Only scan for new trades in this window. Avoids 9:15–9:30 opening volatility and avoids entering too late (low theta decay benefit). Configurable via <code>entry_start</code> / <code>entry_end</code>.</td>
+          </tr>
+          <tr>
+            <td>🔢 Max Trades/Day</td>
+            <td class="mono">trades_today &lt; 3</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Hard cap at 3 trades per day (configurable: <code>max_trades_per_day</code>). Prevents over-trading after a loss. Counter resets at midnight. Incremented at entry, NOT at exit.</td>
+          </tr>
+          <tr>
+            <td>⏱️ Signal Cooldown</td>
+            <td class="mono">≥ 5 min since last signal</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Signal engine enforces a 5-minute cooldown between signal evaluations. Even if all checks pass, the engine won't fire again until 5 min has elapsed.</td>
+          </tr>
+          <tr>
+            <td>📡 Active Position</td>
+            <td class="mono">active_position = False</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>No new trade is opened while one is already running. Bot is single-position — one open trade at a time. Signal engine skips entirely if active_position is True.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- GROUP 2: Risk Gates -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">② Loss Gates — Circuit Breakers</div>
+      <table class="tbl" style="width:100%">
+        <thead><tr><th>Condition</th><th>Rule</th><th>Type</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>📉 Daily Loss Gate</td>
+            <td class="mono">daily_pnl &gt; −₹45,000</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Daily realized P&L must stay above the loss limit. Configurable: <code>daily_loss_limit</code>. Checked every cycle. Once hit, no new trades for the rest of the day. Gate resets at midnight.</td>
+          </tr>
+          <tr>
+            <td>📆 Weekly Loss Gate</td>
+            <td class="mono">week_pnl &gt; −₹60,000</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Sum of closed P&L from Mon–Sun week. Configurable: <code>weekly_loss_limit</code>. Protects against a run of consecutive losing days. Trades blocked for the rest of the week if hit.</td>
+          </tr>
+          <tr>
+            <td>📅 Monthly Loss Gate</td>
+            <td class="mono">month_pnl &gt; −₹1,50,000</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Sum of closed P&L for the calendar month. Configurable: <code>monthly_loss_limit</code>. Largest safety net — protects capital across the full month.</td>
+          </tr>
+          <tr>
+            <td>🔴 Stop-After-SL</td>
+            <td class="mono">_sl_hit_today = False</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>When <code>stop_after_sl = True</code> in config, the daily gate is force-set to False after any SL hit. No further trades for that day after a stop loss. Resets at midnight.</td>
+          </tr>
+          <tr>
+            <td>📅 NSE Holiday</td>
+            <td class="mono">today not in holiday_set</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>Holiday list is fetched from NSE API on startup each day. Falls back to a hard-coded set of known 2026 NSE F&amp;O holidays if the API call fails.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- GROUP 3: Market Condition Checks -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">③ Market Condition Checks — Run on Every Scan Cycle</div>
+      <table class="tbl" style="width:100%">
+        <thead><tr><th>Condition</th><th>Rule</th><th>Type</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>🌡️ VIX Range</td>
+            <td class="mono">13 ≤ VIX ≤ 28</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>India VIX must be in range. Below 13 = premiums too cheap to sell profitably. Above 28 = dangerous gamma, SL hit probability too high. Configurable: <code>vix_min</code> / <code>vix_max</code>. Refreshed every 15 s from AngelOne/Upstox.</td>
+          </tr>
+          <tr>
+            <td>📌 Spot Stability</td>
+            <td class="mono">|Δspot| &lt; 0.5% in 15 min</td>
+            <td><span class="badge red">Hard</span></td>
+            <td>NIFTY spot is tracked in a rolling history every 15 s. If the absolute % change in the last 15 minutes exceeds <code>spot_momentum_limit</code> (default 0.5%), entry is blocked. Avoids selling into a fast directional move.</td>
+          </tr>
+          <tr>
+            <td>⚖️ PCR Range</td>
+            <td class="mono">0.8 ≤ PCR ≤ 1.4</td>
+            <td><span class="badge amber">Optional</span></td>
+            <td>Put-Call Ratio from NSE option chain. Range [0.8, 1.4] means sentiment is not extreme. Passed when data is unavailable (None = skip). If PCR is outside range it means strong directional bias — skip neutral setups. Also used for setup-type selection: PCR ≥ 1.0 = bullish bias → Bull Put Spread; PCR ≤ 1.0 = bearish → Bear Call Spread.</td>
+          </tr>
+          <tr>
+            <td>📊 IV Percentile</td>
+            <td class="mono">IVP &gt; 40  (or IV_ATM &gt; 10%)</td>
+            <td><span class="badge amber">Optional</span></td>
+            <td>Primary: 30-day rolling historical percentile from <code>iv_history.json</code>. Pass = IVP &gt; 40 (current IV is in top 60% of recent history). When &lt; 10 days of history exist, falls back to raw ATM IV &gt; 10%. When no IV data at all: skipped (None). Ensures we only sell options when IV is relatively elevated and premiums are worth collecting.</td>
+          </tr>
+          <tr>
+            <td>📈 EMA Trend / Flat</td>
+            <td class="mono">Depends on trend</td>
+            <td><span class="badge amber">Optional</span></td>
+            <td>
+              <strong>EMA 9 vs EMA 21 on 15-min candles</strong> + ATR comparison.<br>
+              <strong>FLAT:</strong> spread ≤ 0.20× ATR &amp; slope_gap ≤ 0.08× ATR → Short Strangle allowed.<br>
+              <strong>UP:</strong> EMA9 &gt; EMA21, both sloping up, spread &gt; 0.30× ATR → Bull Put Spread.<br>
+              <strong>DOWN:</strong> EMA9 &lt; EMA21, both sloping down, spread &gt; 0.30× ATR → Bear Call Spread.<br>
+              For FLAT trend, if EMA check returns False (not flat), strangle entry is blocked. For UP/DOWN, the EMA check is skipped in <code>_all_checks_pass</code> (trend already known) but PCR must confirm direction.
+            </td>
+          </tr>
+          <tr>
+            <td>💰 Margin Available</td>
+            <td class="mono">avail_cash &gt; 0</td>
+            <td><span class="badge blue">Display Only</span></td>
+            <td>Available margin is fetched from AngelOne. Shown on the dashboard as an informational check but does <strong>not block entry</strong>. Broker will reject the order at placement time if margin is insufficient — that failure is handled by the partial fill recovery logic.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- GROUP 4: Trend → Setup Selection -->
+    <div class="card" style="margin-bottom:12px">
+      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">④ Trend Detection → Setup Type Selection</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px">
+        Before calling strike selection, the signal engine determines <strong>which setup to trade</strong> based on EMA trend + PCR confirmation. This happens every scan cycle once all checks above pass.
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:11px">
+        <div style="background:var(--surface2);border:1px solid rgba(45,214,152,.25);border-radius:9px;padding:14px">
+          <div style="font-weight:700;color:var(--green);margin-bottom:6px">FLAT Trend</div>
+          <div style="color:var(--t3);margin-bottom:6px;font-size:10px">Condition: EMA spread ≤ 0.20× ATR</div>
+          <div style="color:var(--t2)">→ <strong>Short Strangle</strong></div>
+          <div style="color:var(--t3);margin-top:4px">EMA flat check enforced.<br>If EMA is not flat → skip this cycle.</div>
         </div>
-        <div class="check-item">
-          <div class="check-icon">⏰</div>
-          <div class="check-body"><div class="check-name">Entry Window</div><div class="check-desc">9:30 AM – 11:00 AM<br>Avoid open volatility + late theta</div></div>
+        <div style="background:var(--surface2);border:1px solid rgba(79,142,247,.25);border-radius:9px;padding:14px">
+          <div style="font-weight:700;color:var(--blue);margin-bottom:6px">UP Trend + PCR ≥ 1.0</div>
+          <div style="color:var(--t3);margin-bottom:6px;font-size:10px">EMA9 &gt; EMA21, both slopes positive</div>
+          <div style="color:var(--t2)">→ <strong>Bull Put Spread</strong></div>
+          <div style="color:var(--t3);margin-top:4px">SELL OTM PE + BUY PE 100pts lower.<br>PCR ≥ 1 confirms bullish sentiment.</div>
         </div>
-        <div class="check-item">
-          <div class="check-icon">📉</div>
-          <div class="check-body"><div class="check-name">Daily Gate</div><div class="check-desc">Daily P&L > −₹45,000<br>Stops after hitting loss limit</div></div>
-        </div>
-        <div class="check-item">
-          <div class="check-icon">💰</div>
-          <div class="check-body"><div class="check-name">Margin Available</div><div class="check-desc">Available cash > 0<br>Cannot trade without funds</div></div>
-        </div>
-        <div class="check-item">
-          <div class="check-icon">📅</div>
-          <div class="check-body"><div class="check-name">No Holiday</div><div class="check-desc">NSE F&O holiday list<br>No trading on market holidays</div></div>
-        </div>
-        <div class="check-item">
-          <div class="check-icon">📌</div>
-          <div class="check-body"><div class="check-name">Spot Stability</div><div class="check-desc">NIFTY moved &lt; 0.5% in 15 min<br>Avoid entering during fast moves</div></div>
-        </div>
-        <div class="check-item">
-          <div class="check-icon">🔢</div>
-          <div class="check-body"><div class="check-name">Max Trades</div><div class="check-desc">Trades today &lt; 3<br>Prevents over-trading</div></div>
-        </div>
-        <div class="check-item">
-          <div class="check-icon">⚖️</div>
-          <div class="check-body"><div class="check-name">PCR Range <span class="badge amber">Optional</span></div><div class="check-desc">0.8 ≤ PCR ≤ 1.4<br>Sentiment not extreme</div></div>
+        <div style="background:var(--surface2);border:1px solid rgba(247,82,82,.25);border-radius:9px;padding:14px">
+          <div style="font-weight:700;color:var(--red);margin-bottom:6px">DOWN Trend + PCR ≤ 1.0</div>
+          <div style="color:var(--t3);margin-bottom:6px;font-size:10px">EMA9 &lt; EMA21, both slopes negative</div>
+          <div style="color:var(--t2)">→ <strong>Bear Call Spread</strong></div>
+          <div style="color:var(--t3);margin-top:4px">SELL OTM CE + BUY CE 100pts higher.<br>PCR ≤ 1 confirms bearish sentiment.</div>
         </div>
       </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--t3);background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 12px">
+        <strong style="color:var(--amber)">Fallback:</strong> If trend is UP/DOWN but PCR doesn't confirm (e.g. trend UP but PCR &lt; 1.0), falls back to Short Strangle — but only if EMA is flat. If EMA is not flat in this case, the cycle is skipped entirely.
+      </div>
     </div>
+
+    <!-- GROUP 5: Strike Selection Filters -->
+    <div class="card">
+      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">⑤ Strike Selection Filters — Run Inside _select_strikes()</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px">
+        These filters apply <em>after</em> the setup type is chosen. They validate whether valid strikes exist with enough premium and liquidity. If any fails, no signal is generated for that cycle.
+      </div>
+      <table class="tbl" style="width:100%">
+        <thead><tr><th>Filter</th><th>Rule</th><th>Applies To</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>💵 Min Leg Premium</td>
+            <td class="mono">LTP ≥ ₹40</td>
+            <td>All setups</td>
+            <td>Each leg's LTP must be ≥ <code>min_premium</code> (₹40). Walk OTM in ₹50 strike steps from ATM until a qualifying strike is found (up to ₹500 away). If no strike qualifies, no signal.</td>
+          </tr>
+          <tr>
+            <td>💎 Min Combined Premium</td>
+            <td class="mono">CE_LTP + PE_LTP ≥ ₹150</td>
+            <td>Strangle only</td>
+            <td>Combined CE + PE premium must be ≥ <code>min_combined_premium</code> (₹150). Ensures the strangle collects enough premium to cover brokerage and still profit. <strong>Not applied to spreads</strong> (only one leg is sold).</td>
+          </tr>
+          <tr>
+            <td>📊 OI Filter</td>
+            <td class="mono">OI ≥ 3,00,000</td>
+            <td>Per-setup leg only</td>
+            <td>Open Interest at the selected strike must be ≥ <code>min_strike_oi</code> (3 lakh contracts). Ensures adequate liquidity — low OI = slippage risk. <strong>Strangle:</strong> both CE and PE must pass. <strong>Bull Put Spread:</strong> only PE checked. <strong>Bear Call Spread:</strong> only CE checked.</td>
+          </tr>
+          <tr>
+            <td>📈 20-Day Straddle Avg</td>
+            <td class="mono">ATM_straddle ≥ 80% of 20d avg</td>
+            <td>Strangle only</td>
+            <td>ATM straddle (CE + PE at ATM) is compared against the 20-day rolling average premium stored in <code>straddle_history.json</code>. If today's straddle is &lt; 80% of the average, premiums are abnormally cheap — entry blocked. Today's premium is also recorded for future averaging. <strong>Skipped for spread setups.</strong></td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px;font-size:11px;color:var(--t3);background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 12px">
+        <strong style="color:var(--amber)">ATM calculation:</strong> <code>ATM = round(spot / 50) × 50</code>. Strikes walk from ATM+50 upward for CE, ATM−50 downward for PE, in ₹50 increments. First strike with LTP ≥ ₹40 is selected.
+      </div>
+    </div>
+
   </div>
 
   <!-- DTE-TIERED RISK -->
   <div class="section">
     <div class="section-title">Target &amp; Stop Loss — DTE Tiered</div>
     <div class="card">
-      <div style="font-size:12px;color:var(--t2);margin-bottom:14px">Risk/reward auto-adjusts based on days remaining to expiry. More DTE = conservative targets.</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Risk/reward auto-adjusts based on days remaining to expiry. More DTE = conservative targets.</div>
+      <div style="font-size:11px;color:var(--amber);background:var(--amber-bg);border:1px solid rgba(245,166,35,.2);border-radius:7px;padding:7px 12px;margin-bottom:14px">
+        <strong>Spreads:</strong> All percentages apply to the <strong>net spread premium</strong> (sell leg LTP − hedge leg LTP). Example: SELL PE ₹120 − BUY PE ₹65 = net ₹55. Target &amp; SL calculated on ₹55, not ₹120.
+      </div>
       <div class="dte-grid">
         <div class="dte-card expiry">
           <div class="dte-label">Days to Expiry</div>
@@ -438,9 +798,9 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
       </div>
       <div style="margin-top:14px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:12px 14px">
         <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:6px">🔒 Trailing SL — Breakeven Lock</div>
-        <div style="font-size:11px;color:var(--t2)">When profit reaches <strong style="color:var(--t1)">20%</strong> of premium collected, stop loss automatically tightens to breakeven (= entry premium). Worst case after trail: <strong style="color:var(--green)">₹0 loss</strong>.</div>
+        <div style="font-size:11px;color:var(--t2)">When profit reaches <strong style="color:var(--t1)">20%</strong> of premium collected, stop loss automatically tightens to breakeven (= entry premium). Worst case after trail: <strong style="color:var(--green)">₹0 loss</strong>. For spreads, "entry premium" is the net spread premium (sold leg − hedge leg).</div>
         <div style="font-family:var(--mono);font-size:11px;color:var(--green);margin-top:8px;background:var(--surface3);padding:6px 10px;border-radius:6px">
-          Premium ₹378 × 20% = ₹75.6 saved → SL locks at ₹378 (entry)
+          Strangle: Net ₹378 × 20% = ₹75.6 → SL locks at ₹378 &nbsp;|&nbsp; Spread: Net ₹55 × 20% = ₹11 → SL locks at ₹55
         </div>
       </div>
     </div>
@@ -454,13 +814,13 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
         <div class="exit-row">
           <div class="exit-badge">🎯</div>
           <div class="exit-name">Target Hit</div>
-          <div class="exit-cond">current_cost ≤ entry − target</div>
+          <div class="exit-cond">current_cost ≤ entry_prem − target &nbsp;<span style="color:var(--t3);font-size:10px">(net spread for spreads)</span></div>
           <div class="exit-result profit">PROFIT</div>
         </div>
         <div class="exit-row">
           <div class="exit-badge">🛑</div>
           <div class="exit-name">Stop Loss Hit</div>
-          <div class="exit-cond">current_cost > stop_loss</div>
+          <div class="exit-cond">current_cost > sl &nbsp;<span style="color:var(--t3);font-size:10px">(net spread for spreads)</span></div>
           <div class="exit-result loss">LOSS</div>
         </div>
         <div class="exit-row">
@@ -515,7 +875,7 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
 
   <!-- GOOGLE SHEETS -->
   <div class="section">
-    <div class="section-title">Google Sheets — 22 Column Trade Log</div>
+    <div class="section-title">Google Sheets — Trade Log</div>
     <div class="card" style="padding:0;overflow:hidden">
       <table class="tbl">
         <thead><tr><th>#</th><th>Column</th><th>Written</th><th>Example</th></tr></thead>
@@ -523,17 +883,19 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
           <tr><td class="mono">1</td><td>Trade ID</td><td>Entry</td><td class="mono c-blue">T1775708570</td></tr>
           <tr><td class="mono">2</td><td>Entry Time</td><td>Entry</td><td class="mono">09-04-2026 09:52:50</td></tr>
           <tr><td class="mono">3</td><td>Exit Time</td><td>Exit</td><td class="mono">09-04-2026 14:30:00</td></tr>
-          <tr><td class="mono">4–8</td><td>Setup / CE Strike / PE Strike / CE Symbol / PE Symbol</td><td>Entry</td><td class="mono">Short Strangle, 23850, 23750</td></tr>
-          <tr><td class="mono">9–10</td><td>Qty / Premium</td><td>Entry</td><td class="mono">195 / ₹378.45</td></tr>
+          <tr><td class="mono">4–8</td><td>Setup / CE Strike / PE Strike / CE Symbol / PE Symbol</td><td>Entry</td><td class="mono">Bull Put Spread, —, 23700</td></tr>
+          <tr><td class="mono">9–10</td><td>Qty / Premium</td><td>Entry</td><td class="mono">195 / ₹55.00 <span style="color:var(--t3);font-size:10px">(net for spreads)</span></td></tr>
           <tr><td class="mono c-green">11</td><td><strong>CE Entry LTP</strong></td><td>Entry</td><td class="mono c-green">₹192.30</td></tr>
-          <tr><td class="mono c-green">12</td><td><strong>PE Entry LTP</strong></td><td>Entry</td><td class="mono c-green">₹186.15</td></tr>
+          <tr><td class="mono c-green">12</td><td><strong>PE Entry LTP</strong></td><td>Entry</td><td class="mono c-green">₹120.00 <span style="color:var(--t3);font-size:10px">(sold leg)</span></td></tr>
           <tr><td class="mono c-red">13</td><td><strong>CE Exit LTP</strong></td><td>Exit</td><td class="mono c-red">₹216.00</td></tr>
-          <tr><td class="mono c-red">14</td><td><strong>PE Exit LTP</strong></td><td>Exit</td><td class="mono c-red">₹154.55</td></tr>
-          <tr><td class="mono">15–17</td><td>Target / Initial SL / Final SL</td><td>Entry/Exit</td><td class="mono">₹68.12 / ₹473 / ₹378</td></tr>
+          <tr><td class="mono c-red">14</td><td><strong>PE Exit LTP</strong></td><td>Exit</td><td class="mono c-red">₹98.00 <span style="color:var(--t3);font-size:10px">(sold leg)</span></td></tr>
+          <tr><td class="mono">15–17</td><td>Target / Initial SL / Final SL</td><td>Entry/Exit</td><td class="mono">₹24.75 / ₹68.75 / ₹55.00 <span style="color:var(--t3);font-size:10px">(net basis)</span></td></tr>
           <tr><td class="mono">18</td><td>Trail Locked</td><td>Exit</td><td class="mono c-amber">Yes / No</td></tr>
           <tr><td class="mono c-green">19</td><td><strong>P&amp;L</strong></td><td>Exit</td><td class="mono c-green">+₹7,137</td></tr>
           <tr><td class="mono">20</td><td>Exit Reason</td><td>Exit</td><td class="mono">TARGET / DEAD_ZONE / SL</td></tr>
           <tr><td class="mono">21–22</td><td>Expiry / Duration</td><td>Entry/Exit</td><td class="mono">13-Apr-2026 / 295 min</td></tr>
+          <tr><td class="mono c-blue">23</td><td><strong>Hedge PE Exit LTP</strong></td><td>Exit</td><td class="mono c-blue">₹42.00 <span style="color:var(--t3);font-size:10px">(spread only)</span></td></tr>
+          <tr><td class="mono c-blue">24</td><td><strong>Hedge CE Exit LTP</strong></td><td>Exit</td><td class="mono c-blue">₹28.50 <span style="color:var(--t3);font-size:10px">(spread only)</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -605,10 +967,11 @@ pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
     <div class="section-title">File Structure</div>
     <div class="card">
       <div class="files">
-        <div class="file-row"><div class="file-icon">🐍</div><div><div class="file-name">dev_server.py</div><div class="file-desc">Main server — Flask API + all trading logic (~2,400 lines). Signal engine, order placement, position monitor, P&L, Sheets, Telegram.</div></div></div>
+        <div class="file-row"><div class="file-icon">🐍</div><div><div class="file-name">dev_server.py</div><div class="file-desc">Main server — Flask API + all trading logic (~3,700 lines). Signal engine, order placement, position monitor, fast LTP refresh, P&L, Sheets, Telegram.</div></div></div>
         <div class="file-row"><div class="file-icon">🌐</div><div><div class="file-name">nifty_dashboard.html</div><div class="file-desc">Single-file web dashboard. Real-time UI with CE/PE position card, trade log modal, settings panel. PWA-ready.</div></div></div>
         <div class="file-row"><div class="file-icon">💾</div><div><div class="file-name">trades.json</div><div class="file-desc">All trade records (open + closed). Survives restarts. Source of truth for trade history and daily P&L recovery.</div></div></div>
         <div class="file-row"><div class="file-icon">🔴</div><div><div class="file-name">active_pos.json</div><div class="file-desc">Full snapshot of current open position. Written on entry, updated on trailing SL. Deleted on exit. Used for crash recovery.</div></div></div>
+        <div class="file-row"><div class="file-icon">📈</div><div><div class="file-name">iv_history.json</div><div class="file-desc">Rolling 30-day ATM IV history (one entry per trading day). Used to compute IV percentile for the entry check. Falls back to raw ATM IV check when &lt; 10 days exist. Keeps last 60 days.</div></div></div>
         <div class="file-row"><div class="file-icon">🔑</div><div><div class="file-name">.env</div><div class="file-desc">API keys: ANGEL_API_KEY, TELEGRAM_TOKEN, GSHEET_ID, OPENAI_API_KEY. Never committed to git.</div></div></div>
         <div class="file-row"><div class="file-icon">📋</div><div><div class="file-name">gsheet_creds.json</div><div class="file-desc">Google Service Account credentials for Sheets API access. Never committed to git.</div></div></div>
         <div class="file-row"><div class="file-icon">📱</div><div><div class="file-name">manifest.json + sw.js</div><div class="file-desc">PWA files — makes dashboard installable on mobile (Android + iOS). Service worker caches shell, API always live.</div></div></div>

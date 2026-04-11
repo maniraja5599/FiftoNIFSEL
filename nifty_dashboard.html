@@ -906,6 +906,7 @@ html.light .toggle-name      { color: #111827; }
    MOBILE NAV & CTRL BAR — hidden on desktop
 ══════════════════════════════════════════════ */
 .mobile-nav, .mobile-ctrl-bar, .mobile-ctrl-fab { display: none; }
+.mob-broker-chip { display: none; }   /* hidden on desktop, shown on mobile */
 
 /* ══════════════ TOAST NOTIFICATIONS ══════════════ */
 #toast-container {
@@ -1003,7 +1004,7 @@ html.light .toggle-name      { color: #111827; }
 @media (max-width: 768px) {
 
   /* ── Topbar ── */
-  .topbar        { padding: 0 12px; gap: 8px; height: 50px; min-height: 50px; }
+  .topbar        { padding: 0 12px; gap: 8px; height: 50px; min-height: 50px; position: sticky; top: 0; z-index: 200; }
   .topbar-middle { display: none; }
   .clock         { display: none; }
   #mkt-pill      { display: none; }
@@ -1014,6 +1015,8 @@ html.light .toggle-name      { color: #111827; }
   .index-chip-val   { font-size: 12px; }
   .theme-btn     { width: 30px; height: 30px; font-size: 14px; }
   #status-pill   { font-size: 9px; padding: 2px 7px; }
+  .mob-broker-chip { display: flex; align-items: center; gap: 3px; }
+  .right-col .card .ck { padding: 6px 0; }
 
   /* ── Layout ── */
   .body    { overflow: visible; flex-direction: column; }
@@ -1055,33 +1058,42 @@ html.light .toggle-name      { color: #111827; }
   .right-col { flex-direction: column; }
 
   /* ── Settings ── */
-  .settings-layout { grid-template-columns: 1fr; height: auto; }
+  .settings-layout { grid-template-columns: 1fr; height: auto; overflow: visible; }
   .settings-nav {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    flex-direction: unset;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--line);
-    padding: 6px 10px;
-    gap: 0;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    padding: 8px;
+    gap: 6px;
+    height: auto !important;
   }
-  .settings-nav::-webkit-scrollbar { display: none; }
   .settings-nav-item {
     white-space: nowrap;
     border-left: none !important;
-    border-bottom: 2px solid transparent;
-    padding: 7px 14px;
-    border-radius: 0;
-    flex-shrink: 0;
+    border-bottom: none !important;
+    border: 1px solid var(--line2) !important;
+    border-radius: 8px !important;
+    padding: 9px 10px;
+    font-size: 12px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: var(--surface2);
+    color: var(--t2);
   }
   .settings-nav-item.active {
-    background: transparent;
-    border-left-color: transparent !important;
-    border-bottom-color: var(--blue);
+    background: var(--blue) !important;
+    color: #fff !important;
+    border-color: var(--blue) !important;
+    border-left-color: var(--blue) !important;
   }
-  .settings-body { padding: 14px; }
+  .settings-body { padding: 14px; overflow: visible; height: auto; }
+  .settings-panel { height: auto; }
+  .settings-panel.active { display: block; height: auto; overflow: visible; }
   .input-row, .input-row-3 { grid-template-columns: 1fr; }
 
   /* ── Mobile bottom nav ── */
@@ -1418,6 +1430,15 @@ html.light .toggle-name      { color: #111827; }
   </nav>
 
   <div class="topbar-right">
+    <!-- Mobile-only broker connection status -->
+    <div class="mob-broker-chip" title="AngelOne connection">
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--red);display:inline-block;flex-shrink:0" id="mob-angel-dot"></span>
+      <span style="font-size:10px;color:var(--t2);font-family:var(--mono);font-weight:600">AO</span>
+    </div>
+    <div class="mob-broker-chip" title="Upstox connection">
+      <span style="width:7px;height:7px;border-radius:50%;background:var(--t3);display:inline-block;flex-shrink:0" id="mob-upstox-dot"></span>
+      <span style="font-size:10px;color:var(--t2);font-family:var(--mono);font-weight:600">UX</span>
+    </div>
     <div class="index-chip">
       <span class="index-chip-label">Nifty</span>
       <span class="index-chip-val" id="nifty-spot">—</span>
@@ -1603,8 +1624,20 @@ html.light .toggle-name      { color: #111827; }
               <span class="card-label">Active Position</span>
               <span id="pos-pill" style="font-size:10px; color:var(--t3)">No position</span>
             </div>
-            <div id="no-pos" style="color:var(--t2); font-size:12px; padding:4px 0">
-              Waiting for a valid setup...
+            <div id="no-pos" style="padding:2px 0">
+              <div id="no-pos-reason" style="color:var(--t2);font-size:11px;margin-bottom:8px;font-style:italic">Waiting for a valid setup...</div>
+              <!-- entry pre-conditions -->
+              <div class="ck"><div class="ck-dot wait" id="npck-bot-dot"></div><div class="ck-name">Agent running</div><div class="ck-val" id="npck-bot">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-mkt-dot"></div><div class="ck-name">Market open</div><div class="ck-val" id="npck-mkt">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-win-dot"></div><div class="ck-name">Entry window</div><div class="ck-val" id="npck-win">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-trd-dot"></div><div class="ck-name">Trades left today</div><div class="ck-val" id="npck-trd">—</div></div>
+              <!-- setup checks -->
+              <div class="ck"><div class="ck-dot wait" id="npck-vix-dot"></div><div class="ck-name">VIX (13–28)</div><div class="ck-val" id="npck-vix">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-vix-v"></div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-pcr-dot"></div><div class="ck-name">PCR (0.8–1.4)</div><div class="ck-val" id="npck-pcr">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-pcr-v"></div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-iv-dot"></div><div class="ck-name">IV% &gt;40</div><div class="ck-val" id="npck-iv">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-iv-v"></div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-ema-dot"></div><div class="ck-name">EMA flat / trend</div><div class="ck-val" id="npck-ema">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-ema-v"></div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-margin-dot"></div><div class="ck-name">Margin available</div><div class="ck-val" id="npck-margin">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-gate-dot"></div><div class="ck-name">Daily loss gate</div><div class="ck-val" id="npck-gate">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-gate-v"></div></div>
             </div>
             <div id="has-pos" style="display:none">
               <!-- Unrealised P&L -->
@@ -1637,6 +1670,10 @@ html.light .toggle-name      { color: #111827; }
                       <span class="pos-leg-lbl">Qty / Lots</span>
                       <span class="pos-leg-val" id="pos-qty-ce" style="font-size:11px;color:var(--t2)">—</span>
                     </div>
+                    <div class="pos-leg-row" style="padding-top:4px;border-top:1px solid var(--border);margin-top:4px">
+                      <span class="pos-leg-lbl">Leg P&amp;L</span>
+                      <span class="pos-leg-val" id="ce-leg-pnl" style="font-size:12px">—</span>
+                    </div>
                   </div>
                 </div>
                 <!-- PE leg -->
@@ -1660,6 +1697,10 @@ html.light .toggle-name      { color: #111827; }
                     <div class="pos-leg-row" style="padding-top:2px">
                       <span class="pos-leg-lbl">Qty / Lots</span>
                       <span class="pos-leg-val" id="pos-qty-pe" style="font-size:11px;color:var(--t2)">—</span>
+                    </div>
+                    <div class="pos-leg-row" style="padding-top:4px;border-top:1px solid var(--border);margin-top:4px">
+                      <span class="pos-leg-lbl">Leg P&amp;L</span>
+                      <span class="pos-leg-val" id="pe-leg-pnl" style="font-size:12px">—</span>
                     </div>
                   </div>
                 </div>
@@ -1739,6 +1780,7 @@ html.light .toggle-name      { color: #111827; }
                 <div><div class="sm-label">SL</div><div id="sig-sl">—</div></div>
               </div>
               <div id="execute-zone" style="display:none; margin-top:12px">
+                <div id="signal-age-warn" style="display:none;font-size:10px;padding:4px 8px;background:rgba(255,170,0,.12);color:var(--amber);border-radius:4px;margin-bottom:6px;text-align:center"></div>
                 <button class="ctrl-btn ok" id="btn-execute" onclick="executeTrade()" style="width:100%;justify-content:center">
                   ⚡ Execute Trade
                 </button>
@@ -1774,6 +1816,13 @@ html.light .toggle-name      { color: #111827; }
           <div class="card">
             <div class="card-head"><span class="card-label">Setup Checks</span></div>
             <div>
+              <!-- Pre-conditions -->
+              <div class="ck"><div class="ck-dot wait" id="sc-bot-dot"></div><div class="ck-name">Agent running</div><div class="ck-val" id="sc-bot">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="sc-mkt-dot"></div><div class="ck-name">Market open</div><div class="ck-val" id="sc-mkt">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="sc-win-dot"></div><div class="ck-name">Entry window</div><div class="ck-val" id="sc-win" style="font-size:10px">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="sc-trd-dot"></div><div class="ck-name">Trades left today</div><div class="ck-val" id="sc-trd" style="font-size:10px">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="sc-margin-dot"></div><div class="ck-name">Margin available</div><div class="ck-val" id="sc-margin">—</div></div>
+              <!-- Setup checks -->
               <div class="ck">
                 <div class="ck-dot wait"></div>
                 <div class="ck-name">VIX range (13–28)</div>
@@ -1854,14 +1903,6 @@ html.light .toggle-name      { color: #111827; }
                 <input class="input" type="time" id="qc-entry-end" style="padding:4px 7px;font-size:11px">
               </div>
               <div>
-                <div class="sm-label">Profit Target %</div>
-                <input class="input" type="number" step="0.01" id="qc-profit-target" style="padding:4px 7px;font-size:11px">
-              </div>
-              <div>
-                <div class="sm-label">SL Multiplier</div>
-                <input class="input" type="number" step="0.1" id="qc-sl-mult" style="padding:4px 7px;font-size:11px">
-              </div>
-              <div>
                 <div class="sm-label">Max Trades/Day</div>
                 <input class="input" type="number" id="qc-max-trades" style="padding:4px 7px;font-size:11px">
               </div>
@@ -1896,6 +1937,36 @@ html.light .toggle-name      { color: #111827; }
           <div class="card-head">
             <span class="card-label">Open Positions</span>
             <span id="pos-count-pill" style="font-size:10px; color:var(--t3)">No positions</span>
+          </div>
+          <!-- P&L Summary Bar -->
+          <div id="pos-pnl-bar" style="display:none; border-bottom:1px solid var(--border)">
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; text-align:center;">
+              <div style="padding:12px 8px; border-right:1px solid var(--border)">
+                <div style="font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px">Running P&amp;L</div>
+                <div id="pos-running-pnl" style="font-size:20px; font-weight:700; font-family:var(--mono)">—</div>
+              </div>
+              <div style="padding:12px 8px; border-right:1px solid var(--border)">
+                <div style="font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px">Target P&amp;L</div>
+                <div id="pos-target-pnl" style="font-size:20px; font-weight:700; font-family:var(--mono); color:var(--green)">—</div>
+              </div>
+              <div style="padding:12px 8px;">
+                <div style="font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px">Stop Loss P&amp;L</div>
+                <div id="pos-sl-pnl" style="font-size:20px; font-weight:700; font-family:var(--mono); color:var(--red)">—</div>
+              </div>
+            </div>
+            <!-- Data source selector -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:7px 12px; background:var(--bg2); border-top:1px solid var(--border)">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:10px; color:var(--t3); text-transform:uppercase; letter-spacing:.06em">Data Source</span>
+                <span id="pos-ltp-last-used" style="font-size:10px; color:var(--t3)"></span>
+                <span id="pos-ltp-updated" style="font-size:10px; color:var(--t3)"></span>
+              </div>
+              <div style="display:flex; gap:4px;">
+                <button id="ltp-src-auto"   onclick="setLtpSource('auto')"   style="font-size:10px; padding:2px 9px; border-radius:4px; border:1px solid var(--border); background:var(--bg2); color:var(--t2); cursor:pointer">Auto</button>
+                <button id="ltp-src-angel"  onclick="setLtpSource('angel')"  style="font-size:10px; padding:2px 9px; border-radius:4px; border:1px solid var(--border); background:var(--bg2); color:var(--t2); cursor:pointer">AngelOne</button>
+                <button id="ltp-src-upstox" onclick="setLtpSource('upstox')" style="font-size:10px; padding:2px 9px; border-radius:4px; border:1px solid var(--border); background:var(--bg2); color:var(--t2); cursor:pointer">Upstox</button>
+              </div>
+            </div>
           </div>
           <table class="trade-tbl">
             <thead>
@@ -2111,6 +2182,7 @@ html.light .toggle-name      { color: #111827; }
           <button class="settings-nav-item" onclick="showSettingsPanel('timing', this)">⏰ Timing</button>
           <button class="settings-nav-item" onclick="showSettingsPanel('notifications', this)">🔔 Notifications</button>
           <button class="settings-nav-item" onclick="showSettingsPanel('execution', this)">🚀 Execution</button>
+          <button class="settings-nav-item" onclick="showSettingsPanel('datafeed', this)">📡 Data Feed</button>
         </nav>
 
         <!-- Settings panels -->
@@ -2164,13 +2236,27 @@ html.light .toggle-name      { color: #111827; }
               <div class="settings-section-desc">Position sizing parameters.</div>
               <div class="input-row">
                 <div class="field">
-                  <div class="field-label">Capital (₹)</div>
-                  <input class="input" type="number" value="1500000" id="s-capital">
+                  <div class="field-label">Capital (₹)
+                    <button type="button" onclick="fetchCapitalFromBroker()" id="btn-fetch-cap" style="margin-left:8px;font-size:10px;padding:2px 8px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer">📡 Fetch Live</button>
+                  </div>
+                  <input class="input" type="number" value="1500000" id="s-capital" oninput="updatePerTradeCost()">
+                  <div id="cap-fetch-status" style="font-size:10px;color:var(--t3);margin-top:4px;display:none"></div>
                 </div>
                 <div class="field">
                   <div class="field-label">Base Lots</div>
-                  <input class="input" type="number" value="2" id="s-base-lots">
+                  <input class="input" type="number" value="2" id="s-base-lots" oninput="updatePerTradeCost()">
                 </div>
+              </div>
+              <!-- Per-trade cost estimator -->
+              <div id="per-trade-cost-box" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:8px;font-size:12px;line-height:1.7">
+                <div style="font-weight:600;margin-bottom:4px;color:var(--t1)">📊 Estimated per-trade capital</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;color:var(--t2)">
+                  <span>Margin per lot (SPAN+Exp ~6%):</span><span id="ptc-per-lot" style="color:var(--t1);font-weight:600">—</span>
+                  <span>Total for <span id="ptc-lots">—</span> lots:</span><span id="ptc-total" style="color:var(--green);font-weight:600">—</span>
+                  <span>Available from broker:</span><span id="ptc-avail" style="color:var(--t1)">—</span>
+                  <span>After trade (est.):</span><span id="ptc-remaining" style="color:var(--t1)">—</span>
+                </div>
+                <div style="font-size:10px;color:var(--t3);margin-top:6px">⚠ SPAN margin estimate only. Actual margin blocked depends on live VIX and broker calculation.</div>
               </div>
               <div class="input-row">
                 <div class="field">
@@ -2191,24 +2277,10 @@ html.light .toggle-name      { color: #111827; }
 
             <div class="settings-section">
               <div class="settings-section-title">Exit Rules</div>
-              <div class="settings-section-desc">Profit and stop-loss thresholds.</div>
-              <div class="input-row-3">
-                <div class="field">
-                  <div class="field-label">Min Premium (₹)</div>
-                  <input class="input" type="number" value="45" id="s-min-premium">
-                </div>
-                <div class="field">
-                  <div class="field-label">Profit Target %</div>
-                  <input class="input" type="number" step="0.01" value="0.50" id="s-profit-target">
-                </div>
-                <div class="field">
-                  <div class="field-label">SL Multiplier</div>
-                  <input class="input" type="number" step="0.1" value="2.0" id="s-sl-mult">
-                </div>
-              </div>
+              <div class="settings-section-desc">Minimum premium filter for option entry.</div>
               <div class="field">
-                <div class="field-label">Trail Trigger % <span class="field-hint">Lock breakeven at this profit %</span></div>
-                <input class="input" type="number" step="0.01" value="0.30" id="s-trail">
+                <div class="field-label">Min Premium (₹)</div>
+                <input class="input" type="number" value="45" id="s-min-premium">
               </div>
             </div>
 
@@ -2260,6 +2332,10 @@ html.light .toggle-name      { color: #111827; }
                   <div class="field-label">Risk per Trade %</div>
                   <input class="input" type="number" step="0.001" value="0.02" id="s-risk-pct">
                 </div>
+                <div class="field">
+                  <div class="field-label">Brokerage / Lot (₹) <span class="field-hint">round-trip</span></div>
+                  <input class="input" type="number" value="120" id="s-brokerage">
+                </div>
               </div>
             </div>
 
@@ -2271,7 +2347,7 @@ html.light .toggle-name      { color: #111827; }
                   <div class="toggle-desc">No new trades after stop-loss triggered today</div>
                 </div>
                 <label class="toggle">
-                  <input type="checkbox" checked>
+                  <input type="checkbox" id="s-stop-after-sl" checked>
                   <span class="toggle-slider"></span>
                 </label>
               </div>
@@ -2281,9 +2357,28 @@ html.light .toggle-name      { color: #111827; }
                   <div class="toggle-desc">Halt trading for rest of week if weekly limit hit</div>
                 </div>
                 <label class="toggle">
-                  <input type="checkbox" checked>
+                  <input type="checkbox" id="s-weekly-lockout" checked>
                   <span class="toggle-slider"></span>
                 </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Entry Filters</div>
+              <div class="settings-section-desc">Pre-entry quality gates. Signal is skipped if any filter fails.</div>
+              <div class="input-row-3">
+                <div class="field">
+                  <div class="field-label">Min Combined Premium (₹) <span class="field-hint">CE+PE combined</span></div>
+                  <input class="input" type="number" value="150" id="s-min-combined">
+                </div>
+                <div class="field">
+                  <div class="field-label">Min Strike OI <span class="field-hint">contracts</span></div>
+                  <input class="input" type="number" value="300000" id="s-min-oi">
+                </div>
+                <div class="field">
+                  <div class="field-label">Max Spot Move % <span class="field-hint">in last 15 min</span></div>
+                  <input class="input" type="number" step="0.001" value="0.005" id="s-momentum-limit">
+                </div>
               </div>
             </div>
 
@@ -2449,6 +2544,103 @@ html.light .toggle-name      { color: #111827; }
             </div>
           </div>
 
+          <!-- Data Feed -->
+          <div class="settings-panel" id="spanel-datafeed">
+            <div class="settings-section">
+              <div class="settings-section-title">Data Source</div>
+              <div class="settings-section-desc">Choose which broker API fetches live LTP and market data. Diversified alternates between AngelOne and Upstox on every call for uninterrupted data.</div>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:12px;border-radius:8px;border:1px solid var(--line2);background:var(--surface2)">
+                  <input type="radio" name="df-source" value="auto" id="df-src-auto" style="margin-top:3px;accent-color:var(--blue)">
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:var(--t1)">Auto <span style="font-size:11px;font-weight:400;color:var(--t3)">(Recommended)</span></div>
+                    <div style="font-size:11px;color:var(--t2);margin-top:3px">AngelOne primary → Upstox fallback if AngelOne fails. Best for reliability.</div>
+                  </div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:12px;border-radius:8px;border:1px solid var(--line2);background:var(--surface2)">
+                  <input type="radio" name="df-source" value="diversified" id="df-src-diversified" style="margin-top:3px;accent-color:var(--blue)">
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:var(--t1)">Diversified <span style="font-size:11px;font-weight:400;color:var(--green,#2dd698)">Best for no interruption</span></div>
+                    <div style="font-size:11px;color:var(--t2);margin-top:3px">Round-robin: alternates between AngelOne and Upstox on every fetch. If primary fails, switches to the other instantly. Zero data gaps.</div>
+                  </div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:12px;border-radius:8px;border:1px solid var(--line2);background:var(--surface2)">
+                  <input type="radio" name="df-source" value="angel" id="df-src-angel" style="margin-top:3px;accent-color:var(--blue)">
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:var(--t1)">AngelOne Only</div>
+                    <div style="font-size:11px;color:var(--t2);margin-top:3px">Use AngelOne exclusively. No Upstox fallback.</div>
+                  </div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;padding:12px;border-radius:8px;border:1px solid var(--line2);background:var(--surface2)">
+                  <input type="radio" name="df-source" value="upstox" id="df-src-upstox" style="margin-top:3px;accent-color:var(--blue)">
+                  <div>
+                    <div style="font-weight:600;font-size:13px;color:var(--t1)">Upstox Only</div>
+                    <div style="font-size:11px;color:var(--t2);margin-top:3px">Use Upstox exclusively. No AngelOne fallback.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Fetch Interval</div>
+              <div class="settings-section-desc">How often live LTP is refreshed for open position P&L. Faster = smoother updates but more API calls.</div>
+              <div style="margin-top:14px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                  <span style="font-size:12px;color:var(--t2)">Interval</span>
+                  <span style="font-size:14px;font-weight:700;color:var(--blue)" id="df-interval-label">5s</span>
+                </div>
+                <input type="range" id="df-interval-slider" min="1" max="30" value="5" step="1"
+                  style="width:100%;accent-color:var(--blue);cursor:pointer"
+                  oninput="document.getElementById('df-interval-label').textContent=this.value+'s'">
+                <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--t3)">
+                  <span>1s (fastest)</span><span>5s</span><span>10s</span><span>20s</span><span>30s (slowest)</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <div class="settings-section-title">Live Status</div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+                <div style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:12px">
+                  <span style="color:var(--t2)">Active Source</span>
+                  <span style="font-weight:600;color:var(--t1)" id="df-status-source">—</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:12px">
+                  <span style="color:var(--t2)">Last Broker Used</span>
+                  <span style="font-weight:600;color:var(--t1)" id="df-status-last-used">—</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:12px">
+                  <span style="color:var(--t2)">Last Updated</span>
+                  <span style="font-weight:600;color:var(--t1)" id="df-status-updated">—</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:12px">
+                  <span style="color:var(--t2)">AngelOne</span>
+                  <span style="font-weight:600" id="df-angel-status">—</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:8px;background:var(--surface2);font-size:12px">
+                  <span style="color:var(--t2)">Upstox</span>
+                  <span style="font-weight:600" id="df-upstox-status">—</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="save-bar">
+              <button class="btn-primary" onclick="saveDataFeed()">Save Data Feed Config</button>
+              <span class="save-msg" id="save-msg-datafeed">✓ Saved</span>
+            </div>
+
+            <div class="settings-section" style="margin-top:24px;padding-top:24px;border-top:1px solid var(--line)">
+              <div class="settings-section-title">Server Control</div>
+              <div class="settings-section-desc">Restart to apply credential changes or recover from errors. Reset restores all trading parameters to factory defaults.</div>
+              <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">
+                <button class="btn-primary" onclick="restartServer()" style="background:var(--blue);border-color:var(--blue)">⟳ Restart Server</button>
+                <button class="btn-ghost" onclick="resetSettings()" style="color:var(--red,#f87171);border-color:var(--red,#f87171)">↺ Reset All to Defaults</button>
+                <button class="btn-ghost" onclick="syncBrokerPosition()" id="btn-sync-pos">🔄 Sync Position from Broker</button>
+              </div>
+              <div id="sync-pos-result" style="display:none;margin-top:12px;font-size:12px;background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;line-height:1.7"></div>
+            </div>
+          </div>
+
         </div><!-- /settings-body -->
       </div>
     </div>
@@ -2560,6 +2752,8 @@ function showSettingsPanel(id, btn) {
   document.querySelectorAll('.settings-nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('spanel-' + id).classList.add('active');
   btn.classList.add('active');
+  if (id === 'datafeed') loadDataFeed();
+  if (id === 'trading') updatePerTradeCost();
 }
 
 function isAuthenticated() {
@@ -2652,9 +2846,6 @@ function saveSettings(id) {
       margin_override: parseFloat(document.getElementById('s-margin-override').value) || 0,
       delta_target: parseFloat(document.getElementById('s-delta').value) || 0.17,
       min_premium: parseInt(document.getElementById('s-min-premium').value) || 45,
-      profit_target_pct: parseFloat(document.getElementById('s-profit-target').value) || 0.50,
-      sl_multiplier: parseFloat(document.getElementById('s-sl-mult').value) || 2.0,
-      trail_trigger_pct: parseFloat(document.getElementById('s-trail').value) || 0.30,
       paper_trade: document.getElementById('s-paper').checked,
     };
   } else if (id === 'risk') {
@@ -2664,6 +2855,12 @@ function saveSettings(id) {
       monthly_loss_limit: parseInt(document.getElementById('s-monthly-limit').value) || 150000,
       max_trades_per_day: parseInt(document.getElementById('s-max-trades').value) || 3,
       risk_per_trade_pct: parseFloat(document.getElementById('s-risk-pct').value) || 0.02,
+      brokerage_per_lot: parseInt(document.getElementById('s-brokerage').value) || 120,
+      stop_after_sl: document.getElementById('s-stop-after-sl')?.checked ?? true,
+      weekly_loss_lockout: document.getElementById('s-weekly-lockout')?.checked ?? true,
+      min_combined_premium: parseInt(document.getElementById('s-min-combined').value) || 150,
+      min_strike_oi: parseInt(document.getElementById('s-min-oi').value) || 300000,
+      spot_momentum_limit: parseFloat(document.getElementById('s-momentum-limit').value) || 0.005,
     };
   } else if (id === 'regime') {
     data = {
@@ -2698,6 +2895,66 @@ function saveSettings(id) {
       setTimeout(() => msg.style.display = 'none', 2000);
     }
   });
+}
+
+// ── Capital: fetch from broker + per-trade cost estimator ──
+let _brokerAvail = 0;
+
+async function fetchCapitalFromBroker() {
+  const btn    = document.getElementById('btn-fetch-cap');
+  const status = document.getElementById('cap-fetch-status');
+  btn.textContent = '⏳ Fetching…';
+  btn.disabled = true;
+  status.style.display = 'block';
+  status.style.color = 'var(--t3)';
+  status.textContent = 'Calling broker API…';
+  try {
+    const r = await fetch('/api/fetch-capital');
+    const d = await r.json();
+    if (d.ok && d.available > 0) {
+      document.getElementById('s-capital').value = Math.floor(d.available);
+      _brokerAvail = d.available;
+      status.style.color = 'var(--green)';
+      status.textContent = `✓ ${d.source}: Available ₹${_fmt(d.available)}  |  Used ₹${_fmt(d.used)}  |  Total ₹${_fmt(d.total)}`;
+      updatePerTradeCost();
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = d.available === 0
+        ? '⚠ Broker returned ₹0 — check AngelOne connection or enable RMS permission'
+        : `Error: ${d.source}`;
+    }
+  } catch(e) {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Failed to reach server.';
+  }
+  btn.textContent = '📡 Fetch Live';
+  btn.disabled = false;
+}
+
+function updatePerTradeCost() {
+  const spot     = parseFloat((window._latestState || {})?.market?.nifty_spot || 0) || 22500;
+  const lotSize  = parseInt(document.getElementById('s-lot-size')?.value) || 65;
+  const baseLots = parseInt(document.getElementById('s-base-lots')?.value) || 2;
+  const avail    = _brokerAvail || parseFloat(document.getElementById('s-capital')?.value) || 0;
+
+  // SEBI required initial margin ≈ 6% of contract value for index options selling
+  // (SPAN ~3-4% + Exposure ~2-3%) — conservative estimate
+  const contractVal   = spot * lotSize;
+  const marginPerLot  = Math.round(contractVal * 0.065 / 1000) * 1000;  // round to nearest 1000
+  const totalMargin   = marginPerLot * baseLots;
+  const remaining     = avail - totalMargin;
+
+  document.getElementById('ptc-per-lot').textContent  = `₹${_fmt(marginPerLot)}`;
+  document.getElementById('ptc-lots').textContent      = baseLots;
+  document.getElementById('ptc-total').textContent     = `₹${_fmt(totalMargin)}`;
+  document.getElementById('ptc-avail').textContent     = avail > 0 ? `₹${_fmt(avail)}` : 'Click Fetch Live →';
+  const remEl = document.getElementById('ptc-remaining');
+  remEl.textContent = avail > 0 ? `₹${_fmt(remaining)}` : '—';
+  remEl.style.color = remaining < 0 ? 'var(--red)' : 'var(--green)';
+}
+
+function _fmt(n) {
+  return Math.round(n).toLocaleString('en-IN');
 }
 
 // ── Telegram test ──
@@ -2737,12 +2994,10 @@ async function loadConfig() {
     if (cfg.capital) document.getElementById('s-capital').value = cfg.capital;
     if (cfg.base_lots) document.getElementById('s-base-lots').value = cfg.base_lots;
     if (cfg.lot_size) document.getElementById('s-lot-size').value = cfg.lot_size;
+    updatePerTradeCost();
     if (cfg.margin_override !== undefined) document.getElementById('s-margin-override').value = cfg.margin_override;
     if (cfg.delta_target) document.getElementById('s-delta').value = cfg.delta_target;
     if (cfg.min_premium) document.getElementById('s-min-premium').value = cfg.min_premium;
-    if (cfg.profit_target_pct) document.getElementById('s-profit-target').value = cfg.profit_target_pct;
-    if (cfg.sl_multiplier) document.getElementById('s-sl-mult').value = cfg.sl_multiplier;
-    if (cfg.trail_trigger_pct) document.getElementById('s-trail').value = cfg.trail_trigger_pct;
     if (cfg.paper_trade !== undefined) document.getElementById('s-paper').checked = cfg.paper_trade;
     
     // Risk
@@ -2751,7 +3006,13 @@ async function loadConfig() {
     if (cfg.monthly_loss_limit) document.getElementById('s-monthly-limit').value = cfg.monthly_loss_limit;
     if (cfg.max_trades_per_day) document.getElementById('s-max-trades').value = cfg.max_trades_per_day;
     if (cfg.risk_per_trade_pct) document.getElementById('s-risk-pct').value = cfg.risk_per_trade_pct;
-    
+    if (cfg.brokerage_per_lot) document.getElementById('s-brokerage').value = cfg.brokerage_per_lot;
+    if (cfg.stop_after_sl !== undefined) document.getElementById('s-stop-after-sl').checked = cfg.stop_after_sl;
+    if (cfg.weekly_loss_lockout !== undefined) document.getElementById('s-weekly-lockout').checked = cfg.weekly_loss_lockout;
+    if (cfg.min_combined_premium) document.getElementById('s-min-combined').value = cfg.min_combined_premium;
+    if (cfg.min_strike_oi) document.getElementById('s-min-oi').value = cfg.min_strike_oi;
+    if (cfg.spot_momentum_limit) document.getElementById('s-momentum-limit').value = cfg.spot_momentum_limit;
+
     // Regime
     if (cfg.vix_min) document.getElementById('s-vix-min').value = cfg.vix_min;
     if (cfg.vix_max) document.getElementById('s-vix-max').value = cfg.vix_max;
@@ -2796,8 +3057,6 @@ function loadQuickConfig(cfg) {
   _qcSet('qc-vix-max',      cfg.vix_max);
   _qcSet('qc-entry-start',  cfg.entry_start);
   _qcSet('qc-entry-end',    cfg.entry_end);
-  _qcSet('qc-profit-target',cfg.profit_target_pct);
-  _qcSet('qc-sl-mult',      cfg.sl_multiplier);
   _qcSet('qc-max-trades',   cfg.max_trades_per_day);
   _qcSet('qc-daily-limit',  cfg.daily_loss_limit);
 }
@@ -2810,8 +3069,6 @@ async function saveQuickConfig() {
     vix_max:           parseFloat(document.getElementById('qc-vix-max').value)       || undefined,
     entry_start:       document.getElementById('qc-entry-start').value               || undefined,
     entry_end:         document.getElementById('qc-entry-end').value                 || undefined,
-    profit_target_pct: parseFloat(document.getElementById('qc-profit-target').value) || undefined,
-    sl_multiplier:     parseFloat(document.getElementById('qc-sl-mult').value)       || undefined,
     max_trades_per_day:parseInt(document.getElementById('qc-max-trades').value)      || undefined,
     daily_loss_limit:  parseFloat(document.getElementById('qc-daily-limit').value)   || undefined,
   };
@@ -2872,6 +3129,7 @@ async function poll() {
 }
 
 function applyState(d) {
+  window._latestState = d;
   const rm = d.regime || '—';
   const badge = document.getElementById('regime-badge');
   badge.className = 'regime-badge ' + (['A','B','C'].includes(rm) ? rm : 'X');
@@ -2934,6 +3192,68 @@ function applyState(d) {
   const hasPOS = d.position_detail && Object.keys(d.position_detail).length > 0;
   document.getElementById('no-pos').style.display  = hasPOS ? 'none' : 'block';
   document.getElementById('has-pos').style.display = hasPOS ? 'block' : 'none';
+  if (!hasPOS) {
+    // reason line
+    const waitReason = (d.last_signal && d.last_signal.reason) ? d.last_signal.reason : 'Waiting for a valid setup...';
+    document.getElementById('no-pos-reason').textContent = waitReason;
+
+    function _npSet(id, val, realTxt) {
+      const dot = document.getElementById(id + '-dot');
+      const lbl = document.getElementById(id);
+      const cls = val === true ? 'pass' : val === false ? 'fail' : 'wait';
+      const txt = val === true ? 'OK'   : val === false ? 'FAIL' : '—';
+      if (dot) dot.className = 'ck-dot ' + cls;
+      if (lbl) { lbl.textContent = txt; lbl.style.color = val === true ? 'var(--green)' : val === false ? 'var(--red)' : 'var(--t3)'; }
+      const rv = document.getElementById(id + '-v');
+      if (rv && realTxt != null) rv.textContent = realTxt;
+    }
+
+    // Pre-conditions
+    _npSet('npck-bot',  !!d.bot_running);
+    const mktNow = isMarketOpen();
+    _npSet('npck-mkt',  mktNow);
+
+    // Entry window — read from settings inputs if loaded
+    let inWin = null;
+    try {
+      const es = document.getElementById('s-entry-start')?.value || '09:30';
+      const ee = document.getElementById('s-entry-end')?.value   || '11:00';
+      const now = new Date();
+      const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+      const istMin = (utcMin + 330) % 1440;
+      const [sh, sm] = es.split(':').map(Number);
+      const [eh, em] = ee.split(':').map(Number);
+      inWin = istMin >= sh * 60 + sm && istMin <= eh * 60 + em;
+    } catch(e) { inWin = null; }
+    const esVal = document.getElementById('s-entry-start')?.value || '09:30';
+    const eeVal = document.getElementById('s-entry-end')?.value   || '11:00';
+    _npSet('npck-win', inWin);
+    document.getElementById('npck-win').textContent = inWin === true ? esVal+'–'+eeVal : inWin === false ? 'Outside '+esVal+'–'+eeVal : '—';
+    document.getElementById('npck-win').style.fontSize = '10px';
+
+    const tradesLeft = (d.max_trades || 3) - (d.trades_today || 0);
+    _npSet('npck-trd', tradesLeft > 0);
+    const trdEl = document.getElementById('npck-trd');
+    if (trdEl) { trdEl.textContent = tradesLeft + ' left (' + (d.trades_today||0) + '/' + (d.max_trades||3) + ')'; trdEl.style.fontSize = '10px'; }
+
+    // Setup checks
+    const c = d.checks || {};
+    const m = d.market || {};
+    _npSet('npck-vix',    c.vix,    m.vix    != null ? m.vix.toFixed(2) : null);
+    const pcrClosed = !mktNow;
+    _npSet('npck-pcr',    pcrClosed ? null : c.pcr, m.pcr != null ? m.pcr.toFixed(2) : null);
+    const ivHasHist = m.iv_percentile != null;
+    const ivLabel = document.querySelector('#npck-iv-dot')?.closest('.ck')?.querySelector('.ck-name');
+    if (ivLabel) ivLabel.textContent = ivHasHist ? 'IV% >40 (30d hist)' : 'IV ATM >10 (fallback)';
+    const ivRealTxt = ivHasHist ? m.iv_percentile.toFixed(1)+'%ile' : (m.iv_atm != null ? m.iv_atm.toFixed(1) : null);
+    _npSet('npck-iv', c.iv, ivRealTxt);
+    const trend = m.trend || 'FLAT';
+    const emaVal = c.ema;
+    const emaSkipped = (trend === 'UP' || trend === 'DOWN');
+    _npSet('npck-ema', emaSkipped ? true : emaVal, emaSkipped ? 'Skipped ('+trend+' trend)' : (m.ema_trend_flat != null ? (m.ema_trend_flat ? 'Flat' : 'Trending') : null));
+    _npSet('npck-margin', c.margin);
+    _npSet('npck-gate',   c.gate,   d.daily_pnl != null ? '₹'+Math.round(d.daily_pnl).toLocaleString('en-IN') : null);
+  }
   const posPill = document.getElementById('pos-pill');
   posPill.textContent = hasPOS ? '● Active' : 'No position';
   posPill.style.color = hasPOS ? 'var(--green)' : 'var(--t3)';
@@ -2969,6 +3289,11 @@ function applyState(d) {
       const el = document.getElementById('ce-ltp-chg');
       el.textContent = (d >= 0 ? '▲ +' : '▼ ') + d.toFixed(2);
       el.className = 'pos-leg-ltp-chg ' + (d > 0 ? 'up' : 'dn');
+      // CE leg P&L: sold call → profit = entry - current
+      const cePnl = (p.ce_entry_price - ceLtp) * qty;
+      const cePnlEl = document.getElementById('ce-leg-pnl');
+      cePnlEl.textContent = (cePnl >= 0 ? '+' : '') + '₹' + Math.round(cePnl).toLocaleString('en-IN');
+      cePnlEl.style.color = cePnl >= 0 ? 'var(--green)' : 'var(--red)';
     }
     // PE: sold put → falling LTP is good (cost goes down)
     if (peLtp != null && p.pe_entry_price != null) {
@@ -2976,6 +3301,11 @@ function applyState(d) {
       const el = document.getElementById('pe-ltp-chg');
       el.textContent = (d >= 0 ? '▲ +' : '▼ ') + d.toFixed(2);
       el.className = 'pos-leg-ltp-chg ' + (d > 0 ? 'up' : 'dn');
+      // PE leg P&L: sold put → profit = entry - current
+      const pePnl = (p.pe_entry_price - peLtp) * qty;
+      const pePnlEl = document.getElementById('pe-leg-pnl');
+      pePnlEl.textContent = (pePnl >= 0 ? '+' : '') + '₹' + Math.round(pePnl).toLocaleString('en-IN');
+      pePnlEl.style.color = pePnl >= 0 ? 'var(--green)' : 'var(--red)';
     }
 
     // ── Summary bar ──
@@ -3035,6 +3365,22 @@ function applyState(d) {
   // Execute button — only in MANUAL mode when signal pending
   const execZone = document.getElementById('execute-zone');
   if (execZone) execZone.style.display = (d.signal_pending && mode === 'MANUAL') ? 'block' : 'none';
+  // Signal age warning
+  const ageWarn = document.getElementById('signal-age-warn');
+  if (ageWarn && d.signal_pending && d.signal_age_secs != null) {
+    const ageSec = d.signal_age_secs;
+    const remaining = 300 - ageSec;
+    if (ageSec >= 60) {
+      ageWarn.style.display = 'block';
+      ageWarn.textContent = remaining > 0
+        ? `⏱ Signal is ${Math.floor(ageSec/60)}m ${ageSec%60}s old — expires in ${remaining}s`
+        : '⚠ Signal expired — a fresh one will generate shortly';
+    } else {
+      ageWarn.style.display = 'none';
+    }
+  } else if (ageWarn) {
+    ageWarn.style.display = 'none';
+  }
 
   const dailyPct = Math.min(100, Math.abs(pnl)/45000*100);
   const bar = document.getElementById('daily-bar');
@@ -3057,13 +3403,45 @@ function applyState(d) {
     document.getElementById('md-delta').textContent   = m.net_delta != null ? m.net_delta.toFixed(3) : '—';
   }
 
+  // ── Shared helper: set dot + label for any ck row ──
+  function _scSet(id, val, txt) {
+    const dot = document.getElementById(id + '-dot');
+    const lbl = document.getElementById(id);
+    const cls = val === true ? 'pass' : val === false ? 'fail' : 'wait';
+    if (dot) dot.className = 'ck-dot ' + cls;
+    if (lbl) {
+      lbl.textContent = txt !== undefined ? txt : (val === true ? 'OK' : val === false ? 'FAIL' : '—');
+      lbl.style.color = val === true ? 'var(--green)' : val === false ? 'var(--red)' : 'var(--t3)';
+    }
+  }
+
+  // Pre-conditions for Setup Checks panel (right col)
+  _scSet('sc-bot', !!d.bot_running);
+  const _scMkt = isMarketOpen();
+  _scSet('sc-mkt', _scMkt);
+  _scSet('sc-margin', (d.checks || {}).margin);
+
+  // Entry window
+  try {
+    const _es = document.getElementById('s-entry-start')?.value || '09:30';
+    const _ee = document.getElementById('s-entry-end')?.value   || '11:00';
+    const _now = new Date(); const _istMin = ((_now.getUTCHours()*60+_now.getUTCMinutes())+330)%1440;
+    const [_sh,_sm]=_es.split(':').map(Number); const [_eh,_em]=_ee.split(':').map(Number);
+    const _inWin = _istMin>=_sh*60+_sm && _istMin<=_eh*60+_em;
+    _scSet('sc-win', _inWin, _inWin ? _es+'–'+_ee : 'Outside '+_es+'–'+_ee);
+  } catch(e) { _scSet('sc-win', null); }
+
+  // Trades left
+  const _tLeft = (d.max_trades||3) - (d.trades_today||0);
+  _scSet('sc-trd', _tLeft > 0, _tLeft+' left ('+(d.trades_today||0)+'/'+(d.max_trades||3)+')');
+
   // Setup checks — true=pass, false=fail, null=no data yet
   if (d.checks) {
     const marketClosed = !isMarketOpen();
     const map = { vix:'chk-vix', iv:'chk-iv', ema:'chk-ema', pcr:'chk-pcr', gate:'chk-gate' };
     const realMap = { 
       vix: { id: 'val-vix', format: (v) => v != null ? v.toFixed(2) : '—', range: [13, 28] },
-      iv: { id: 'val-iv', format: (v) => v != null ? v.toFixed(1) + '%' : '—', threshold: 40 },
+      iv: { id: 'val-iv', format: (v) => v != null ? v.toFixed(1) + '%' : '—', threshold: 40, altId: 'val-iv-atm' },
       ema: { id: 'val-ema', format: (v) => v != null ? (v ? 'Flat' : 'Trending') : '—' },
       pcr: { id: 'val-pcr', format: (v) => v != null ? v.toFixed(2) : '—', range: [0.8, 1.4] },
       gate: { id: 'val-gate', format: (v) => v != null ? (v ? 'OK' : 'BREACHED') : '—' }
@@ -3084,7 +3462,16 @@ function applyState(d) {
       if (realEl) {
         let realVal = null;
         if (k === 'vix' && d.market?.vix) realVal = d.market.vix;
-        else if (k === 'iv' && d.market?.iv_percentile) realVal = d.market.iv_percentile;
+        else if (k === 'iv') {
+          if (d.market?.iv_percentile != null) {
+            realEl.textContent = d.market.iv_percentile.toFixed(1) + '%ile';
+            const nameEl = row?.querySelector('.ck-name'); if (nameEl) nameEl.textContent = 'IV percentile >40 (30d)';
+          } else if (d.market?.iv_atm != null) {
+            realEl.textContent = d.market.iv_atm.toFixed(1) + ' ATM';
+            const nameEl = row?.querySelector('.ck-name'); if (nameEl) nameEl.textContent = 'IV ATM >10 (fallback)';
+          } else { realEl.textContent = '—'; }
+          return; // skip default realEl assignment below
+        }
         else if (k === 'ema' && d.market?.ema_trend_flat != null) realVal = d.market.ema_trend_flat;
         else if (k === 'pcr' && d.market?.pcr) realVal = d.market.pcr;
         else if (k === 'gate' && d.daily_pnl != null) realVal = d.daily_pnl > -45000;
@@ -3117,11 +3504,13 @@ function renderPositions(d) {
   const pill  = document.getElementById('pos-count-pill');
   if (!tbody) return;
 
+  const pnlBar = document.getElementById('pos-pnl-bar');
   const hasPOS = d.position_detail && Object.keys(d.position_detail).length > 0;
   if (!hasPOS) {
     pill.textContent = 'No positions';
     pill.style.color = 'var(--t3)';
     tbody.innerHTML  = '<tr><td colspan="9" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>';
+    if (pnlBar) pnlBar.style.display = 'none';
     return;
   }
 
@@ -3130,12 +3519,34 @@ function renderPositions(d) {
 
   const p   = d.position_detail;
   const qty = p.quantity || 1;
+  const ep  = p.premium_received || 0;
   const pnl = (typeof p.pnl === 'number')
     ? p.pnl
-    : ((p.premium_received || 0) - ((p.current_ce_ltp || 0) + (p.current_pe_ltp || 0)));
+    : (ep - ((p.current_ce_ltp || 0) + (p.current_pe_ltp || 0)));
   const pnlHtml = pnl >= 0
     ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
     : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
+
+  // Populate P&L summary bar
+  if (pnlBar) {
+    pnlBar.style.display = 'block';
+    const runEl = document.getElementById('pos-running-pnl');
+    const tgtEl = document.getElementById('pos-target-pnl');
+    const slEl  = document.getElementById('pos-sl-pnl');
+    if (runEl) {
+      runEl.textContent = (pnl >= 0 ? '+' : '−') + '₹' + Math.abs(pnl).toLocaleString('en-IN', {maximumFractionDigits:0});
+      runEl.style.color = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+    if (tgtEl && p.target) {
+      const tgtAmt = p.target * qty;
+      tgtEl.textContent = '+₹' + tgtAmt.toLocaleString('en-IN', {maximumFractionDigits:0});
+    } else if (tgtEl) { tgtEl.textContent = '—'; }
+    if (slEl && p.sl && ep) {
+      const slPts = p.sl - ep;
+      const slAmt = Math.abs(slPts * qty);
+      slEl.textContent = '−₹' + slAmt.toLocaleString('en-IN', {maximumFractionDigits:0});
+    } else if (slEl) { slEl.textContent = '—'; }
+  }
 
   const entryTime = formatDateTime(p.entry_time);
 
@@ -3592,10 +4003,16 @@ async function pollConnection() {
     const errEl = document.getElementById('conn-error');
     if (c.error) { errEl.textContent = c.error; errEl.style.display = 'block'; }
     else         { errEl.style.display = 'none'; }
+
+    // Mobile topbar dot
+    const mobAo = document.getElementById('mob-angel-dot');
+    if (mobAo) mobAo.style.background = color;
   } catch {
     document.getElementById('conn-dot').className = 'conn-dot disconnected';
     document.getElementById('conn-status-label').textContent = 'Offline';
     document.getElementById('conn-status-label').style.color = 'var(--red)';
+    const mobAo = document.getElementById('mob-angel-dot');
+    if (mobAo) mobAo.style.background = 'var(--red)';
   }
 }
 
@@ -3607,20 +4024,66 @@ async function pollUpstoxStatus() {
     const dot   = document.getElementById('upstox-dot');
     const label = document.getElementById('upstox-status-label');
     const btn   = document.getElementById('upstox-login-btn');
+    const mobUx = document.getElementById('mob-upstox-dot');
     if (u.connected) {
       dot.className      = 'conn-dot connected';
       label.textContent  = 'Connected';
       label.style.color  = 'var(--green)';
       if (btn) { btn.textContent = '✓ Connected'; btn.style.background = 'var(--surface2)'; btn.style.color = 'var(--green)'; }
+      if (mobUx) mobUx.style.background = 'var(--green)';
     } else {
       dot.className      = 'conn-dot disconnected';
       label.textContent  = 'Offline';
       label.style.color  = 'var(--red)';
       if (btn) { btn.textContent = '⚡ Connect Upstox'; btn.style.background = 'var(--green)'; btn.style.color = '#000'; }
+      if (mobUx) mobUx.style.background = 'var(--t3)';
     }
   } catch (e) {
     console.error('Upstox status poll failed', e);
   }
+}
+
+// ── LTP data source control ──
+let _ltpSourceCurrent = 'auto';
+
+function _applyLtpSourceUI(src) {
+  _ltpSourceCurrent = src;
+  ['auto','angel','upstox'].forEach(s => {
+    const btn = document.getElementById('ltp-src-' + s);
+    if (!btn) return;
+    const active = s === src;
+    btn.style.background = active ? 'var(--accent,#2dd698)' : 'var(--bg2)';
+    btn.style.color      = active ? '#000' : 'var(--t2)';
+    btn.style.fontWeight = active ? '600' : 'normal';
+    btn.style.borderColor = active ? 'var(--accent,#2dd698)' : 'var(--border)';
+  });
+}
+
+async function setLtpSource(src) {
+  try {
+    const r = await fetch('/api/ltp-source', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({source: src})
+    });
+    const d = await r.json();
+    if (d.ok) _applyLtpSourceUI(src);
+  } catch(e) { console.error('setLtpSource failed', e); }
+}
+
+async function pollLtpSource() {
+  try {
+    const r = await fetch('/api/ltp-source');
+    const d = await r.json();
+    _applyLtpSourceUI(d.source || 'auto');
+    const lastUsedEl   = document.getElementById('pos-ltp-last-used');
+    const lastUpdEl    = document.getElementById('pos-ltp-updated');
+    if (lastUsedEl && d.last_used) lastUsedEl.textContent = '· via ' + d.last_used;
+    if (lastUpdEl  && d.last_updated) lastUpdEl.textContent = '· ' + d.last_updated;
+    // Disable Upstox button if not connected
+    const uxBtn = document.getElementById('ltp-src-upstox');
+    if (uxBtn) uxBtn.disabled = !d.upstox_available;
+  } catch(e) {}
 }
 
 async function upstoxLogin() {
@@ -3655,6 +4118,180 @@ async function upstoxLogin() {
 if (new URLSearchParams(location.search).get('upstox') === 'ok') {
   history.replaceState({}, '', '/');
   setTimeout(() => showToast('Upstox Connected', 'Fallback data source is now active', 'success'), 500);
+}
+
+// ── Data Feed settings panel ──
+async function loadDataFeed() {
+  try {
+    const r = await fetch('/api/ltp-source');
+    const d = await r.json();
+
+    // Set radio
+    const src = d.source || 'auto';
+    const radio = document.querySelector(`input[name="df-source"][value="${src}"]`);
+    if (radio) radio.checked = true;
+
+    // Set interval slider
+    const iv = d.fetch_interval || 5;
+    const slider = document.getElementById('df-interval-slider');
+    const label  = document.getElementById('df-interval-label');
+    if (slider) slider.value = iv;
+    if (label)  label.textContent = iv + 's';
+
+    // Status
+    const srcNames = { auto: 'Auto', angel: 'AngelOne Only', upstox: 'Upstox Only', diversified: 'Diversified' };
+    const el = id => document.getElementById(id);
+    if (el('df-status-source'))   el('df-status-source').textContent   = srcNames[src] || src;
+    if (el('df-status-last-used')) el('df-status-last-used').textContent = d.last_used || '—';
+    if (el('df-status-updated'))  el('df-status-updated').textContent  = d.last_updated || '—';
+
+    const angelOk  = d.angel_available;
+    const upstoxOk = d.upstox_available;
+    if (el('df-angel-status')) {
+      el('df-angel-status').textContent = angelOk ? 'Connected' : 'Not connected';
+      el('df-angel-status').style.color = angelOk ? 'var(--green,#2dd698)' : 'var(--red,#f87171)';
+    }
+    if (el('df-upstox-status')) {
+      el('df-upstox-status').textContent = upstoxOk ? 'Connected' : 'Not connected';
+      el('df-upstox-status').style.color = upstoxOk ? 'var(--green,#2dd698)' : 'var(--red,#f87171)';
+    }
+
+    // Disable Upstox-only if not connected
+    const upstoxRadio = document.getElementById('df-src-upstox');
+    if (upstoxRadio) upstoxRadio.disabled = !upstoxOk;
+  } catch(e) { console.error('loadDataFeed error', e); }
+}
+
+async function saveDataFeed() {
+  const radio    = document.querySelector('input[name="df-source"]:checked');
+  const slider   = document.getElementById('df-interval-slider');
+  const msgEl    = document.getElementById('save-msg-datafeed');
+  if (!radio || !slider) return;
+
+  try {
+    const r = await fetch('/api/ltp-source', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ source: radio.value, interval: parseInt(slider.value) })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      msgEl.style.display = 'inline';
+      msgEl.style.color   = 'var(--green,#2dd698)';
+      msgEl.textContent   = '✓ Saved';
+      setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+      loadDataFeed();
+      // Also sync the old LTP source buttons if they exist
+      _applyLtpSourceUI(radio.value);
+    } else {
+      msgEl.style.display = 'inline';
+      msgEl.style.color   = 'var(--red,#f87171)';
+      msgEl.textContent   = '✗ ' + (d.msg || 'Error');
+    }
+  } catch(e) {
+    console.error('saveDataFeed error', e);
+  }
+}
+
+
+// ── Server restart ──
+async function resetSettings() {
+  const pin = await _showActionPin('Reset All Settings', 'Enter PIN to reset all settings to factory defaults');
+  if (!pin) return;
+  try {
+    const r = await fetch('/api/settings/reset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ pin })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast('Reset Complete', 'All settings restored to defaults. Reloading...', 'success');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showToast('Reset Failed', d.msg || 'Invalid PIN', 'error');
+    }
+  } catch(e) {
+    showToast('Error', 'Reset request failed', 'error');
+  }
+}
+
+async function restartServer() {
+  const pin = await _showActionPin('Restart Server', 'Enter PIN to restart the trading server');
+  if (!pin) return;
+
+  showToast('Restarting', 'Server restarting — page will reload automatically...', 'info');
+
+  try {
+    await fetch('/api/restart', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ pin })
+    });
+  } catch(e) { /* expected — server shuts down */ }
+
+  // Poll until server is back up, then reload
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const r = await fetch('/api/state', { signal: AbortSignal.timeout(2000) });
+      if (r.ok) {
+        clearInterval(poll);
+        setTimeout(() => location.reload(), 500);
+      }
+    } catch(e) {}
+    if (attempts > 30) {
+      clearInterval(poll);
+      showToast('Timeout', 'Server did not respond. Check it manually.', 'error');
+    }
+  }, 2000);
+}
+
+async function syncBrokerPosition() {
+  const pin = await _showActionPin('Sync Position', 'Enter PIN to fetch live positions from AngelOne broker');
+  if (!pin) return;
+  const btn = document.getElementById('btn-sync-pos');
+  const resultBox = document.getElementById('sync-pos-result');
+  btn.textContent = '⏳ Syncing…';
+  btn.disabled = true;
+  resultBox.style.display = 'none';
+  try {
+    const r = await fetch('/api/sync-position', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({pin})
+    });
+    const d = await r.json();
+    resultBox.style.display = 'block';
+    if (!d.ok) {
+      resultBox.innerHTML = `<span style="color:var(--red)">✗ ${d.msg || 'Error'}</span>`;
+    } else if (!d.positions || d.positions.length === 0) {
+      resultBox.innerHTML = `<span style="color:var(--green)">✓ ${d.msg}</span>`;
+    } else {
+      let html = `<div style="color:var(--amber);margin-bottom:8px">⚠ ${d.msg}</div>`;
+      html += '<table style="width:100%;border-collapse:collapse;font-size:11px">';
+      html += '<tr style="color:var(--t3)"><th style="text-align:left">Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&L</th></tr>';
+      for (const p of d.positions) {
+        const pnlColor = p.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        html += `<tr>
+          <td style="font-family:var(--mono);padding:3px 0">${p.symbol}</td>
+          <td style="text-align:center">${p.qty}</td>
+          <td style="text-align:right">₹${parseFloat(p.avg_price).toFixed(1)}</td>
+          <td style="text-align:right">₹${parseFloat(p.ltp).toFixed(1)}</td>
+          <td style="text-align:right;color:${pnlColor}">₹${Math.round(p.pnl).toLocaleString('en-IN')}</td>
+        </tr>`;
+      }
+      html += '</table>';
+      html += '<div style="font-size:10px;color:var(--t3);margin-top:8px">These are live broker positions. If the app lost track of them, manually square off from AngelOne and re-enter the trade.</div>';
+      resultBox.innerHTML = html;
+    }
+  } catch(e) {
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = `<span style="color:var(--red)">✗ Request failed: ${e.message}</span>`;
+  }
+  btn.textContent = '🔄 Sync Position from Broker';
+  btn.disabled = false;
 }
 
 // ── Toast + Chrome Notifications ──
@@ -3877,12 +4514,14 @@ history.replaceState({ page: 'dashboard' }, '', '#dashboard');
 poll();
 pollConnection();
 pollUpstoxStatus();
+pollLtpSource();
 loadConfig();
 ensureLogin();
 pollNotifications();
 setInterval(poll, 3000);
 setInterval(pollConnection, 5000);
 setInterval(pollUpstoxStatus, 15000);
+setInterval(pollLtpSource, 5000);
 setInterval(fetchLogs, 10000);
 setInterval(pollNotifications, 3000);
 fetchTrades();

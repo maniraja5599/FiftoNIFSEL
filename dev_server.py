@@ -13,6 +13,7 @@ import requests as _requests
 # ── Trade persistence ──
 TRADES_FILE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.json")
 ACTIVE_POS_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "active_pos.json")
+SETTINGS_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
 
 def _save_active_position(pos):
     """Write current open position to active_pos.json for crash-safe recovery."""
@@ -609,14 +610,16 @@ config = {
     "min_combined_premium": 150,   # combined CE+PE must be ≥ this for a valid entry
     "spot_momentum_limit":  0.005, # block entry if spot moved > 0.5% in last 15 min
     "min_strike_oi":        300000, # minimum OI at CE/PE strike (3 lakh contracts)
-    "profit_target_pct": 0.30,
-    "sl_multiplier":     1.5,
-    "trail_trigger_pct": 0.20,
-    "paper_trade":       os.getenv("PAPER_TRADE", "false").lower() == "true",
-    "margin_override":   1500000,  # app-side margin bypass for test mode; broker may still reject live orders
-    "daily_loss_limit":  45000,
-    "weekly_loss_limit": 60000,
-    "max_trades_per_day": 3,
+    "paper_trade":          os.getenv("PAPER_TRADE", "false").lower() == "true",
+    "margin_override":      1500000,  # app-side margin bypass for test mode; broker may still reject live orders
+    "daily_loss_limit":     45000,    # 3% of ₹15L capital
+    "weekly_loss_limit":    90000,    # 6% of ₹15L capital  (~2 bad days before lockout)
+    "monthly_loss_limit":   150000,   # 10% of ₹15L capital
+    "risk_per_trade_pct":   0.02,     # 2% capital risk per trade for position sizing
+    "stop_after_sl":        True,     # halt bot for rest of day after any SL hit
+    "weekly_loss_lockout":  True,     # halt bot for rest of week if weekly limit breached
+    "max_trades_per_day":   3,
+    "brokerage_per_lot":    120,    # ₹/lot round-trip (flat ₹20×4 orders + STT + charges estimate)
     "vix_min":           13,
     "vix_max":           28,
     "entry_start":       "09:30",
@@ -627,6 +630,49 @@ config = {
     "execution_mode":    "AUTO",
     "gsheet_id":         os.getenv("GSHEET_ID", ""),
 }
+
+# ── Keys that persist to settings.json (non-sensitive trading params) ──
+_PERSISTENT_KEYS = {
+    "capital", "base_lots", "lot_size", "min_premium", "min_combined_premium",
+    "spot_momentum_limit", "min_strike_oi", "paper_trade", "margin_override",
+    "daily_loss_limit", "weekly_loss_limit", "monthly_loss_limit",
+    "risk_per_trade_pct", "stop_after_sl", "weekly_loss_lockout",
+    "max_trades_per_day", "brokerage_per_lot", "vix_min", "vix_max", "entry_start", "entry_end",
+    "dead_zone_start", "expiry_cut_time", "execution_mode",
+}
+
+# ── Defaults snapshot (for reset) ──
+_CONFIG_DEFAULTS = {k: config[k] for k in _PERSISTENT_KEYS if k in config}
+
+def _save_settings():
+    """Persist non-sensitive config + state settings to settings.json."""
+    try:
+        data = {k: config[k] for k in _PERSISTENT_KEYS if k in config}
+        data["ltp_source"]    = state.get("ltp_source", "auto")
+        data["fetch_interval"] = state.get("fetch_interval", 5)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Failed to save settings.json: {e}")
+
+def _load_settings():
+    """Load persisted settings from settings.json and apply to config/state."""
+    if not os.path.exists(SETTINGS_FILE):
+        return
+    try:
+        with open(SETTINGS_FILE) as f:
+            data = json.load(f)
+        for k, v in data.items():
+            if k in _PERSISTENT_KEYS and k in config:
+                config[k] = v
+        if "ltp_source" in data:
+            state["ltp_source"]    = data["ltp_source"]
+        if "fetch_interval" in data:
+            state["fetch_interval"] = int(data["fetch_interval"])
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Settings loaded from settings.json ({len(data)} keys)")
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Failed to load settings.json: {e}")
+
 
 # ── Agent state ──
 state = {
@@ -640,8 +686,9 @@ state = {
     "active_position":  False,
     "squaring_off":     False,      # True = square-off in progress (prevents double exit)
     "execution_mode":   config["execution_mode"],   # "AUTO" or "MANUAL" from config
-    "signal_pending":   False,      # True = signal ready, awaiting manual execute
-    "pending_signal":   None,       # Full signal dict stored here for execution
+    "signal_pending":      False,    # True = signal ready, awaiting manual execute
+    "pending_signal":      None,    # Full signal dict stored here for execution
+    "signal_generated_at": None,    # Unix timestamp when pending signal was set
     "last_signal": {
         "signal":       "WAIT",
         "confidence":   0,
@@ -683,6 +730,11 @@ state = {
     "mode": "LIVE",
     "dte":          None,   # Days-To-Expiry for current weekly expiry
     "expiry_date":  None,   # e.g. "10-Apr-2026"
+    "ltp_source":          "auto",   # "auto" | "angel" | "upstox" | "diversified"
+    "ltp_last_used":       None,     # which broker actually served last LTP
+    "ltp_last_updated":    None,     # ISO timestamp of last successful LTP fetch
+    "fetch_interval":      5,        # seconds between fast LTP refreshes (1–30)
+    "_diversify_turn":     0,        # internal: 0=angel-first, 1=upstox-first (round-robin)
 }
 
 # Auto-start agent on boot
@@ -800,6 +852,7 @@ LOG_LINES = [
 
 _restore_daily_pnl()
 _restore_open_position()
+_load_settings()
 
 # ── Notification queue (consumed by dashboard poll) ──
 _NOTIF = []
@@ -874,13 +927,30 @@ def _update_checks():
 
     mkt_open = _is_market_open()
     state["checks"]["vix"]    = (vix is not None) and (config["vix_min"] <= vix <= config["vix_max"])
-    state["checks"]["iv"]     = None if ivp is None else (ivp > 40)
+    # IV check: use 30-day historical percentile when available (>= 10 days history);
+    # fall back to raw iv_atm > 10 when history is thin; None = skip if no data at all.
+    iv_atm = state["market"].get("iv_atm")
+    if ivp is not None:
+        state["checks"]["iv"] = (ivp > 40)          # historical percentile path
+    elif iv_atm is not None:
+        state["checks"]["iv"] = (iv_atm > 10.0)     # fallback: raw ATM IV > 10%
+    else:
+        state["checks"]["iv"] = None                 # no data — skip
     state["checks"]["ema"]    = emaf
     state["checks"]["pcr"]    = None if pcr is None else (0.8 <= pcr <= 1.4)
     state["checks"]["event"]  = today not in holidays
     # Margin: True/False during market hours; None (waiting) before market opens
     state["checks"]["margin"] = (avail > 0) if (mkt_open or avail > 0) else None
     state["checks"]["gate"]   = pnl > -config["daily_loss_limit"]
+    # ── Weekly loss gate ──
+    week_pnl  = _calc_weekly_pnl()
+    state["checks"]["weekly_gate"] = week_pnl > -config.get("weekly_loss_limit", 60000)
+    # ── Monthly loss gate ──
+    month_pnl = _calc_monthly_pnl()
+    state["checks"]["monthly_gate"] = month_pnl > -config.get("monthly_loss_limit", 150000)
+    # ── Stop-after-SL circuit breaker ──
+    if config.get("stop_after_sl") and state.get("_sl_hit_today"):
+        state["checks"]["gate"] = False
 
 
 def _spot_stable():
@@ -901,17 +971,59 @@ def _spot_stable():
     return True
 
 
+def _calc_weekly_pnl():
+    """Sum P&L of all closed trades this Monday–Sunday week."""
+    trades = state.get("trade_history", [])
+    today  = datetime.now().date()
+    week_start = today - timedelta(days=today.weekday())  # Monday
+    total = 0.0
+    for t in trades:
+        exit_t = t.get("exit_time")
+        pnl    = t.get("final_pnl")
+        if not exit_t or pnl is None:
+            continue
+        try:
+            exit_dt = datetime.fromisoformat(exit_t) if "T" in str(exit_t) else datetime.strptime(str(exit_t).strip(), "%d-%m-%Y  %H:%M:%S")
+            if exit_dt.date() >= week_start:
+                total += float(pnl)
+        except Exception:
+            continue
+    return round(total, 2)
+
+
+def _calc_monthly_pnl():
+    """Sum P&L of all closed trades this calendar month."""
+    trades = state.get("trade_history", [])
+    now    = datetime.now()
+    total  = 0.0
+    for t in trades:
+        exit_t = t.get("exit_time")
+        pnl    = t.get("final_pnl")
+        if not exit_t or pnl is None:
+            continue
+        try:
+            exit_dt = datetime.fromisoformat(exit_t) if "T" in str(exit_t) else datetime.strptime(str(exit_t).strip(), "%d-%m-%Y  %H:%M:%S")
+            if exit_dt.year == now.year and exit_dt.month == now.month:
+                total += float(pnl)
+        except Exception:
+            continue
+    return round(total, 2)
+
+
 def _all_checks_pass():
     """All mandatory checks must be True. Optional checks (pcr/iv/ema) pass when None (data unavailable).
     When market is trending (UP/DOWN), EMA-flat check is skipped — trend setups are valid in trending markets.
+    Margin check is intentionally excluded — it is shown on the dashboard for information only.
     """
     c = state["checks"]
-    # Mandatory: VIX range, not a holiday, margin available, daily loss gate
+    # Mandatory: VIX range, not a holiday, daily/weekly/monthly loss gates
+    # NOTE: margin is NOT included here — it is display-only on the dashboard
     mandatory = (
-        c.get("vix")    is True and
-        c.get("event")  is True and
-        c.get("margin") is True and
-        c.get("gate")   is True
+        c.get("vix")          is True and
+        c.get("event")        is True and
+        c.get("gate")         is True and
+        c.get("weekly_gate")  is not False and
+        c.get("monthly_gate") is not False
     )
     if not mandatory:
         return False
@@ -940,7 +1052,7 @@ _nse_lock      = threading.Lock()
 _chain_cache   = {"data": None, "ts": 0}
 _nse_holidays  = set()          # populated daily from NSE API
 _nifty_lotsize = 75             # updated daily from NSE CSV
-_iv_history    = {"date": None, "values": []}
+_iv_history    = {"date": None, "values": []}   # legacy intraday (unused)
 _angel_contract_cache = {"rows": [], "ts": 0}
 _candle_cache = {}
 _candle_backoff = {}
@@ -990,6 +1102,46 @@ def _straddle_premium_ok(current_premium):
             f"20d avg ₹{avg:.0f} (threshold ₹{threshold:.0f}) — skip"
         )
     return ok
+
+# ── Persistent IV ATM history (30-day percentile) ──
+_IV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "iv_history.json")
+
+def _load_iv_history():
+    try:
+        if os.path.exists(_IV_FILE):
+            with open(_IV_FILE) as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+def _save_iv_history(history):
+    try:
+        with open(_IV_FILE, "w") as f:
+            json.dump(history[-60:], f)   # keep last 60 days
+    except Exception:
+        pass
+
+def _record_iv_daily(iv_atm):
+    """Record today's IV ATM once per day (first good sample). Returns 30-day percentile,
+    or None if < 10 days of history (fallback: use raw iv_atm > 10 check instead)."""
+    if iv_atm is None:
+        return None
+    today = _date.today().isoformat()
+    history = _load_iv_history()
+    # Update or append today's entry
+    if history and history[-1].get("date") == today:
+        history[-1]["iv"] = round(iv_atm, 2)
+    else:
+        history.append({"date": today, "iv": round(iv_atm, 2)})
+    _save_iv_history(history)
+    # Need at least 10 days to compute a meaningful percentile
+    ivs = [d["iv"] for d in history if d.get("iv") is not None]
+    if len(ivs) < 10:
+        return None   # not enough history — caller will use raw fallback
+    below = sum(1 for v in ivs if v <= iv_atm)
+    return round((below / len(ivs)) * 100.0, 1)
+
 
 _NSE_HEADERS = {
     "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1360,23 +1512,6 @@ def _time_to_expiry_years(expiry_str):
     return secs / (365.0 * 24.0 * 3600.0)
 
 
-def _record_iv_sample(iv_atm):
-    if iv_atm is None:
-        return None
-    today = _date.today()
-    if _iv_history["date"] != today:
-        _iv_history["date"] = today
-        _iv_history["values"] = []
-    vals = _iv_history["values"]
-    vals.append(float(iv_atm))
-    if len(vals) > 240:
-        del vals[:-240]
-    if len(vals) == 1:
-        return 50.0
-    below = sum(1 for v in vals if v <= iv_atm)
-    return round((below / len(vals)) * 100.0, 1)
-
-
 def _calc_atr(candles, period=14):
     if not candles or len(candles) < 2:
         return None
@@ -1561,7 +1696,7 @@ def _compute_option_metrics(spot):
     pe_iv = atm_rec.get("PE", {}).get("impliedVolatility")
     iv_vals = [float(v) for v in (ce_iv, pe_iv) if v not in (None, "", 0)]
     iv_atm = round(sum(iv_vals) / len(iv_vals), 2) if iv_vals else None
-    iv_percentile = _record_iv_sample(iv_atm) if iv_atm is not None else None
+    iv_percentile = _record_iv_daily(iv_atm) if iv_atm is not None else None
 
     t_years = _time_to_expiry_years(nearest_expiry)
     exposure_sum = 0.0
@@ -1604,13 +1739,17 @@ def _compute_option_metrics(spot):
     }
 
 
-def _safe_ltp_data(exchange, symbol, token):
-    """Fetch LTP for a single instrument via AngelOne getMarketData.
-    Falls back to Upstox if AngelOne fails.
-    Returns a dict shaped like {status: bool, data: {ltp: float}} or {status: False}."""
-    # ── Try AngelOne first ──
-    angel_result = {"status": False, "message": "angel_obj not ready"}
-    if angel_obj:
+def _safe_ltp_data(exchange, symbol, token, source=None):
+    """Fetch LTP for a single instrument.
+    source: "auto" (default) tries AngelOne first then Upstox,
+            "angel" = AngelOne only, "upstox" = Upstox only.
+    Returns {status: bool, data: {ltp: float}, broker: str} or {status: False}."""
+    if source is None:
+        source = state.get("ltp_source", "auto")
+
+    def _try_angel():
+        if not angel_obj:
+            return {"status": False, "message": "angel_obj not ready"}
         try:
             resp = angel_obj.getMarketData("LTP", {exchange: [str(token)]})
             if resp and resp.get("status"):
@@ -1620,26 +1759,67 @@ def _safe_ltp_data(exchange, symbol, token):
                     row = rows[0]
                     ltp = row.get("ltp") or row.get("lastPrice") or row.get("close")
                     if ltp is not None:
-                        return {"status": True, "data": {"ltp": float(ltp)}}
-            angel_result = {"status": False, "message": resp.get("message", "no data") if resp else "no response"}
+                        return {"status": True, "data": {"ltp": float(ltp)}, "broker": "angel"}
+            return {"status": False, "message": resp.get("message", "no data") if resp else "no response"}
         except Exception as e:
-            angel_result = {"status": False, "message": str(e)}
+            return {"status": False, "message": str(e)}
 
-    # ── AngelOne failed — try Upstox fallback ──
-    if _upstox_available():
-        if exchange == "NSE" and token == "26000":
+    def _try_upstox():
+        if not _upstox_available():
+            return {"status": False, "message": "Upstox token not set"}
+        if exchange == "NSE" and str(token) == "26000":
             ux = _upstox_ltp("NSE_INDEX|Nifty 50")
-        elif exchange == "NSE" and token == "99926017":
+        elif exchange == "NSE" and str(token) == "99926017":
             ux = _upstox_ltp("NSE_INDEX|India VIX")
         elif exchange == "NFO" and symbol:
             ux = _upstox_ltp_nfo(symbol)
         else:
             ux = {"status": False}
         if ux.get("status"):
-            LOG_LINES.append(f"[INFO]  [{_ts()}] Upstox fallback LTP OK: {symbol} ₹{ux['data']['ltp']}")
-            return ux
+            ux["broker"] = "upstox"
+        return ux
 
-    return angel_result
+    if source == "upstox":
+        result = _try_upstox()
+        if not result.get("status"):
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox LTP failed for {symbol}, no fallback (source=upstox)")
+        return result
+
+    if source == "angel":
+        return _try_angel()
+
+    if source == "diversified":
+        # Round-robin: alternate primary source each call for true load distribution
+        turn = state.get("_diversify_turn", 0)
+        state["_diversify_turn"] = 1 - turn  # flip for next call
+        if turn == 0:
+            result = _try_angel()
+            if result.get("status"):
+                return result
+            ux = _try_upstox()
+            if ux.get("status"):
+                LOG_LINES.append(f"[INFO]  [{_ts()}] Diversified: Angel failed, Upstox served {symbol}")
+                return ux
+            return result
+        else:
+            result = _try_upstox()
+            if result.get("status"):
+                return result
+            ang = _try_angel()
+            if ang.get("status"):
+                LOG_LINES.append(f"[INFO]  [{_ts()}] Diversified: Upstox failed, Angel served {symbol}")
+                return ang
+            return result
+
+    # auto: AngelOne first, Upstox fallback
+    result = _try_angel()
+    if result.get("status"):
+        return result
+    ux = _try_upstox()
+    if ux.get("status"):
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Upstox fallback LTP OK: {symbol} ₹{ux['data']['ltp']}")
+        return ux
+    return result
 
 
 def _refresh_market_metrics():
@@ -1824,17 +2004,18 @@ def _select_strikes(spot, setup_type="strangle"):
             min_premium = config.get("min_premium", 40)
             min_oi      = config.get("min_strike_oi", 300000)   # 3 lakh contracts
 
-            # ── ATM straddle premium for 20-day filter ──
-            atm_rec = next((r for r in recs if r.get("strikePrice") == atm), None)
-            if atm_rec:
-                atm_ce_ltp = atm_rec.get("CE", {}).get("lastPrice", 0) or 0
-                atm_pe_ltp = atm_rec.get("PE", {}).get("lastPrice", 0) or 0
-                atm_straddle = atm_ce_ltp + atm_pe_ltp
-                if atm_straddle > 0:
-                    _record_straddle_premium(atm_straddle)
-                    if not _straddle_premium_ok(atm_straddle):
-                        LOG_LINES.append(f"[INFO]  [{_ts()}] Straddle avg filter blocked entry — premium too cheap")
-                        return None
+            # ── ATM straddle premium for 20-day filter (strangle only) ──
+            if setup_type == "strangle":
+                atm_rec = next((r for r in recs if r.get("strikePrice") == atm), None)
+                if atm_rec:
+                    atm_ce_ltp = atm_rec.get("CE", {}).get("lastPrice", 0) or 0
+                    atm_pe_ltp = atm_rec.get("PE", {}).get("lastPrice", 0) or 0
+                    atm_straddle = atm_ce_ltp + atm_pe_ltp
+                    if atm_straddle > 0:
+                        _record_straddle_premium(atm_straddle)
+                        if not _straddle_premium_ok(atm_straddle):
+                            LOG_LINES.append(f"[INFO]  [{_ts()}] Straddle avg filter blocked entry — premium too cheap")
+                            return None
 
             # ── CE side ──
             ce_strike = ce_ltp = ce_oi = None
@@ -1874,14 +2055,36 @@ def _select_strikes(spot, setup_type="strangle"):
                         pe_strike, pe_ltp, pe_oi = s, ltp, oi
                         break
 
-            if ce_strike and pe_strike:
-                combined = round(ce_ltp + pe_ltp, 2)
+            # ── Validation: setup-type-aware checks ──
+            combined = round((ce_ltp or 0) + (pe_ltp or 0), 2)
+            if setup_type == "bull_put_spread":
+                # Only PE leg is sold — only check PE premium and OI
+                if not pe_strike:
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] Bull Put Spread: no PE strike with premium ≥ ₹{min_premium}")
+                    return None
+                pe_oi_ok = (pe_oi or 0) >= min_oi
+                if not pe_oi_ok:
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] OI filter (BPS): PE {pe_strike} OI={int(pe_oi or 0):,} < min {min_oi:,} — skipping")
+                    return None
+                LOG_LINES.append(f"[INFO]  [{_ts()}] OI OK (BPS): PE {pe_strike} OI={int(pe_oi):,}")
+            elif setup_type == "bear_call_spread":
+                # Only CE leg is sold — only check CE premium and OI
+                if not ce_strike:
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] Bear Call Spread: no CE strike with premium ≥ ₹{min_premium}")
+                    return None
+                ce_oi_ok = (ce_oi or 0) >= min_oi
+                if not ce_oi_ok:
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] OI filter (BCS): CE {ce_strike} OI={int(ce_oi or 0):,} < min {min_oi:,} — skipping")
+                    return None
+                LOG_LINES.append(f"[INFO]  [{_ts()}] OI OK (BCS): CE {ce_strike} OI={int(ce_oi):,}")
+            else:
+                # Short Strangle — both legs required, combined premium + both OI checks
+                if not ce_strike or not pe_strike:
+                    return None
                 min_combined = config.get("min_combined_premium", 150)
                 if combined < min_combined:
                     LOG_LINES.append(f"[INFO]  [{_ts()}] Strike scan: combined ₹{combined} < min ₹{min_combined}, skipping")
                     return None
-
-                # ── OI check at selected strikes ──
                 ce_oi_ok = (ce_oi or 0) >= min_oi
                 pe_oi_ok = (pe_oi or 0) >= min_oi
                 if not ce_oi_ok or not pe_oi_ok:
@@ -1894,17 +2097,17 @@ def _select_strikes(spot, setup_type="strangle"):
                     f"[INFO]  [{_ts()}] OI OK: CE {ce_strike} OI={int(ce_oi):,} | PE {pe_strike} OI={int(pe_oi):,}"
                 )
 
-                return {
-                    "expiry":    nearest_expiry,
-                    "atm":       atm,
-                    "ce_strike": ce_strike,
-                    "pe_strike": pe_strike,
-                    "ce_ltp":    ce_ltp,
-                    "pe_ltp":    pe_ltp,
-                    "premium":   combined,
-                    "ce_oi":     int(ce_oi or 0),
-                    "pe_oi":     int(pe_oi or 0),
-                }
+            return {
+                "expiry":    nearest_expiry,
+                "atm":       atm,
+                "ce_strike": ce_strike,
+                "pe_strike": pe_strike,
+                "ce_ltp":    ce_ltp,
+                "pe_ltp":    pe_ltp,
+                "premium":   combined,
+                "ce_oi":     int(ce_oi or 0),
+                "pe_oi":     int(pe_oi or 0),
+            }
 
     LOG_LINES.append(f"[INFO]  [{_ts()}] AngelOne option chain unavailable — using direct LTP lookup")
     return _select_strikes_angelone(spot)
@@ -2080,7 +2283,23 @@ def _calc_sl_mult_by_dte(expiry_str):
 def _execute_trade(signal):
     """Execute trade — SHORT STRANGLE, BULL PUT SPREAD, or BEAR CALL SPREAD."""
     lot_size   = state.get("lot_size") or config.get("lot_size", 75)
-    qty        = config.get("base_lots", 1) * lot_size
+    # ── Risk-aware position sizing ──
+    # If risk_per_trade_pct > 0, cap lots so max loss ≤ capital × risk_pct
+    base_lots  = config.get("base_lots", 1)
+    risk_pct   = float(config.get("risk_per_trade_pct", 0.02))
+    capital    = float(config.get("capital", 1500000))
+    premium    = float(signal.get("premium", 0) or 0)
+    sl_mult    = _calc_sl_mult_by_dte(signal.get("expiry", ""))
+    if risk_pct > 0 and premium > 0 and sl_mult > 1:
+        # Loss at SL = (sl_price - entry_price) × qty = premium × (sl_mult - 1) × lot_size
+        max_loss_per_lot = premium * (sl_mult - 1) * lot_size
+        risk_budget      = capital * risk_pct
+        risk_capped_lots = max(1, int(risk_budget / max_loss_per_lot))
+        qty = min(base_lots, risk_capped_lots) * lot_size
+        if risk_capped_lots < base_lots:
+            LOG_LINES.append(f"[INFO]  [{_ts()}] Risk sizing: capped {base_lots}→{risk_capped_lots} lots (risk_budget=₹{risk_budget:,.0f}, max_loss/lot=₹{max_loss_per_lot:,.0f})")
+    else:
+        qty = base_lots * lot_size
     setup_type = signal.get("setup_type", "Short Strangle")
 
     # ── Bull Put Spread: SELL PE + BUY lower PE ──
@@ -2112,7 +2331,14 @@ def _execute_trade(signal):
                     _notify("🚨 Spread Partial Fill Crisis", f"PE {pe_symbol} sold but hedge failed AND PE buyback failed.\nManual intervention required immediately.", "danger")
                 state["signal_pending"] = False
                 return False
-        premium    = signal["pe_ltp"]
+        sell_leg_ltp = signal["pe_ltp"]
+        # Fetch hedge LTP at entry to compute net spread premium received
+        hedge_pe_entry_ltp = 0.0
+        if hedge_tok and hedge_sym:
+            _hr = _safe_ltp_data("NFO", hedge_sym, hedge_tok)
+            if _hr.get("status"):
+                hedge_pe_entry_ltp = round(_hr["data"]["ltp"], 2)
+        premium    = round(sell_leg_ltp - hedge_pe_entry_ltp, 2)  # net spread premium
         target_pct = _calc_target_pct_by_dte(signal.get("expiry", ""))
         sl_mult    = _calc_sl_mult_by_dte(signal.get("expiry", ""))
         target     = round(premium * target_pct, 2)
@@ -2147,13 +2373,15 @@ def _execute_trade(signal):
             "expiry":           signal.get("expiry", ""),
             "entry_time":       datetime.now().isoformat(),
             "ce_entry_ltp":     0,
-            "pe_entry_ltp":     signal["pe_ltp"],
+            "pe_entry_ltp":     sell_leg_ltp,
+            "hedge_pe_entry_ltp": hedge_pe_entry_ltp,
+            "current_hedge_pe_ltp": hedge_pe_entry_ltp,
         }
         state["position_detail"] = pos
         state["last_signal"]["signal"] = "ACTIVE"
-        _save_active_position(pos)
-        LOG_LINES.append(f"[TRADE] [{_ts()}] Bull Put Spread entered | PE {signal['pe_strike']} | Premium ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}")
-        _notify("✅ Bull Put Spread Entered", f"SELL PE {signal['pe_strike']} @ ₹{premium:.0f}\nTarget ₹{target:.0f} | SL ₹{sl:.0f}", "success")
+        _persist_entry(pos)
+        LOG_LINES.append(f"[TRADE] [{_ts()}] Bull Put Spread entered | PE {signal['pe_strike']} @ ₹{sell_leg_ltp:.0f} | Hedge ₹{hedge_pe_entry_ltp:.0f} | Net ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}")
+        _notify("✅ Bull Put Spread Entered", f"SELL PE {signal['pe_strike']} @ ₹{sell_leg_ltp:.0f} | Hedge ₹{hedge_pe_entry_ltp:.0f}\nNet Premium ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}", "success")
         return True
 
     # ── Bear Call Spread: SELL CE + BUY higher CE ──
@@ -2185,7 +2413,14 @@ def _execute_trade(signal):
                     _notify("🚨 Spread Partial Fill Crisis", f"CE {ce_symbol} sold but hedge failed AND CE buyback failed.\nManual intervention required immediately.", "danger")
                 state["signal_pending"] = False
                 return False
-        premium    = signal["ce_ltp"]
+        sell_leg_ltp = signal["ce_ltp"]
+        # Fetch hedge LTP at entry to compute net spread premium received
+        hedge_ce_entry_ltp = 0.0
+        if hedge_tok and hedge_sym:
+            _hr = _safe_ltp_data("NFO", hedge_sym, hedge_tok)
+            if _hr.get("status"):
+                hedge_ce_entry_ltp = round(_hr["data"]["ltp"], 2)
+        premium    = round(sell_leg_ltp - hedge_ce_entry_ltp, 2)  # net spread premium
         target_pct = _calc_target_pct_by_dte(signal.get("expiry", ""))
         sl_mult    = _calc_sl_mult_by_dte(signal.get("expiry", ""))
         target     = round(premium * target_pct, 2)
@@ -2219,14 +2454,16 @@ def _execute_trade(signal):
             "setup_type":       setup_type,
             "expiry":           signal.get("expiry", ""),
             "entry_time":       datetime.now().isoformat(),
-            "ce_entry_ltp":     signal["ce_ltp"],
+            "ce_entry_ltp":     sell_leg_ltp,
             "pe_entry_ltp":     0,
+            "hedge_ce_entry_ltp": hedge_ce_entry_ltp,
+            "current_hedge_ce_ltp": hedge_ce_entry_ltp,
         }
         state["position_detail"] = pos
         state["last_signal"]["signal"] = "ACTIVE"
-        _save_active_position(pos)
-        LOG_LINES.append(f"[TRADE] [{_ts()}] Bear Call Spread entered | CE {signal['ce_strike']} | Premium ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}")
-        _notify("✅ Bear Call Spread Entered", f"SELL CE {signal['ce_strike']} @ ₹{premium:.0f}\nTarget ₹{target:.0f} | SL ₹{sl:.0f}", "success")
+        _persist_entry(pos)
+        LOG_LINES.append(f"[TRADE] [{_ts()}] Bear Call Spread entered | CE {signal['ce_strike']} @ ₹{sell_leg_ltp:.0f} | Hedge ₹{hedge_ce_entry_ltp:.0f} | Net ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}")
+        _notify("✅ Bear Call Spread Entered", f"SELL CE {signal['ce_strike']} @ ₹{sell_leg_ltp:.0f} | Hedge ₹{hedge_ce_entry_ltp:.0f}\nNet Premium ₹{premium:.0f} | Target ₹{target:.0f} | SL ₹{sl:.0f}", "success")
         return True
 
     # ── Default: Short Strangle ──
@@ -2443,7 +2680,13 @@ def _square_off_position():
         LOG_LINES.append(f"[ERROR] [{_ts()}] EXIT ORDER FAILURE — {msg} — MANUAL INTERVENTION REQUIRED")
         _notify("🚨 Exit Order Failed", f"{msg}\nVerify broker position. Manual close may be required.", "danger")
 
-    final_pnl = round(pos.get("pnl", 0), 2)   # pos["pnl"] is already qty-multiplied
+    gross_pnl  = round(pos.get("pnl", 0), 2)   # pos["pnl"] is already qty-multiplied
+    lot_size   = state.get("lot_size") or config.get("lot_size", 65)
+    lots       = max(1, round(qty / lot_size)) if lot_size > 0 else 1
+    brokerage  = round(config.get("brokerage_per_lot", 120) * lots, 2)
+    final_pnl  = round(gross_pnl - brokerage, 2)
+    if brokerage > 0:
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Brokerage deducted: ₹{brokerage:,.0f} ({lots} lots × ₹{config.get('brokerage_per_lot',120)}) | Gross ₹{gross_pnl:,.0f} → Net ₹{final_pnl:,.0f}")
     state["closed_pnl"] += final_pnl        # accumulate realized P&L for the day
     state["daily_pnl"]   = state["closed_pnl"]
     # trades_today already incremented at entry — do NOT increment again here
@@ -2468,14 +2711,19 @@ def _square_off_position():
         "pe_symbol":       pos["pe_symbol"],
         "quantity":        qty,
         "premium_received": pos["premium_received"],
-        "ce_entry_ltp":    pos.get("ce_entry_price", ""),
-        "pe_entry_ltp":    pos.get("pe_entry_price", ""),
+        # Short Strangle stores "ce_entry_price"/"pe_entry_price"; spreads store "ce_entry_ltp"/"pe_entry_ltp"
+        "ce_entry_ltp":    pos.get("ce_entry_ltp") or pos.get("ce_entry_price", ""),
+        "pe_entry_ltp":    pos.get("pe_entry_ltp") or pos.get("pe_entry_price", ""),
         "ce_exit_ltp":     pos.get("current_ce_ltp", ""),
         "pe_exit_ltp":     pos.get("current_pe_ltp", ""),
+        "hedge_pe_exit_ltp": pos.get("current_hedge_pe_ltp", ""),
+        "hedge_ce_exit_ltp": pos.get("current_hedge_ce_ltp", ""),
         "target":          pos["target"],
         "initial_sl":      pos.get("initial_sl", pos.get("sl", "")),
         "stop_loss":       pos["sl"],
         "trail_locked":    pos.get("trail_locked", False),
+        "gross_pnl":       gross_pnl,
+        "brokerage":       brokerage,
         "final_pnl":       final_pnl,
         "exit_reason":     pos.get("exit_reason", "UNKNOWN"),
         "expiry":          pos.get("expiry", ""),
@@ -2491,9 +2739,16 @@ def _square_off_position():
     _persist_trade(trade_record)
     
     LOG_LINES.append(f"[TRADE] [{_ts()}] Square-off complete | Realized ₹{final_pnl:,.0f} | Daily ₹{state['daily_pnl']:,.0f} | Trades today: {state['trades_today']}")
+    _setup_label = pos.get("setup_type", "Short Strangle")
+    if _setup_label == "Bull Put Spread":
+        _leg_label = f"PE {pos['pe_strike']}"
+    elif _setup_label == "Bear Call Spread":
+        _leg_label = f"CE {pos['ce_strike']}"
+    else:
+        _leg_label = f"CE {pos['ce_strike']} | PE {pos['pe_strike']}"
     _notify(
         "✅ Position Closed",
-        f"CE {pos['ce_strike']} | PE {pos['pe_strike']}\n"
+        f"{_setup_label} | {_leg_label}\n"
         f"P&L: ₹{final_pnl:,.0f}\n"
         f"Total trades today: {state['trades_today']}",
         "success" if final_pnl >= 0 else "danger"
@@ -2538,18 +2793,35 @@ def signal_engine():
                     spot  = state["market"]["nifty_spot"]
                     trend = state["market"].get("trend", "FLAT")
                     if spot:
-                        strikes = _select_strikes(spot)
-                        if strikes:
-                            ce_sym   = _build_angel_symbol(strikes["ce_strike"], "CE", strikes["expiry"])
-                            pe_sym   = _build_angel_symbol(strikes["pe_strike"], "PE", strikes["expiry"])
-                            ce_token = strikes.get("ce_token") or _get_nfo_token(ce_sym)
-                            pe_token = strikes.get("pe_token") or _get_nfo_token(pe_sym)
+                        # ── Determine setup type BEFORE calling _select_strikes ──
+                        # FLAT  → Short Strangle (sell both sides, collect premium)
+                        # UP    → Bull Put Spread (sell PE, hedge with lower PE)
+                        # DOWN  → Bear Call Spread (sell CE, hedge with higher CE)
+                        pcr = state["market"].get("pcr") or 1.0
+                        if trend == "UP" and pcr >= 1.0:
+                            setup_type_hint = "bull_put_spread"
+                        elif trend == "DOWN" and pcr <= 1.0:
+                            setup_type_hint = "bear_call_spread"
+                        else:
+                            # Strangle: only valid when EMA is flat.
+                            # _all_checks_pass() skips EMA check for UP/DOWN trend, so
+                            # enforce it here for the strangle fallback case.
+                            if state["checks"].get("ema") is False:
+                                LOG_LINES.append(
+                                    f"[INFO]  [{_ts()}] Strangle skipped — trend {trend} but PCR {pcr:.2f} "
+                                    f"not confirming; EMA not flat"
+                                )
+                                time.sleep(60)
+                                continue
+                            setup_type_hint = "strangle"
 
-                            # ── Choose setup based on trend ──
-                            # FLAT  → Short Strangle (sell both sides, collect premium)
-                            # UP    → Bull Put Spread (sell PE, hedge with lower PE)
-                            # DOWN  → Bear Call Spread (sell CE, hedge with higher CE)
-                            pcr = state["market"].get("pcr") or 1.0
+                        strikes = _select_strikes(spot, setup_type_hint)
+                        if strikes:
+                            ce_sym   = _build_angel_symbol(strikes["ce_strike"], "CE", strikes["expiry"]) if strikes.get("ce_strike") else None
+                            pe_sym   = _build_angel_symbol(strikes["pe_strike"], "PE", strikes["expiry"]) if strikes.get("pe_strike") else None
+                            ce_token = (strikes.get("ce_token") or (ce_sym and _get_nfo_token(ce_sym))) if ce_sym else None
+                            pe_token = (strikes.get("pe_token") or (pe_sym and _get_nfo_token(pe_sym))) if pe_sym else None
+
                             if trend == "UP" and pcr >= 1.0:
                                 setup_type = "Bull Put Spread"
                                 # Sell the chosen PE, buy PE 100 points lower as hedge
@@ -2669,6 +2941,7 @@ def signal_engine():
                                 threading.Thread(target=_execute_trade, args=(signal,), daemon=True).start()
                             else:
                                 state["signal_pending"] = True
+                                state["signal_generated_at"] = time.time()
                                 LOG_LINES.append(f"[TRADE] [{_ts()}] Signal: {setup_type} | MANUAL — waiting for user")
                                 _notify(
                                     f"📊 Signal Ready — {setup_type}",
@@ -2704,62 +2977,125 @@ def signal_engine():
 
 # ── Position monitor ──
 
+def _refresh_position_ltp():
+    """Fetch current LTPs for active position and update P&L. Called by fast LTP thread."""
+    if not (state.get("active_position") and state.get("position_detail")):
+        return
+    pos        = state["position_detail"]
+    setup      = pos.get("setup_type", "Short Strangle")
+    ce_token   = pos.get("ce_token")
+    pe_token   = pos.get("pe_token")
+    qty        = pos.get("quantity", 1)
+    entry_prem = pos.get("premium_received", 0)
+
+    current_cost = None
+    broker_used  = None
+
+    if setup == "Bull Put Spread" and pe_token:
+        pe_r = _safe_ltp_data("NFO", pos.get("pe_symbol"), pe_token)
+        hedge_tok = pos.get("hedge_pe_token")
+        hedge_r   = _safe_ltp_data("NFO", pos.get("hedge_pe_symbol"), hedge_tok) if hedge_tok else None
+        if pe_r.get("status"):
+            pe_ltp = pe_r["data"]["ltp"]
+            pos["current_pe_ltp"] = round(pe_ltp, 2)
+            pos["current_ce_ltp"] = 0
+            if hedge_r and hedge_r.get("status"):
+                hedge_ltp = hedge_r["data"]["ltp"]
+                pos["current_hedge_pe_ltp"] = round(hedge_ltp, 2)
+                current_cost = pe_ltp - hedge_ltp   # net spread cost
+            else:
+                current_cost = pe_ltp               # fallback: short leg only
+            broker_used = pe_r.get("broker", "unknown")
+
+    elif setup == "Bear Call Spread" and ce_token:
+        ce_r = _safe_ltp_data("NFO", pos.get("ce_symbol"), ce_token)
+        hedge_tok = pos.get("hedge_ce_token")
+        hedge_r   = _safe_ltp_data("NFO", pos.get("hedge_ce_symbol"), hedge_tok) if hedge_tok else None
+        if ce_r.get("status"):
+            ce_ltp = ce_r["data"]["ltp"]
+            pos["current_ce_ltp"] = round(ce_ltp, 2)
+            pos["current_pe_ltp"] = 0
+            if hedge_r and hedge_r.get("status"):
+                hedge_ltp = hedge_r["data"]["ltp"]
+                pos["current_hedge_ce_ltp"] = round(hedge_ltp, 2)
+                current_cost = ce_ltp - hedge_ltp   # net spread cost
+            else:
+                current_cost = ce_ltp               # fallback: short leg only
+            broker_used = ce_r.get("broker", "unknown")
+
+    elif setup == "Short Strangle" and ce_token and pe_token:
+        ce_r = _safe_ltp_data("NFO", pos.get("ce_symbol"), ce_token)
+        pe_r = _safe_ltp_data("NFO", pos.get("pe_symbol"), pe_token)
+        b1 = ce_r.get("broker"); b2 = pe_r.get("broker")
+        broker_used = b1 if b1 == b2 else f"{b1}/{b2}"
+        if ce_r.get("status") and pe_r.get("status"):
+            ce_ltp = ce_r["data"]["ltp"]
+            pe_ltp = pe_r["data"]["ltp"]
+            current_cost = ce_ltp + pe_ltp
+            pos["current_ce_ltp"] = round(ce_ltp, 2)
+            pos["current_pe_ltp"] = round(pe_ltp, 2)
+        elif ce_r.get("status"):
+            pos["current_ce_ltp"] = round(ce_r["data"]["ltp"], 2)
+        elif pe_r.get("status"):
+            pos["current_pe_ltp"] = round(pe_r["data"]["ltp"], 2)
+
+    if current_cost is not None:
+        open_pnl = entry_prem - current_cost
+        pos["pnl"]         = round(open_pnl * qty, 2)
+        state["daily_pnl"] = round(state["closed_pnl"] + open_pnl * qty, 2)
+        state["ltp_last_used"]    = broker_used
+        state["ltp_last_updated"] = _dt.now().strftime("%H:%M:%S")
+
+
+def fast_ltp_refresh():
+    """Fetch position LTPs at the user-configured interval for smooth P&L updates."""
+    time.sleep(25)  # let position_monitor start first
+    while True:
+        try:
+            _refresh_position_ltp()
+        except Exception as e:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Fast LTP refresh error: {e}")
+        interval = max(1, min(30, int(state.get("fetch_interval", 5))))
+        time.sleep(interval)
+
+
 def position_monitor():
     """Monitor active position SL/target every 30s."""
     time.sleep(20)
 
     while True:
         try:
-            if state["active_position"] and state["position_detail"] and angel_obj:
-                pos       = state["position_detail"]
-                setup     = pos.get("setup_type", "Short Strangle")
-                ce_token  = pos.get("ce_token")
-                pe_token  = pos.get("pe_token")
-                qty       = pos.get("quantity", 1)
-                entry_prem = pos["premium_received"]
+            if state["active_position"] and state["position_detail"]:
+                pos        = state["position_detail"]
+                setup      = pos.get("setup_type", "Short Strangle")
+                entry_prem = pos.get("premium_received", 0)
 
                 # Retry token lookup if missing (e.g. restored from disk before login)
-                if not ce_token and pos.get("ce_symbol"):
-                    ce_token = _get_nfo_token(pos["ce_symbol"])
-                    if ce_token: pos["ce_token"] = ce_token
-                if not pe_token and pos.get("pe_symbol"):
-                    pe_token = _get_nfo_token(pos["pe_symbol"])
-                    if pe_token: pos["pe_token"] = pe_token
+                if not pos.get("ce_token") and pos.get("ce_symbol"):
+                    t = _get_nfo_token(pos["ce_symbol"])
+                    if t: pos["ce_token"] = t
+                if not pos.get("pe_token") and pos.get("pe_symbol"):
+                    t = _get_nfo_token(pos["pe_symbol"])
+                    if t: pos["pe_token"] = t
 
-                # ── Fetch LTP for the sold leg(s) ──
-                # Spreads have only one sold leg; Strangle has both
-                current_cost = None
+                # ── LTP fetch (fast_ltp_refresh handles 5s updates; this ensures 30s fallback) ──
+                _refresh_position_ltp()
 
-                if setup == "Bull Put Spread" and pe_token:
-                    pe_r = _safe_ltp_data("NFO", pos["pe_symbol"], pe_token)
-                    if pe_r.get("status"):
-                        pe_ltp = pe_r["data"]["ltp"]
-                        current_cost = pe_ltp
-                        pos["current_pe_ltp"] = round(pe_ltp, 2)
-                        pos["current_ce_ltp"] = 0
-
-                elif setup == "Bear Call Spread" and ce_token:
-                    ce_r = _safe_ltp_data("NFO", pos["ce_symbol"], ce_token)
-                    if ce_r.get("status"):
-                        ce_ltp = ce_r["data"]["ltp"]
-                        current_cost = ce_ltp
-                        pos["current_ce_ltp"] = round(ce_ltp, 2)
-                        pos["current_pe_ltp"] = 0
-
-                elif setup == "Short Strangle" and ce_token and pe_token:
-                    ce_r = _safe_ltp_data("NFO", pos["ce_symbol"], ce_token)
-                    pe_r = _safe_ltp_data("NFO", pos["pe_symbol"], pe_token)
-                    if ce_r.get("status") and pe_r.get("status"):
-                        ce_ltp = ce_r["data"]["ltp"]
-                        pe_ltp = pe_r["data"]["ltp"]
-                        current_cost = ce_ltp + pe_ltp
-                        pos["current_ce_ltp"] = round(ce_ltp, 2)
-                        pos["current_pe_ltp"] = round(pe_ltp, 2)
+                # Derive current_cost from freshly updated LTPs
+                ce_ltp = pos.get("current_ce_ltp", 0) or 0
+                pe_ltp = pos.get("current_pe_ltp", 0) or 0
+                if setup == "Bull Put Spread":
+                    hedge_pe_ltp = pos.get("current_hedge_pe_ltp", 0) or 0
+                    current_cost = (pe_ltp - hedge_pe_ltp) if pe_ltp else None
+                elif setup == "Bear Call Spread":
+                    hedge_ce_ltp = pos.get("current_hedge_ce_ltp", 0) or 0
+                    current_cost = (ce_ltp - hedge_ce_ltp) if ce_ltp else None
+                else:
+                    current_cost = (ce_ltp + pe_ltp) if (ce_ltp or pe_ltp) else None
 
                 if current_cost is not None:
+                    qty      = pos.get("quantity", 1)
                     open_pnl = entry_prem - current_cost
-                    pos["pnl"]         = round(open_pnl * qty, 2)
-                    state["daily_pnl"] = round(state["closed_pnl"] + open_pnl * qty, 2)
 
                     # Label for notifications
                     leg_label = (
@@ -2805,6 +3141,7 @@ def position_monitor():
                         if not pos.get("exit_notified"):
                             pos["exit_notified"] = True
                             pos["exit_reason"]   = "STOP_LOSS"
+                            state["_sl_hit_today"] = True  # circuit breaker flag
                             LOG_LINES.append(f"[TRADE] [{_ts()}] SL HIT ✗ | {setup} | P&L ₹{open_pnl:,.0f} | Squaring off")
                             _notify(
                                 "🛑 Stop Loss Hit",
@@ -2867,9 +3204,10 @@ def fetch_market_data():
         today = _date.today()
         if today != _last_date:
             _last_date = today
-            state["daily_pnl"]    = 0.0
-            state["closed_pnl"]   = 0.0
-            state["trades_today"] = 0
+            state["daily_pnl"]      = 0.0
+            state["closed_pnl"]     = 0.0
+            state["trades_today"]   = 0
+            state["_sl_hit_today"]  = False  # reset circuit breaker each day
             state["market"].update({
                 "pcr": None,
                 "iv_atm": None,
@@ -3006,6 +3344,146 @@ def upstox_status():
         LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox status error: {e}")
         return jsonify({"configured": False, "connected": False, "msg": "Upstox status unavailable"}), 500
 
+@app.route("/api/ltp-source", methods=["GET", "POST"])
+def ltp_source_api():
+    """GET: return current LTP source + fetch interval.
+    POST {source, interval}: update either or both."""
+    if request.method == "GET":
+        return jsonify({
+            "source":           state.get("ltp_source", "auto"),
+            "fetch_interval":   state.get("fetch_interval", 5),
+            "last_used":        state.get("ltp_last_used"),
+            "last_updated":     state.get("ltp_last_updated"),
+            "upstox_available": _upstox_available(),
+            "angel_available":  bool(angel_obj),
+        })
+    data = request.get_json(force=True, silent=True) or {}
+    if "source" in data:
+        src = data["source"]
+        if src not in ("auto", "angel", "upstox", "diversified"):
+            return jsonify({"ok": False, "msg": "Invalid source. Use: auto | angel | upstox | diversified"}), 400
+        state["ltp_source"] = src
+        LOG_LINES.append(f"[INFO]  [{_ts()}] LTP source changed to: {src}")
+    if "interval" in data:
+        try:
+            iv = max(1, min(30, int(data["interval"])))
+            state["fetch_interval"] = iv
+            LOG_LINES.append(f"[INFO]  [{_ts()}] Fetch interval changed to: {iv}s")
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "msg": "Invalid interval. Must be 1–30 seconds"}), 400
+    _save_settings()
+    return jsonify({"ok": True, "source": state.get("ltp_source"), "fetch_interval": state.get("fetch_interval")})
+
+
+@app.route("/api/settings/reset", methods=["POST"])
+def api_reset_settings():
+    """Reset all trading settings to factory defaults. Requires PIN."""
+    err = _require_pin()
+    if err: return err
+    for k, v in _CONFIG_DEFAULTS.items():
+        config[k] = v
+    state["ltp_source"]    = "auto"
+    state["fetch_interval"] = 5
+    state["execution_mode"] = config.get("execution_mode", "AUTO")
+    # Delete settings.json so next restart also uses defaults
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            os.remove(SETTINGS_FILE)
+    except Exception:
+        pass
+    LOG_LINES.append(f"[INFO]  [{_ts()}] Settings reset to factory defaults.")
+    return jsonify({"ok": True, "msg": "Settings reset to defaults."})
+
+
+@app.route("/api/restart", methods=["POST"])
+def restart_server():
+    """Restart the server process. Requires PIN."""
+    import sys, subprocess, threading
+    data = request.get_json(force=True, silent=True) or {}
+    pin  = str(data.get("pin", "")).strip()
+    correct = str(config.get("login_pin", os.getenv("LOGIN_PIN", "5599")))
+    if pin != correct:
+        return jsonify({"ok": False, "msg": "Invalid PIN"}), 403
+    LOG_LINES.append(f"[INFO]  [{_ts()}] Server restart requested from dashboard.")
+    def _do_restart():
+        time.sleep(1)
+        subprocess.Popen([sys.executable] + sys.argv)
+        os._exit(0)
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return jsonify({"ok": True, "msg": "Restarting..."})
+
+
+@app.route("/api/fetch-capital", methods=["GET"])
+def api_fetch_capital():
+    """Fetch live available capital from AngelOne broker and return it."""
+    _fetch_margin()
+    avail = state["funds"].get("available_cash", 0)
+    used  = state["funds"].get("used_margin", 0)
+    total = avail + used
+    return jsonify({
+        "ok":        True,
+        "available": avail,
+        "used":      used,
+        "total":     total,
+        "source":    "AngelOne" if angel_obj else "unavailable",
+    })
+
+
+@app.route("/api/sync-position", methods=["POST"])
+def api_sync_position():
+    """Fetch live positions from AngelOne and attempt to recover an active position
+    if the app lost state (e.g. after a crash). Requires PIN."""
+    err = _require_pin()
+    if err: return err
+
+    if not angel_obj:
+        return jsonify({"ok": False, "msg": "AngelOne not connected."}), 400
+
+    try:
+        # AngelOne positions endpoint
+        if hasattr(angel_obj, "_routes"):
+            angel_obj._routes["getPosition"] = "/rest/secure/angelbroking/order/v1/getPosition"
+        r = angel_obj._getRequest("getPosition") if hasattr(angel_obj, "_getRequest") else None
+    except Exception as e:
+        return jsonify({"ok": False, "msg": f"Broker API error: {e}"}), 500
+
+    if not r or not r.get("status"):
+        return jsonify({"ok": False, "msg": "No positions returned or API error."}), 400
+
+    positions = r.get("data") or []
+    nfo_pos = [p for p in positions if p.get("exchange") == "NFO" and
+               abs(float(p.get("netqty", 0))) > 0]
+
+    if not nfo_pos:
+        return jsonify({"ok": True, "msg": "No open NFO positions found.", "positions": []})
+
+    # If app already has an active position, don't overwrite
+    if state.get("active_position"):
+        return jsonify({
+            "ok":       True,
+            "msg":      "App already has an active position tracked. No sync needed.",
+            "positions": nfo_pos,
+        })
+
+    # Surface broker positions for the user to review — don't auto-restore to avoid mistakes
+    summary = []
+    for p in nfo_pos:
+        summary.append({
+            "symbol":   p.get("tradingsymbol", ""),
+            "qty":      p.get("netqty", 0),
+            "avg_price":p.get("averageprice", 0),
+            "ltp":      p.get("ltp", 0),
+            "pnl":      p.get("unrealised", 0),
+        })
+    LOG_LINES.append(f"[INFO]  [{_ts()}] Position sync: found {len(nfo_pos)} open NFO legs from broker.")
+    return jsonify({
+        "ok":       True,
+        "msg":      f"Found {len(nfo_pos)} open NFO position(s) on broker. App position not set — review below.",
+        "positions": summary,
+        "action":   "review",
+    })
+
+
 @app.route("/fifto_logo.png")
 def logo():
     p = os.path.join(BASE, "fifto_logo.png")
@@ -3057,8 +3535,15 @@ def api_state():
         if t.get("exit_time") and t.get("final_pnl") is not None
     )
     capital = float(config.get("capital", 1500000))
-    state["overall_pnl"] = round(overall, 2)
-    state["overall_pnl_pct"] = round((overall / capital * 100), 2) if capital else 0
+    state["overall_pnl"]      = round(overall, 2)
+    state["overall_pnl_pct"]  = round((overall / capital * 100), 2) if capital else 0
+    state["weekly_pnl"]       = _calc_weekly_pnl()
+    state["monthly_pnl"]      = _calc_monthly_pnl()
+    state["weekly_loss_limit"]  = config.get("weekly_loss_limit", 60000)
+    state["monthly_loss_limit"] = config.get("monthly_loss_limit", 150000)
+    # Signal age in seconds (so frontend can show countdown/warning)
+    gen = state.get("signal_generated_at")
+    state["signal_age_secs"] = round(time.time() - gen) if gen else None
     return jsonify(state)
 
 @app.route("/api/connection")
@@ -3071,15 +3556,42 @@ def api_logs():
 
 _CONFIG_SENSITIVE = {"login_pin", "angel_api_key", "angel_password", "angel_totp_secret"}
 
+# PIN brute-force protection: track failed attempts per IP
+_pin_failures: dict = {}   # {ip: {"count": N, "locked_until": float}}
+_PIN_MAX_ATTEMPTS = 3
+_PIN_LOCKOUT_SECS = 300    # 5 minutes
+
 def _require_pin():
-    """Returns None if PIN is valid, or a (response, status) tuple to return immediately."""
+    """Returns None if PIN is valid, or a (response, status) tuple to return immediately.
+    After 3 wrong attempts from the same IP, locks out for 5 minutes."""
+    ip = request.remote_addr or "unknown"
+    now = time.time()
+
+    rec = _pin_failures.get(ip, {"count": 0, "locked_until": 0.0})
+    if rec["locked_until"] > now:
+        remaining = int(rec["locked_until"] - now)
+        return jsonify({"ok": False, "msg": f"Too many wrong attempts. Try again in {remaining}s.", "locked": True}), 429
+
     data = request.get_json(force=True, silent=True) or {}
     pin  = str(data.get("pin", "")).strip()
     if not pin:
         return jsonify({"ok": False, "msg": "PIN required."}), 401
+
     correct = str(config.get("login_pin", "5599"))
     if not hmac.compare_digest(pin, correct):
-        return jsonify({"ok": False, "msg": "Invalid PIN."}), 401
+        rec["count"] += 1
+        if rec["count"] >= _PIN_MAX_ATTEMPTS:
+            rec["locked_until"] = now + _PIN_LOCKOUT_SECS
+            rec["count"] = 0
+            _pin_failures[ip] = rec
+            LOG_LINES.append(f"[WARN]  [{_ts()}] PIN lockout triggered for {ip} ({_PIN_MAX_ATTEMPTS} failed attempts)")
+            return jsonify({"ok": False, "msg": f"Too many wrong attempts. Locked for {_PIN_LOCKOUT_SECS//60} min.", "locked": True}), 429
+        _pin_failures[ip] = rec
+        remaining_attempts = _PIN_MAX_ATTEMPTS - rec["count"]
+        return jsonify({"ok": False, "msg": f"Invalid PIN. {remaining_attempts} attempt(s) left."}), 401
+
+    # Success — reset failure counter
+    _pin_failures.pop(ip, None)
     return None
 
 
@@ -3142,11 +3654,22 @@ def api_set_mode():
     LOG_LINES.append(f"[INFO]  [{_ts()}] Execution mode → {mode}")
     return jsonify({"ok": True, "mode": mode})
 
+_SIGNAL_MAX_AGE_SECS = 300   # reject manual execute if signal is older than 5 minutes
+
 @app.route("/api/execute", methods=["POST"])
 def api_execute():
     """User manually triggers execution of the pending signal."""
     if not state.get("signal_pending") or not state.get("pending_signal"):
         return jsonify({"error": "No pending signal to execute"}), 400
+    # Reject stale signals
+    generated_at = state.get("signal_generated_at")
+    if generated_at and (time.time() - generated_at) > _SIGNAL_MAX_AGE_SECS:
+        age_min = int((time.time() - generated_at) / 60)
+        state["signal_pending"] = False
+        state["pending_signal"] = None
+        state["signal_generated_at"] = None
+        LOG_LINES.append(f"[WARN]  [{_ts()}] Stale signal discarded (age {age_min} min > {_SIGNAL_MAX_AGE_SECS//60} min limit)")
+        return jsonify({"error": f"Signal expired ({age_min} min old). Market conditions may have changed. A fresh signal will generate shortly."}), 400
     signal = state["pending_signal"]
     LOG_LINES.append(f"[TRADE] [{_ts()}] Manual execute triggered by user.")
     threading.Thread(target=_execute_trade, args=(signal,), daemon=True).start()
@@ -3157,18 +3680,6 @@ def api_execute():
 def api_test_live_trade():
     payload, status = _place_test_live_atm_sell()
     return jsonify(payload), status
-
-@app.route("/api/approve_buy", methods=["POST"])
-def api_approve_buy():
-    """Legacy endpoint — manual execution now handled by /api/execute."""
-    err = _require_pin()
-    if err: return err
-    if state.get("signal_pending") and state.get("pending_signal"):
-        signal = state["pending_signal"]
-        LOG_LINES.append(f"[TRADE] [{_ts()}] Approve Buy → executing pending signal.")
-        threading.Thread(target=_execute_trade, args=(signal,), daemon=True).start()
-        return jsonify({"ok": True, "msg": "Executing trade..."})
-    return jsonify({"ok": False, "msg": "No pending signal to execute."})
 
 @app.route("/api/reconnect", methods=["POST"])
 def api_reconnect():
@@ -3191,7 +3702,26 @@ def api_save_config():
     # Apply execution_mode immediately if changed
     if "execution_mode" in data:
         state["execution_mode"] = data["execution_mode"].upper()
-    LOG_LINES.append(f"[INFO]  [{_ts()}] Configuration updated.")
+    # ── Capital-aware risk scaling ──
+    # If capital changed AND user did NOT explicitly set loss limits, scale them proportionally
+    if "capital" in data:
+        cap = float(config["capital"])
+        if "daily_loss_limit" not in data:
+            config["daily_loss_limit"]   = max(15000, round(cap * 0.03 / 1000) * 1000)   # 3% of capital
+        if "weekly_loss_limit" not in data:
+            config["weekly_loss_limit"]  = max(40000, round(cap * 0.06 / 1000) * 1000)   # 6% of capital (~2 bad days)
+        if "monthly_loss_limit" not in data:
+            config["monthly_loss_limit"] = max(50000, round(cap * 0.10 / 1000) * 1000)   # 10% of capital
+        if "margin_override" not in data:
+            config["margin_override"]    = int(cap)
+        LOG_LINES.append(
+            f"[INFO]  [{_ts()}] Capital changed to ₹{cap:,.0f} → "
+            f"Daily limit ₹{config['daily_loss_limit']:,} | "
+            f"Weekly ₹{config['weekly_loss_limit']:,} | "
+            f"Monthly ₹{config['monthly_loss_limit']:,}"
+        )
+    _save_settings()
+    LOG_LINES.append(f"[INFO]  [{_ts()}] Configuration updated and saved to disk.")
     return jsonify({"ok": True})
 
 @app.route("/api/notifications")
@@ -3584,6 +4114,7 @@ if __name__ == "__main__":
     threading.Thread(target=fetch_market_data,        daemon=True).start()
     threading.Thread(target=signal_engine,            daemon=True).start()
     threading.Thread(target=position_monitor,         daemon=True).start()
+    threading.Thread(target=fast_ltp_refresh,         daemon=True).start()
     threading.Thread(target=_startup_nse_fetch,       daemon=True).start()
     threading.Thread(target=telegram_command_poll,    daemon=True).start()
     print("FIFTO AI Trading server → http://localhost:8080")
