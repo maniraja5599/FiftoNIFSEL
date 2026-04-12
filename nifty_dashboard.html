@@ -1971,22 +1971,15 @@ html.light .toggle-name      { color: #111827; }
           <table class="trade-tbl">
             <thead>
               <tr>
-                <th>Entry Date &amp; Time</th>
+                <th>Date &amp; Time</th>
                 <th>Type</th>
-                <th>CE Strike</th>
-                <th>PE Strike</th>
-                <th>CE Entry LTP</th>
-                <th>PE Entry LTP</th>
-                <th>Premium</th>
-                <th>Target</th>
-                <th>SL</th>
-                <th>Qty</th>
-                <th>Expiry</th>
+                <th>Entry ₹</th>
+                <th>Exit ₹</th>
                 <th>Unrealised P&amp;L</th>
               </tr>
             </thead>
             <tbody id="positions-list">
-              <tr><td colspan="12" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>
+              <tr><td colspan="5" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>
             </tbody>
           </table>
         </div>
@@ -2000,10 +1993,10 @@ html.light .toggle-name      { color: #111827; }
           <div class="card-head"><span class="card-label">Today's Trades</span></div>
           <table class="trade-tbl">
             <thead>
-              <tr><th>Time</th><th>Type</th><th>CE Strike</th><th>PE Strike</th><th>Premium</th><th>Exit</th><th>P&amp;L</th><th></th></tr>
+              <tr><th>Date &amp; Time</th><th>Type</th><th>Entry ₹</th><th>Exit ₹</th><th>P&amp;L</th><th></th></tr>
             </thead>
             <tbody id="trade-log">
-              <tr><td colspan="8" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No trades yet</td></tr>
+              <tr><td colspan="6" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No trades yet</td></tr>
             </tbody>
           </table>
         </div>
@@ -3509,7 +3502,7 @@ function renderPositions(d) {
   if (!hasPOS) {
     pill.textContent = 'No positions';
     pill.style.color = 'var(--t3)';
-    tbody.innerHTML  = '<tr><td colspan="9" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>';
+    tbody.innerHTML  = '<tr><td colspan="5" style="text-align:center; color:var(--t3); padding:24px; font-family:var(--ui)">No open positions</td></tr>';
     if (pnlBar) pnlBar.style.display = 'none';
     return;
   }
@@ -3550,19 +3543,16 @@ function renderPositions(d) {
 
   const entryTime = formatDateTime(p.entry_time);
 
+  const currentExitPrem = (p.current_ce_ltp != null && p.current_pe_ltp != null)
+    ? `₹${(parseFloat(p.current_ce_ltp||0) + parseFloat(p.current_pe_ltp||0)).toFixed(0)}`
+    : '—';
+  const entryPrem = p.premium_received ? `₹${p.premium_received.toFixed(0)}` : '—';
   const tid = escHtml(p.trade_id || '');
   tbody.innerHTML = `<tr onclick="${tid ? `showTradeDetail('${tid}')` : ''}" style="${tid ? 'cursor:pointer' : ''}" title="${tid ? 'Click for full details' : ''}">
     <td>${entryTime}</td>
     <td>${p.setup_type || 'Short Strangle'}</td>
-    <td style="color:var(--red)">${p.ce_strike || '—'}</td>
-    <td style="color:var(--green)">${p.pe_strike || '—'}</td>
-    <td>${p.ce_entry_price != null ? '₹'+parseFloat(p.ce_entry_price).toFixed(2) : '—'}</td>
-    <td>${p.pe_entry_price != null ? '₹'+parseFloat(p.pe_entry_price).toFixed(2) : '—'}</td>
-    <td>₹${p.premium_received ? p.premium_received.toFixed(2) : '—'}</td>
-    <td style="color:var(--green)">${p.target ? '₹'+p.target.toFixed(0) : '—'}</td>
-    <td style="color:var(--red)">${p.sl ? '₹'+p.sl.toFixed(0) : '—'}</td>
-    <td>${qty}</td>
-    <td style="color:var(--t2);font-size:11px">${p.expiry || '—'}</td>
+    <td>${entryPrem}</td>
+    <td>${currentExitPrem}</td>
     <td>${pnlHtml}</td>
   </tr>`;
 }
@@ -3601,7 +3591,7 @@ async function fetchTrades() {
     const d = await (await fetch('/api/trades')).json();
     const tbody = document.getElementById('trade-log');
     if (!d.trades || d.trades.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:24px;font-family:var(--ui)">No trades yet</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--t3);padding:24px;font-family:var(--ui)">No trades yet</td></tr>';
       return;
     }
     d.trades.forEach(t => { _tradeCache[t.trade_id] = t; });
@@ -3613,15 +3603,19 @@ async function fetchTrades() {
         : pnl >= 0
           ? `<span style="color:var(--green)">+₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`
           : `<span style="color:var(--red)">−₹${Math.abs(pnl).toLocaleString('en-IN',{maximumFractionDigits:0})}</span>`;
-      const exitTime = t.exit_time ? formatDateTime(t.exit_time) : '—';
+      const entryTime = t.entry_time ? formatDateTime(t.entry_time) : '—';
+      const exitTime  = t.exit_time  ? formatDateTime(t.exit_time)  : '—';
+      const timeHtml  = `<span style="display:block">${entryTime}</span><span style="display:block;font-size:10px;color:var(--t3)">Exit: ${exitTime}</span>`;
+      const entryPrem = t.premium_received != null ? `₹${parseFloat(t.premium_received).toFixed(0)}` : '—';
+      const exitPrem  = (t.ce_exit_ltp != null && t.pe_exit_ltp != null)
+        ? `₹${(parseFloat(t.ce_exit_ltp||0) + parseFloat(t.pe_exit_ltp||0)).toFixed(0)}`
+        : '—';
       const tid = escHtml(t.trade_id || '');
       return `<tr onclick="showTradeDetail('${tid}')" title="Click for full details">
-        <td>${exitTime}</td>
+        <td>${timeHtml}</td>
         <td>${escHtml(t.setup_type || '—')}</td>
-        <td>${escHtml(t.ce_strike || '—')}</td>
-        <td>${escHtml(t.pe_strike || '—')}</td>
-        <td>₹${(t.premium_received||0).toFixed(0)}</td>
-        <td style="font-size:10px;color:var(--t3)">${escHtml(t.exit_reason || (isOpen ? 'ACTIVE' : '—'))}</td>
+        <td>${entryPrem}</td>
+        <td>${exitPrem}</td>
         <td>${pnlHtml}</td>
         <td><button onclick="event.stopPropagation();deleteTrade('${tid}')" style="background:none;border:none;color:var(--t3);cursor:pointer;font-size:13px;padding:2px 6px" title="Delete">✕</button></td>
       </tr>`;
@@ -4508,8 +4502,14 @@ async function fetchAnalytics() {
   }
 }
 
-// Seed initial history state so very first back press is caught by popstate
-history.replaceState({ page: 'dashboard' }, '', '#dashboard');
+// Restore last active page from URL hash on refresh
+(function() {
+  const valid = ['dashboard','positions','trades','analytics','settings'];
+  const hash  = location.hash.replace('#','');
+  const page  = valid.includes(hash) ? hash : 'dashboard';
+  history.replaceState({ page }, '', '#' + page);
+  if (page !== 'dashboard') showPage(page, null, null, null, true);
+})();
 
 poll();
 pollConnection();
