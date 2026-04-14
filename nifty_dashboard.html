@@ -1453,6 +1453,7 @@ html.light .toggle-name      { color: #111827; }
       <span class="pill-dot"></span>
       <span id="mkt-text">MARKET —</span>
     </span>
+    <span id="mkt-closed-reason" style="display:none;font-size:9px;color:var(--t3);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
     <div class="divider-v"></div>
     <span class="clock" id="clock">--:--:--</span>
     <span class="pill live" id="status-pill">
@@ -2679,7 +2680,13 @@ function toggleTheme() {
 })();
 
 // ── Clock ──
+// _serverMarketOpen: null = not yet received, true/false = from server (holiday-aware)
+let _serverMarketOpen = null;
+
 function isMarketOpen() {
+  // Prefer the server's authoritative value (holiday-aware) when available
+  if (_serverMarketOpen !== null) return _serverMarketOpen;
+  // Fallback: local time-only check (no holiday awareness)
   const now = new Date();
   const day = now.getDay(); // 0=Sun, 6=Sat
   if (day === 0 || day === 6) return false;
@@ -2697,9 +2704,17 @@ function tick() {
   const open = isMarketOpen();
   const mktPill = document.getElementById('mkt-pill');
   const mktTxt  = document.getElementById('mkt-text');
+  const reason  = window._latestState?.market_closed_reason || null;
   if (mktPill && mktTxt) {
     mktPill.className = 'pill ' + (open ? 'mkt-open' : 'mkt-closed');
     mktTxt.textContent = open ? 'MARKET OPEN' : 'MARKET CLOSED';
+    mktPill.title = open ? '' : (reason || 'Market closed');
+  }
+  // Show reason below pill on dashboard (mobile-friendly separate line)
+  const reasonEl = document.getElementById('mkt-closed-reason');
+  if (reasonEl) {
+    reasonEl.textContent = (!open && reason) ? reason : '';
+    reasonEl.style.display = (!open && reason) ? '' : 'none';
   }
 }
 setInterval(tick,1000); tick();
@@ -3123,6 +3138,8 @@ async function poll() {
 
 function applyState(d) {
   window._latestState = d;
+  // Update server-backed market status (holiday-aware); tick() reads this every second
+  if (typeof d.market_open === 'boolean') _serverMarketOpen = d.market_open;
   const rm = d.regime || '—';
   const badge = document.getElementById('regime-badge');
   badge.className = 'regime-badge ' + (['A','B','C'].includes(rm) ? rm : 'X');
@@ -3186,8 +3203,13 @@ function applyState(d) {
   document.getElementById('no-pos').style.display  = hasPOS ? 'none' : 'block';
   document.getElementById('has-pos').style.display = hasPOS ? 'block' : 'none';
   if (!hasPOS) {
-    // reason line
-    const waitReason = (d.last_signal && d.last_signal.reason) ? d.last_signal.reason : 'Waiting for a valid setup...';
+    // reason line — priority: no_trade_reason (checks failing) > market_closed_reason > signal reason
+    let waitReason = (d.last_signal && d.last_signal.reason) ? d.last_signal.reason : 'Waiting for a valid setup...';
+    if (d.market_closed_reason) {
+      waitReason = '🔴 ' + d.market_closed_reason;
+    } else if (d.no_trade_reason) {
+      waitReason = '⚠️ ' + d.no_trade_reason;
+    }
     document.getElementById('no-pos-reason').textContent = waitReason;
 
     function _npSet(id, val, realTxt) {

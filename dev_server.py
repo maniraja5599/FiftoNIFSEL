@@ -109,6 +109,10 @@ def _save_entry_sheets(trade_record):
         ws = _get_or_create_sheet()
         if not ws:
             return
+        tid = trade_record.get("trade_id", "")
+        if tid and ws.find(tid, in_column=1):
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Sheet: trade {tid} already exists, skipping duplicate append")
+            return
         ws.append_row([
             trade_record.get("trade_id", ""),
             trade_record.get("entry_time", ""),
@@ -477,6 +481,9 @@ def angel_login():
     import pyotp
     from SmartApi import SmartConnect
 
+    if not _is_market_open():
+        LOG_LINES.append(f"[INFO]  [{_ts()}] AngelOne login deferred — market is closed (holiday/weekend/outside hours)")
+
     api_key  = os.getenv("ANGEL_API_KEY", "")
     client   = os.getenv("ANGEL_CLIENT_ID", "")
     password = os.getenv("ANGEL_PASSWORD", "")
@@ -682,7 +689,7 @@ state = {
     "closed_pnl":       0.0,   # cumulative realized P&L for today
     "bot_running":      False,
     "lot_size":         65,          # updated daily from NSE
-    "holidays_count":   0,          # number of F&O holidays loaded
+    "holidays_count":   0,          # updated after _NSE_HOLIDAYS_2026 is loaded
     "active_position":  False,
     "squaring_off":     False,      # True = square-off in progress (prevents double exit)
     "execution_mode":   config["execution_mode"],   # "AUTO" or "MANUAL" from config
@@ -719,7 +726,7 @@ state = {
     },
     "checks": {
         "vix": False, "iv": None, "ema": None,
-        "pcr": False, "event": False, "margin": False, "gate": False,
+        "pcr": False, "margin": False, "gate": False,
     },
     "button_states": {
         "approve_buy":    False,
@@ -896,6 +903,9 @@ def _is_market_open():
     now = datetime.now()
     if now.weekday() >= 5:
         return False
+    today = now.date()
+    if today.isoformat() in _nse_holidays:
+        return False
     t = now.time()
     return _time(9, 15) <= t <= _time(15, 30)
 
@@ -910,20 +920,35 @@ def _is_entry_window():
         return False
 
 
+def _market_closed_reason():
+    """Return a human-readable reason why the market is closed, or None if open."""
+    now = datetime.now()
+    if now.weekday() == 5:
+        return "Weekend (Saturday)"
+    if now.weekday() == 6:
+        return "Weekend (Sunday)"
+    today = now.date().isoformat()
+    if today in _nse_holidays:
+        name = _NSE_HOLIDAYS_2026.get(today, "NSE Holiday")
+        return f"NSE Holiday — {name}"
+    t = now.time()
+    if t < _time(9, 15):
+        return "Before market hours (opens 9:15 AM)"
+    if t > _time(15, 30):
+        return "After market hours (closed 3:30 PM)"
+    return None
+
+
 # ── Setup checks ──
 
 def _update_checks():
+    state["checks"].pop("event", None)   # removed — market closure handles holidays
     vix   = state["market"]["vix"]
     avail = state["funds"]["available_cash"]
     pnl   = state["daily_pnl"]
     pcr   = state["market"]["pcr"]
     ivp   = state["market"].get("iv_percentile")
     emaf  = state["market"].get("ema_trend_flat")
-    today = _date.today().isoformat()
-
-    # Use live NSE holiday set; fall back to known dates if not yet loaded
-    holidays = _nse_holidays or {"2026-03-31", "2026-04-14", "2026-08-15",
-                                  "2026-10-02", "2026-11-04", "2026-11-05"}
 
     mkt_open = _is_market_open()
     state["checks"]["vix"]    = (vix is not None) and (config["vix_min"] <= vix <= config["vix_max"])
@@ -938,7 +963,6 @@ def _update_checks():
         state["checks"]["iv"] = None                 # no data — skip
     state["checks"]["ema"]    = emaf
     state["checks"]["pcr"]    = None if pcr is None else (0.8 <= pcr <= 1.4)
-    state["checks"]["event"]  = today not in holidays
     # Margin: True/False during market hours; None (waiting) before market opens
     state["checks"]["margin"] = (avail > 0) if (mkt_open or avail > 0) else None
     state["checks"]["gate"]   = pnl > -config["daily_loss_limit"]
@@ -1016,11 +1040,10 @@ def _all_checks_pass():
     Margin check is intentionally excluded — it is shown on the dashboard for information only.
     """
     c = state["checks"]
-    # Mandatory: VIX range, not a holiday, daily/weekly/monthly loss gates
+    # Mandatory: VIX range, daily/weekly/monthly loss gates
     # NOTE: margin is NOT included here — it is display-only on the dashboard
     mandatory = (
         c.get("vix")          is True and
-        c.get("event")        is True and
         c.get("gate")         is True and
         c.get("weekly_gate")  is not False and
         c.get("monthly_gate") is not False
@@ -1045,12 +1068,34 @@ def _all_checks_pass():
     return True
 
 
+# ── Trade execution lock — prevents concurrent orders from signal engine + Telegram ──
+_trade_exec_lock = threading.Lock()
+
 # ── NSE session + caches ──
 
 _nse_session   = None
 _nse_lock      = threading.Lock()
 _chain_cache   = {"data": None, "ts": 0}
-_nse_holidays  = set()          # populated daily from NSE API
+# NSE F&O trading holidays 2026 — hardcoded fallback so bot works even if API fetch fails.
+# The live _fetch_nse_holidays() call overwrites this with the official list when it succeeds.
+_NSE_HOLIDAYS_2026 = {
+    "2026-01-26": "Republic Day",
+    "2026-02-19": "Chhatrapati Shivaji Maharaj Jayanti",
+    "2026-03-14": "Holi",
+    "2026-04-03": "Good Friday",
+    "2026-04-14": "Dr. B.R. Ambedkar Jayanti",
+    "2026-05-01": "Maharashtra Day",
+    "2026-08-15": "Independence Day",
+    "2026-08-27": "Ganesh Chaturthi",
+    "2026-10-02": "Gandhi Jayanti",
+    "2026-10-23": "Dussehra",
+    "2026-11-13": "Diwali Laxmi Puja",
+    "2026-11-14": "Diwali Balipratipada",
+    "2026-11-25": "Guru Nanak Jayanti",
+    "2026-12-25": "Christmas",
+}
+_nse_holidays  = set(_NSE_HOLIDAYS_2026.keys())   # pre-loaded; refreshed daily from NSE API
+state["holidays_count"] = len(_nse_holidays)   # reflect hardcoded count immediately
 _nifty_lotsize = 75             # updated daily from NSE CSV
 _iv_history    = {"date": None, "values": []}   # legacy intraday (unused)
 _angel_contract_cache = {"rows": [], "ts": 0}
@@ -1078,28 +1123,39 @@ def _save_straddle_history(history):
         pass
 
 def _record_straddle_premium(premium):
-    """Record today's ATM straddle premium once per day."""
+    """Record today's ATM straddle premium once per day, tagged with current DTE."""
     today = _date.today().isoformat()
+    dte   = state.get("dte", 99)
     history = _load_straddle_history()
     if history and history[-1].get("date") == today:
-        history[-1]["premium"] = round(premium, 2)   # update today's value
+        history[-1]["premium"] = round(premium, 2)
+        history[-1]["dte"]     = dte
     else:
-        history.append({"date": today, "premium": round(premium, 2)})
+        history.append({"date": today, "premium": round(premium, 2), "dte": dte})
     _save_straddle_history(history)
 
 def _straddle_premium_ok(current_premium):
-    """Return True if current ATM straddle premium >= 80% of 20-day average.
-    Returns True if < 5 days of data (don't block early on)."""
+    """Return True if current ATM straddle premium >= 80% of recent average.
+    Compares against same-DTE records (±1) for apples-to-apples accuracy.
+    Falls back to all history if < 3 same-DTE records exist."""
     history = _load_straddle_history()
     if len(history) < 5:
         return True   # not enough history yet — allow
-    avg = sum(d["premium"] for d in history[-20:]) / len(history[-20:])
+    current_dte = state.get("dte", 99)
+    same_dte = [d for d in history[:-1] if abs(d.get("dte", 99) - current_dte) <= 1]
+    if len(same_dte) >= 3:
+        reference = same_dte[-10:]   # last 10 same-DTE records
+        label = f"DTE≈{current_dte} avg (n={len(reference)})"
+    else:
+        reference = history[-20:]    # fall back to all history
+        label = f"20d avg (n={len(reference)})"
+    avg = sum(d["premium"] for d in reference) / len(reference)
     threshold = avg * 0.80
     ok = current_premium >= threshold
     if not ok:
         LOG_LINES.append(
-            f"[INFO]  [{_ts()}] Straddle filter: premium ₹{current_premium:.0f} < 80% of "
-            f"20d avg ₹{avg:.0f} (threshold ₹{threshold:.0f}) — skip"
+            f"[INFO]  [{_ts()}] Straddle filter [{label}]: ₹{current_premium:.0f} < 80% of "
+            f"₹{avg:.0f} (threshold ₹{threshold:.0f}) — skip"
         )
     return ok
 
@@ -1237,6 +1293,11 @@ def _fetch_nifty_lot_size():
 def _fetch_nse_holidays():
     """Fetch NSE F&O trading holidays for the current year."""
     global _nse_holidays, _nse_session
+    # Skip API call on holidays/weekends — NSE website is down, hardcoded list already covers it
+    today = _date.today()
+    if today.weekday() >= 5 or today.isoformat() in _nse_holidays:
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Holiday fetch skipped (today is holiday/weekend — hardcoded list in use)")
+        return _nse_holidays
     try:
         sess = _get_nse_session()
         r = sess.get(
@@ -1258,7 +1319,7 @@ def _fetch_nse_holidays():
                     except ValueError:
                         continue
             if dates:
-                _nse_holidays = dates
+                _nse_holidays = dates | set(_NSE_HOLIDAYS_2026.keys())   # merge API list with hardcoded fallback
                 state["holidays_count"] = len(dates)
                 LOG_LINES.append(f"[INFO]  [{_ts()}] F&O holidays loaded: {len(dates)} dates")
                 return dates
@@ -1845,23 +1906,24 @@ def _refresh_market_metrics():
 # ── Strike selection ──
 
 def _next_thursday():
-    """Return the nearest NIFTY weekly expiry (Thursday). If today is Thursday and
-    market is still open, return today; otherwise next Thursday."""
+    """Return the nearest NIFTY weekly expiry (Tuesday since SEBI change).
+    If today is Tuesday and market has closed, return next Tuesday."""
     today = _date.today()
-    days_ahead = (3 - today.weekday()) % 7   # Thursday = weekday 3
+    days_ahead = (1 - today.weekday()) % 7   # Tuesday = weekday 1
     if days_ahead == 0 and datetime.now().time() >= _time(15, 30):
         days_ahead = 7   # today's expiry has passed, use next week
     return today + timedelta(days=days_ahead)
 
 
 def _candidate_expiries(weeks=4):
-    """Return upcoming Tuesday/Thursday expiries, nearest first, to handle holiday shifts."""
+    """Return upcoming Tuesday expiries (SEBI changed from Thursday to Tuesday),
+    also include Monday as holiday-shift fallback, nearest first."""
     today = _date.today()
     now_t = datetime.now().time()
     out = []
     for day_offset in range(0, weeks * 7 + 7):
         dt = today + timedelta(days=day_offset)
-        if dt.weekday() not in (1, 3):   # Tuesday / Thursday
+        if dt.weekday() not in (0, 1):   # Monday (holiday shift) / Tuesday
             continue
         if dt == today and now_t >= _time(15, 30):
             continue
@@ -1990,6 +2052,15 @@ def _select_strikes_angelone(spot):
     }
 
 
+def _target_delta_by_vix():
+    """Return target OTM delta for strike selection based on current VIX.
+    Lower VIX → closer ATM (more premium).  Higher VIX → wider (more cushion)."""
+    vix = state["market"].get("vix") or 16
+    if vix < 14:  return 0.20   # calm: sell closer, collect more premium
+    if vix < 20:  return 0.16   # normal regime
+    return 0.12                  # volatile: go wider for safety
+
+
 def _select_strikes(spot, setup_type="strangle"):
     """Select strikes for given setup_type: 'strangle', 'bull_put_spread', 'bear_call_spread'.
     Primary: AngelOne option chain. Fallback: AngelOne direct LTP lookup."""
@@ -1998,6 +2069,7 @@ def _select_strikes(spot, setup_type="strangle"):
         expiry_dates = data.get("records", {}).get("expiryDates", [])
         all_records  = data.get("records", {}).get("data", [])
         if expiry_dates and all_records:
+            # Trust AngelOne's expiry_dates[0] — it already accounts for holiday shifts
             nearest_expiry = expiry_dates[0]
             recs        = [r for r in all_records if r.get("expiryDate") == nearest_expiry]
             atm         = round(spot / 50) * 50
@@ -2017,43 +2089,108 @@ def _select_strikes(spot, setup_type="strangle"):
                             LOG_LINES.append(f"[INFO]  [{_ts()}] Straddle avg filter blocked entry — premium too cheap")
                             return None
 
+            # ── Delta-based strike selection ──
+            # Target delta from VIX: 0.12 (wide/volatile) → 0.20 (calm/tight).
+            # Pick the OTM strike whose delta is closest to target — higher
+            # probability of expiring worthless vs premium-first walk.
+            t_years      = _time_to_expiry_years(nearest_expiry)
+            target_delta = _target_delta_by_vix()
+            iv_fallback  = state["market"].get("iv_atm") or 15.0
+
+            def _strike_delta(rec, is_call):
+                """Compute delta for a chain record; fall back to BS with ATM IV."""
+                side = rec.get("CE" if is_call else "PE") or {}
+                iv   = side.get("impliedVolatility") or iv_fallback
+                return _black_scholes_delta(spot, float(rec.get("strikePrice", 0)), iv, t_years, is_call)
+
             # ── CE side ──
             ce_strike = ce_ltp = ce_oi = None
-            for offset in range(50, 500, 50):
-                s   = atm + offset
-                rec = next((r for r in recs if r.get("strikePrice") == s and r.get("CE")), None)
-                if rec:
-                    ltp = rec["CE"].get("lastPrice", 0)
-                    if not ltp:
-                        sym = rec["CE"].get("tradingsymbol")
-                        tok = rec["CE"].get("symboltoken")
-                        if sym and tok:
-                            q = _safe_ltp_data("NFO", sym, tok)
-                            if q.get("status"):
-                                ltp = q["data"]["ltp"]
-                    oi = float(rec["CE"].get("openInterest") or 0)
-                    if ltp >= min_premium:
-                        ce_strike, ce_ltp, ce_oi = s, ltp, oi
-                        break
+            ce_candidates = []
+            for rec in recs:
+                s = float(rec.get("strikePrice", 0))
+                if s <= atm or not rec.get("CE"):
+                    continue
+                ltp = rec["CE"].get("lastPrice", 0)
+                if not ltp:
+                    sym = rec["CE"].get("tradingsymbol")
+                    tok = rec["CE"].get("symboltoken")
+                    if sym and tok:
+                        q = _safe_ltp_data("NFO", sym, tok)
+                        if q.get("status"):
+                            ltp = q["data"]["ltp"]
+                if not ltp or ltp < min_premium:
+                    continue
+                delta = _strike_delta(rec, True)
+                if delta is not None and 0.04 < delta < (target_delta + 0.06):
+                    ce_candidates.append((s, ltp, float(rec["CE"].get("openInterest") or 0), delta))
+            if ce_candidates:
+                # Pick strike whose delta is closest to target (from the OTM side)
+                ce_candidates.sort(key=lambda x: abs(x[3] - target_delta))
+                best = ce_candidates[0]
+                ce_strike, ce_ltp, ce_oi = int(best[0]), best[1], best[2]
+                LOG_LINES.append(f"[INFO]  [{_ts()}] CE δ-select: {ce_strike} δ={best[3]:.3f} ₹{ce_ltp:.0f} (target δ={target_delta})")
+            else:
+                # Fallback: original premium-walk
+                for offset in range(50, 500, 50):
+                    s   = atm + offset
+                    rec = next((r for r in recs if r.get("strikePrice") == s and r.get("CE")), None)
+                    if rec:
+                        ltp = rec["CE"].get("lastPrice", 0)
+                        if not ltp:
+                            sym = rec["CE"].get("tradingsymbol")
+                            tok = rec["CE"].get("symboltoken")
+                            if sym and tok:
+                                q = _safe_ltp_data("NFO", sym, tok)
+                                if q.get("status"):
+                                    ltp = q["data"]["ltp"]
+                        oi = float(rec["CE"].get("openInterest") or 0)
+                        if ltp >= min_premium:
+                            ce_strike, ce_ltp, ce_oi = s, ltp, oi
+                            break
 
             # ── PE side ──
             pe_strike = pe_ltp = pe_oi = None
-            for offset in range(50, 500, 50):
-                s   = atm - offset
-                rec = next((r for r in recs if r.get("strikePrice") == s and r.get("PE")), None)
-                if rec:
-                    ltp = rec["PE"].get("lastPrice", 0)
-                    if not ltp:
-                        sym = rec["PE"].get("tradingsymbol")
-                        tok = rec["PE"].get("symboltoken")
-                        if sym and tok:
-                            q = _safe_ltp_data("NFO", sym, tok)
-                            if q.get("status"):
-                                ltp = q["data"]["ltp"]
-                    oi = float(rec["PE"].get("openInterest") or 0)
-                    if ltp >= min_premium:
-                        pe_strike, pe_ltp, pe_oi = s, ltp, oi
-                        break
+            pe_candidates = []
+            for rec in recs:
+                s = float(rec.get("strikePrice", 0))
+                if s >= atm or not rec.get("PE"):
+                    continue
+                ltp = rec["PE"].get("lastPrice", 0)
+                if not ltp:
+                    sym = rec["PE"].get("tradingsymbol")
+                    tok = rec["PE"].get("symboltoken")
+                    if sym and tok:
+                        q = _safe_ltp_data("NFO", sym, tok)
+                        if q.get("status"):
+                            ltp = q["data"]["ltp"]
+                if not ltp or ltp < min_premium:
+                    continue
+                delta = _strike_delta(rec, False)   # put delta is negative
+                if delta is not None and -(target_delta + 0.06) < delta < -0.04:
+                    pe_candidates.append((s, ltp, float(rec["PE"].get("openInterest") or 0), delta))
+            if pe_candidates:
+                pe_candidates.sort(key=lambda x: abs(abs(x[3]) - target_delta))
+                best = pe_candidates[0]
+                pe_strike, pe_ltp, pe_oi = int(best[0]), best[1], best[2]
+                LOG_LINES.append(f"[INFO]  [{_ts()}] PE δ-select: {pe_strike} δ={best[3]:.3f} ₹{pe_ltp:.0f} (target δ={target_delta})")
+            else:
+                # Fallback: original premium-walk
+                for offset in range(50, 500, 50):
+                    s   = atm - offset
+                    rec = next((r for r in recs if r.get("strikePrice") == s and r.get("PE")), None)
+                    if rec:
+                        ltp = rec["PE"].get("lastPrice", 0)
+                        if not ltp:
+                            sym = rec["PE"].get("tradingsymbol")
+                            tok = rec["PE"].get("symboltoken")
+                            if sym and tok:
+                                q = _safe_ltp_data("NFO", sym, tok)
+                                if q.get("status"):
+                                    ltp = q["data"]["ltp"]
+                        oi = float(rec["PE"].get("openInterest") or 0)
+                        if ltp >= min_premium:
+                            pe_strike, pe_ltp, pe_oi = s, ltp, oi
+                            break
 
             # ── Validation: setup-type-aware checks ──
             combined = round((ce_ltp or 0) + (pe_ltp or 0), 2)
@@ -2282,6 +2419,18 @@ def _calc_sl_mult_by_dte(expiry_str):
 
 def _execute_trade(signal):
     """Execute trade — SHORT STRANGLE, BULL PUT SPREAD, or BEAR CALL SPREAD."""
+    if not _trade_exec_lock.acquire(blocking=False):
+        LOG_LINES.append(f"[WARN]  [{_ts()}] _execute_trade: concurrent call blocked by lock — already executing")
+        state["signal_pending"] = False
+        return False
+    try:
+        return _execute_trade_inner(signal)
+    finally:
+        _trade_exec_lock.release()
+
+
+def _execute_trade_inner(signal):
+    """Inner trade execution logic (called under _trade_exec_lock)."""
     lot_size   = state.get("lot_size") or config.get("lot_size", 75)
     # ── Risk-aware position sizing ──
     # If risk_per_trade_pct > 0, cap lots so max loss ≤ capital × risk_pct
@@ -2776,7 +2925,15 @@ def _square_off_position():
 def signal_engine():
     """Generate signals every 5 minutes during entry window. Runs in background."""
     time.sleep(12)   # wait for login + market data
-    last_signal_ts = time.time()  # enforce 5-min cooldown from startup
+
+    # ── Wait for market open before doing anything ──
+    if not _is_market_open():
+        LOG_LINES.append(f"[INFO]  [{_ts()}] Signal engine: market closed — waiting for 9:15 AM open")
+    while not _is_market_open():
+        time.sleep(60)
+    LOG_LINES.append(f"[INFO]  [{_ts()}] Signal engine: market open — starting scan")
+
+    last_signal_ts = time.time()  # enforce 5-min cooldown from market open
 
     while True:
         try:
@@ -2932,6 +3089,8 @@ def signal_engine():
                             })
 
                             if state["execution_mode"] == "AUTO":
+                                state["signal_pending"] = True   # block re-entry until execution completes
+                                state["signal_generated_at"] = time.time()
                                 LOG_LINES.append(f"[TRADE] [{_ts()}] Signal: {setup_type} | AUTO — executing now")
                                 _notify(
                                     f"📊 Signal — {setup_type} — Auto Executing",
@@ -3044,13 +3203,16 @@ def _refresh_position_ltp():
         pos["pnl"]         = round(open_pnl * qty, 2)
         state["daily_pnl"] = round(state["closed_pnl"] + open_pnl * qty, 2)
         state["ltp_last_used"]    = broker_used
-        state["ltp_last_updated"] = _dt.now().strftime("%H:%M:%S")
+        state["ltp_last_updated"] = datetime.now().strftime("%H:%M:%S")
 
 
 def fast_ltp_refresh():
     """Fetch position LTPs at the user-configured interval for smooth P&L updates."""
     time.sleep(25)  # let position_monitor start first
     while True:
+        if not _is_market_open():
+            time.sleep(60)   # idle when market is closed — no LTPs to refresh
+            continue
         try:
             _refresh_position_ltp()
         except Exception as e:
@@ -3104,24 +3266,43 @@ def position_monitor():
                         f"CE {pos['ce_strike']} | PE {pos['pe_strike']}"
                     )
 
-                    # ── Trailing SL: lock at breakeven at 20% profit ──
+                    # ── Trail 1: lock at breakeven at 20% profit ──
                     trail_pct  = config.get("trail_trigger_pct", 0.20)
                     profit_pct = (entry_prem - current_cost) / entry_prem if entry_prem > 0 else 0
                     if profit_pct >= trail_pct and not pos.get("trail_locked"):
                         old_sl = pos["sl"]
-                        pos["sl"]          = entry_prem
+                        pos["sl"]           = entry_prem
                         pos["trail_locked"] = True
                         LOG_LINES.append(
-                            f"[TRADE] [{_ts()}] TRAILING SL ACTIVATED ✓ | {setup} | "
+                            f"[TRADE] [{_ts()}] TRAIL-1 ACTIVATED ✓ | {setup} | "
                             f"Profit {profit_pct*100:.0f}% ≥ {trail_pct*100:.0f}% | "
                             f"SL ₹{old_sl:.0f} → ₹{entry_prem:.0f} (breakeven)"
                         )
                         _notify(
-                            "🔒 Trailing SL — Breakeven Locked",
+                            "🔒 Trail-1 — Breakeven Locked",
                             f"{setup} | {leg_label}\nProfit {profit_pct*100:.0f}% | SL → ₹{entry_prem:.0f}",
                             "success"
                         )
                         _save_active_position(pos)
+
+                    # ── Trail 2: at 60% profit lock in 30% gain ──
+                    if profit_pct >= 0.60 and not pos.get("trail2_locked"):
+                        new_sl = round(entry_prem * 0.70, 2)   # allow cost to rise to 70% of entry (30% profit locked)
+                        if new_sl < pos["sl"]:                  # only ever tighten, never widen
+                            old_sl = pos["sl"]
+                            pos["sl"]            = new_sl
+                            pos["trail2_locked"] = True
+                            LOG_LINES.append(
+                                f"[TRADE] [{_ts()}] TRAIL-2 ACTIVATED ✓ | {setup} | "
+                                f"Profit {profit_pct*100:.0f}% ≥ 60% | "
+                                f"SL ₹{old_sl:.0f} → ₹{new_sl:.0f} (30% gain locked)"
+                            )
+                            _notify(
+                                "🔒 Trail-2 — 30% Gain Locked",
+                                f"{setup} | {leg_label}\nProfit {profit_pct*100:.0f}% | SL → ₹{new_sl:.0f}",
+                                "success"
+                            )
+                            _save_active_position(pos)
 
                     # ── Target hit ──
                     if current_cost <= entry_prem - pos["target"]:
@@ -3195,15 +3376,44 @@ def position_monitor():
 def fetch_market_data():
     """Fetch Nifty/VIX/margin every 15s and refresh derived market metrics every minute."""
     time.sleep(5)
-    metrics_counter   = 3   # first derived refresh happens on the first live cycle
-    _last_date        = _date.today()
-    _holidays_fetched = False   # retry holiday fetch once market opens
+    metrics_counter      = 3   # first derived refresh happens on the first live cycle
+    _last_date           = _date.today()
+    _holidays_fetched    = False   # retry holiday fetch once market opens
+    _daily_summary_sent  = False   # reset each day
 
     while True:
+        # ── Daily summary at 3:35 PM ──
+        now_t = datetime.now()
+        if not _daily_summary_sent and now_t.time() >= _time(15, 35):
+            _daily_summary_sent = True
+            try:
+                today_str    = _date.today().isoformat()
+                today_trades = [t for t in state.get("trade_history", [])
+                                if str(t.get("entry_time", "")).startswith(today_str)]
+                n   = len(today_trades)
+                wins = sum(1 for t in today_trades if (t.get("final_pnl") or 0) > 0)
+                pnl  = state.get("daily_pnl", 0)
+                checks_failed = [k for k, v in state.get("checks", {}).items() if v is False]
+                lines = [f"Trades: {n} | Wins: {wins}/{n} | P&L: ₹{pnl:,.0f}"]
+                for t in today_trades:
+                    reason = t.get("exit_reason", "?")
+                    tpnl   = t.get("final_pnl", 0)
+                    prem   = t.get("premium_received", 0)
+                    lines.append(f"  {t.get('setup_type','?')} | Entry ₹{prem:.0f} | {reason} ₹{tpnl:,.0f}")
+                if checks_failed:
+                    lines.append(f"Checks failed: {', '.join(checks_failed)}")
+                if n == 0:
+                    lines.append("No trades taken today.")
+                _notify("📊 Daily Summary", "\n".join(lines), "info")
+                LOG_LINES.append(f"[INFO]  [{_ts()}] Daily summary sent | {n} trades | ₹{pnl:,.0f}")
+            except Exception as e:
+                LOG_LINES.append(f"[WARN]  [{_ts()}] Daily summary error: {e}")
+
         # ── Daily reset at start of each new trading day ──
         today = _date.today()
         if today != _last_date:
-            _last_date = today
+            _last_date          = today
+            _daily_summary_sent = False   # reset for new day
             state["daily_pnl"]      = 0.0
             state["closed_pnl"]     = 0.0
             state["trades_today"]   = 0
@@ -3220,6 +3430,11 @@ def fetch_market_data():
             # Refresh lot size + holidays for the new trading day
             threading.Thread(target=_fetch_nifty_lot_size, daemon=True).start()
             threading.Thread(target=_fetch_nse_holidays,   daemon=True).start()
+
+        # ── Gate: skip all live fetching when market is closed ──
+        if not _is_market_open():
+            time.sleep(300)   # re-check every 5 min; do nothing until market opens
+            continue
 
         if angel_obj and connection["status"] == "connected":
             try:
@@ -3544,7 +3759,34 @@ def api_state():
     # Signal age in seconds (so frontend can show countdown/warning)
     gen = state.get("signal_generated_at")
     state["signal_age_secs"] = round(time.time() - gen) if gen else None
-    return jsonify(state)
+    # Build response — filter checks to known keys only
+    import copy
+    state["checks"].pop("event", None)   # remove from live state too
+    resp = copy.deepcopy(state)
+    known_checks = {"vix", "iv", "ema", "pcr", "margin", "gate", "weekly_gate", "monthly_gate"}
+    resp["checks"] = {k: v for k, v in resp["checks"].items() if k in known_checks}
+    if "event" in state["checks"]:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] BUG: event key found in checks: {state['checks']}")
+    resp["market_open"]          = _is_market_open()
+    resp["market_closed_reason"] = _market_closed_reason()   # e.g. "NSE Holiday — Ambedkar Jayanti"
+
+    # ── No-trade reason: which checks are blocking entry ──
+    if not state.get("active_position") and _is_market_open() and _is_entry_window():
+        c = state.get("checks", {})
+        failed = []
+        if c.get("vix")    is False: failed.append("VIX out of range")
+        if c.get("iv")     is False: failed.append("IV too low")
+        if c.get("ema")    is False: failed.append("EMA not flat (trending)")
+        if c.get("pcr")    is False: failed.append("PCR out of range")
+        if c.get("margin") is False: failed.append("Margin insufficient")
+        if c.get("gate")   is False: failed.append("Daily loss limit hit")
+        if c.get("weekly_gate")  is False: failed.append("Weekly loss limit hit")
+        if c.get("monthly_gate") is False: failed.append("Monthly loss limit hit")
+        resp["no_trade_reason"] = ("Checks failing: " + ", ".join(failed)) if failed else None
+    else:
+        resp["no_trade_reason"] = None
+
+    return jsonify(resp)
 
 @app.route("/api/connection")
 def api_connection():
