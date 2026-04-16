@@ -14,6 +14,7 @@ import requests as _requests
 TRADES_FILE      = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trades.json")
 ACTIVE_POS_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "active_pos.json")
 SETTINGS_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+EQ_TRADES_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eq_trades.json")
 
 def _save_active_position(pos):
     """Write current open position to active_pos.json for crash-safe recovery."""
@@ -2960,13 +2961,20 @@ def signal_engine():
                         elif trend == "DOWN" and pcr <= 1.0:
                             setup_type_hint = "bear_call_spread"
                         else:
-                            # Strangle: only valid when EMA is flat.
-                            # _all_checks_pass() skips EMA check for UP/DOWN trend, so
-                            # enforce it here for the strangle fallback case.
+                            # Spread conditions not met — fall back to strangle, but only if EMA is flat.
+                            # _all_checks_pass() skips EMA for UP/DOWN trends (spread setups), so enforce
+                            # it here for the strangle fallback.
+                            if trend == "UP" and pcr < 1.0:
+                                LOG_LINES.append(
+                                    f"[INFO]  [{_ts()}] Bull Put Spread skipped — Trend UP but PCR {pcr:.2f} < 1.0 not confirming"
+                                )
+                            elif trend == "DOWN" and pcr > 1.0:
+                                LOG_LINES.append(
+                                    f"[INFO]  [{_ts()}] Bear Call Spread skipped — Trend DOWN but PCR {pcr:.2f} > 1.0 not confirming"
+                                )
                             if state["checks"].get("ema") is False:
                                 LOG_LINES.append(
-                                    f"[INFO]  [{_ts()}] Strangle skipped — trend {trend} but PCR {pcr:.2f} "
-                                    f"not confirming; EMA not flat"
+                                    f"[INFO]  [{_ts()}] Strangle also skipped — EMA not flat (trend {trend}); no valid setup this cycle"
                                 )
                                 time.sleep(60)
                                 continue
@@ -3732,6 +3740,392 @@ def iconmask():
 def overview():
     return send_from_directory(BASE, "project_overview.html")
 
+@app.route("/eq")
+def eq_market():
+    from flask import make_response
+    resp = make_response(send_from_directory(BASE, "eq_market.html"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+@app.route("/api/eq/config")
+def api_eq_config():
+    """Return config needed by the EQ market page."""
+    return jsonify({"openai_key": os.getenv("OPENAI_API_KEY", "")})
+
+@app.route("/api/eq/plan", methods=["GET"])
+def api_eq_plan():
+    """Generate an intraday EQ trading plan via OpenAI GPT-4o.
+    Returns a JSON trade plan with preMarket, setups, and watchlist."""
+    oai_key = os.getenv("OPENAI_API_KEY", "")
+    if not oai_key:
+        return jsonify({"ok": False, "error": "OPENAI_API_KEY not set in .env"}), 500
+
+    from datetime import datetime as _dt
+    today = _dt.now().strftime("%A, %d %B %Y")
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "preMarket": {
+                "type": "object",
+                "properties": {
+                    "globalCues":   {"type": "string"},
+                    "domesticCues": {"type": "string"},
+                    "sentiment":    {"type": "string"},
+                    "niftyLevels":  {"type": "string"}
+                },
+                "required": ["globalCues", "domesticCues", "sentiment", "niftyLevels"],
+                "additionalProperties": False
+            },
+            "setups": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "symbol":       {"type": "string"},
+                        "isFnO":        {"type": "boolean"},
+                        "cmp":          {"type": "number"},
+                        "tradeType":    {"type": "string"},
+                        "setupType":    {"type": "string"},
+                        "entryPrice":   {"type": "number"},
+                        "entryTrigger": {"type": "string"},
+                        "stopLoss":     {"type": "number"},
+                        "target1":      {"type": "number"},
+                        "target2":      {"type": "number"},
+                        "confidence":   {"type": "number"},
+                        "reasoning":    {"type": "string"}
+                    },
+                    "required": ["symbol","isFnO","cmp","tradeType","setupType","entryPrice","entryTrigger","stopLoss","target1","target2","confidence","reasoning"],
+                    "additionalProperties": False
+                }
+            },
+            "watchlist": {
+                "type": "object",
+                "properties": {
+                    "aPlus":  {"type": "array", "items": {"type": "string"}},
+                    "bSetup": {"type": "array", "items": {"type": "string"}},
+                    "avoid":  {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["aPlus", "bSetup", "avoid"],
+                "additionalProperties": False
+            }
+        },
+        "required": ["preMarket", "setups", "watchlist"],
+        "additionalProperties": False
+    }
+
+    try:
+        r = _requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {oai_key}"},
+            json={
+                "model": "gpt-4o",
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": {"name": "trading_plan", "strict": True, "schema": schema}
+                },
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an expert intraday trader with 15+ years in Indian equity markets (NSE/BSE). "
+                            "Generate realistic, high-probability intraday trade setups. "
+                            "Include both F&O stocks (isFnO: true) and cash-only stocks (isFnO: false). "
+                            "Use realistic current Indian stock prices. confidence is 1-5. tradeType is LONG or SHORT. "
+                            "Provide 6-10 setups with diverse sectors."
+                        )
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Today is {today}. Generate a complete intraday trading plan for Indian equity markets covering F&O and cash segments. Include realistic CMPs, entry levels, stop-losses, and targets."
+                    }
+                ]
+            },
+            timeout=45
+        )
+        if r.status_code != 200:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] OpenAI EQ plan error: {r.status_code} {r.text[:200]}")
+            return jsonify({"ok": False, "error": f"OpenAI error {r.status_code}: {r.json().get('error', {}).get('message', r.text[:200])}"}), 502
+        content = r.json()["choices"][0]["message"]["content"]
+        plan = json.loads(content)
+        LOG_LINES.append(f"[INFO]  [{_ts()}] EQ plan generated: {len(plan.get('setups', []))} setups via GPT-4o")
+        return jsonify({"ok": True, "plan": plan})
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] OpenAI EQ plan exception: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+def _eq_normalise_symbol(raw: str) -> str:
+    """Normalise GPT-generated stock names to NSE trading symbols.
+    Strips spaces/special chars and maps known aliases to correct NSE codes."""
+    _ALIAS = {
+        "HDFC BANK": "HDFCBANK", "HDFCBANK LTD": "HDFCBANK",
+        "ICICI BANK": "ICICIBANK", "AXIS BANK": "AXISBANK",
+        "KOTAK BANK": "KOTAKBANK", "KOTAK MAHINDRA BANK": "KOTAKBANK",
+        "STATE BANK OF INDIA": "SBIN", "SBI": "SBIN",
+        "TATA MOTORS": "TATAMOTORS", "TATA CONSULTANCY": "TCS",
+        "TATA CONSULTANCY SERVICES": "TCS",
+        "MARUTI SUZUKI": "MARUTI", "MARUTI SUZUKI INDIA": "MARUTI",
+        "WIPRO LTD": "WIPRO", "HCL TECHNOLOGIES": "HCLTECH",
+        "HCL TECH": "HCLTECH", "TECH MAHINDRA": "TECHM",
+        "BAJAJ FINANCE": "BAJFINANCE", "BAJAJ FINSERV": "BAJAJFINSV",
+        "HINDUSTAN UNILEVER": "HINDUNILVR", "HUL": "HINDUNILVR",
+        "BHARAT PETROLEUM": "BPCL", "INDIAN OIL": "IOC",
+        "OIL AND NATURAL GAS": "ONGC", "NTPC LTD": "NTPC",
+        "POWER GRID": "POWERGRID", "ADANI PORTS": "ADANIPORTS",
+        "ADANI ENTERPRISES": "ADANIENT", "ADANI ENTERPRISE": "ADANIENT",
+        "DMART": "DMART", "AVENUE SUPERMARTS": "DMART",
+        "EICHER MOTORS": "EICHERMOT", "HERO MOTOCORP": "HEROMOTOCO",
+        "HERO MOTO": "HEROMOTOCO", "SUN PHARMA": "SUNPHARMA",
+        "SUN PHARMACEUTICAL": "SUNPHARMA", "DR REDDY": "DRREDDY",
+        "DR REDDYS": "DRREDDY", "CIPLA LTD": "CIPLA",
+        "DIVIS LAB": "DIVISLAB", "DIVIS LABORATORIES": "DIVISLAB",
+        "ASIAN PAINTS": "ASIANPAINT", "BERGER PAINTS": "BERGEPAINT",
+        "ULTRATECH CEMENT": "ULTRACEMCO", "AMBUJA CEMENT": "AMBUJACEMENT",
+        "BHARTI AIRTEL": "BHARTIARTL", "AIRTEL": "BHARTIARTL",
+        "INDUSIND BANK": "INDUSINDBK", "FEDERAL BANK": "FEDERALBNK",
+        "YES BANK": "YESBANK", "PNB": "PNB", "PUNJAB NATIONAL BANK": "PNB",
+        "BANK OF BARODA": "BANKBARODA", "CANARA BANK": "CANBK",
+        "TATA STEEL": "TATASTEEL", "JSPL": "JINDALSTEL",
+        "JINDAL STEEL": "JINDALSTEL", "SAIL": "SAIL",
+        "VEDANTA LTD": "VEDL", "HINDALCO": "HINDALCO",
+        "APOLLO HOSPITALS": "APOLLOHOSP", "FORTIS": "FORTIS",
+        "ZOMATO LTD": "ZOMATO", "PAYTM": "PAYTM",
+        "NYKAA": "NYKAA", "FSN ECOMMERCE": "NYKAA",
+        "PIDILITE": "PIDILITIND", "PIDILITE INDUSTRIES": "PIDILITIND",
+        "TITAN COMPANY": "TITAN", "TITAN LTD": "TITAN",
+        "NESTLE INDIA": "NESTLEIND", "ITC LTD": "ITC",
+    }
+    s = raw.strip().upper()
+    if s in _ALIAS:
+        return _ALIAS[s]
+    # Remove common suffixes and spaces
+    for suffix in [" LTD", " LIMITED", " INDUSTRIES", " CORP", " INDIA", " NSE"]:
+        if s.endswith(suffix):
+            s = s[:-len(suffix)].strip()
+    return s.replace(" ", "").replace(".", "").replace("&", "AND").replace("-", "")
+
+def _eq_yahoo_ltp(symbols: list) -> dict:
+    """Fetch LTP for NSE equity symbols via Yahoo Finance (no auth needed).
+    Symbol format: RELIANCE → RELIANCE.NS"""
+    result = {}
+    for sym in symbols:
+        try:
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}.NS"
+            r = _requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+            if r.status_code == 200:
+                data = r.json()
+                result_arr = data.get("chart", {}).get("result")
+                if result_arr and len(result_arr) > 0:
+                    meta = result_arr[0].get("meta", {})
+                    ltp  = meta.get("regularMarketPrice") or meta.get("previousClose")
+                    if ltp:
+                        result[sym] = float(ltp)
+        except Exception as exc:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Yahoo {sym} exception: {exc}")
+    return result
+
+@app.route("/api/eq/ltp", methods=["POST"])
+def api_eq_ltp():
+    """Fetch live LTP for NSE equity (cash market) symbols.
+    Body: {"symbols": ["RELIANCE", "HDFC BANK", ...]}
+    Returns: {"data": {"RELIANCE": 2450.5, ...}, "source": "upstox"|"yahoo"|"unavailable"}
+    """
+    body    = request.get_json(force=True, silent=True) or {}
+    raw_syms = [s for s in body.get("symbols", []) if s][:20]
+    # Normalise to NSE trading symbols
+    symbols = [_eq_normalise_symbol(s) for s in raw_syms]
+    sym_map = {norm: raw for norm, raw in zip(symbols, raw_syms)}  # norm→original
+
+    if not symbols:
+        return jsonify({"data": {}, "source": "none"})
+
+    result = {}
+    source = "unavailable"
+
+    # ── 1. Try Upstox bulk LTP ──
+    if _upstox_available():
+        try:
+            instrument_keys = ",".join(f"NSE_EQ|{s}" for s in symbols)
+            r = _requests.get(
+                "https://api.upstox.com/v2/market-quote/ltp",
+                headers=_upstox_headers(),
+                params={"instrument_key": instrument_keys},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                data = r.json().get("data", {})
+                for sym in symbols:
+                    entry = data.get(f"NSE_EQ:{sym}") or data.get(f"NSE_EQ|{sym}")
+                    if entry:
+                        lp = entry.get("last_price") or entry.get("ltp")
+                        if lp:
+                            result[sym] = float(lp)
+                if result:
+                    source = "upstox"
+                    LOG_LINES.append(f"[INFO]  [{_ts()}] EQ LTP via Upstox: {len(result)}/{len(symbols)}")
+            else:
+                LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox EQ LTP HTTP {r.status_code}")
+        except Exception as e:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Upstox EQ LTP error: {e}")
+
+    # ── 2. Fallback to Yahoo Finance for missing symbols ──
+    missing = [s for s in symbols if s not in result]
+    if missing:
+        try:
+            yahoo_data = _eq_yahoo_ltp(missing)
+            for sym, ltp in yahoo_data.items():
+                result[sym] = ltp
+            if yahoo_data:
+                source = "upstox+yahoo" if result and source == "upstox" else "yahoo"
+                LOG_LINES.append(f"[INFO]  [{_ts()}] EQ LTP via Yahoo: {len(yahoo_data)} symbols")
+        except Exception as e:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Yahoo EQ LTP error: {e}")
+
+    # Map normalised keys back to the original (raw) keys the frontend sent,
+    # so j.data["HDFC BANK"] finds the price even though Yahoo fetched via "HDFCBANK".
+    raw_result = {sym_map.get(sym, sym): ltp for sym, ltp in result.items()}
+    return jsonify({"data": raw_result, "source": source, "count": len(raw_result)})
+
+
+# ── EQ Trade persistence ──────────────────────────────────────────────────────
+
+_EQ_SHEET_HEADERS = [
+    "Trade ID", "Symbol", "Trade Type", "Setup Type",
+    "Entry Time", "Entry Price", "Stop Loss", "Target", "Qty",
+    "Status", "Exit Time", "Exit Price", "P&L", "Source",
+]
+
+def _get_or_create_eq_sheet():
+    """Return the 'EQ Trades' worksheet in the same Google Spreadsheet, creating it if missing."""
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        creds_file = os.path.join(BASE, "gsheet_creds.json")
+        sheet_id   = os.getenv("GSHEET_ID", "")
+        if not sheet_id or not os.path.exists(creds_file):
+            return None
+        scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+        creds  = Credentials.from_service_account_file(creds_file, scopes=scopes)
+        gc     = gspread.authorize(creds)
+        sh     = gc.open_by_key(sheet_id)
+        try:
+            ws = sh.worksheet("EQ Trades")
+            existing = ws.row_values(1)
+            if len(existing) < len(_EQ_SHEET_HEADERS):
+                ws.resize(cols=len(_EQ_SHEET_HEADERS))
+                ws.update(range_name="A1", values=[_EQ_SHEET_HEADERS])
+            return ws
+        except gspread.exceptions.WorksheetNotFound:
+            ws = sh.add_worksheet(title="EQ Trades", rows=2000, cols=len(_EQ_SHEET_HEADERS))
+            ws.update(range_name="A1", values=[_EQ_SHEET_HEADERS])
+            return ws
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] EQ Sheet init error: {e}")
+        return None
+
+def _eq_sheet_upsert(trade: dict):
+    """Write or update a single trade row in the EQ Trades sheet (run in background thread)."""
+    try:
+        ws = _get_or_create_eq_sheet()
+        if not ws:
+            return
+        tid = str(trade.get("id", ""))
+        if not tid:
+            return
+        # Coerce numeric fields so Google Sheets recognises them as numbers (not strings)
+        def _n(v, default=""):
+            try:
+                return float(v) if v not in (None, "") else default
+            except (TypeError, ValueError):
+                return default
+
+        pnl = _n(trade.get("realizedPnl"))
+        row = [
+            tid,
+            trade.get("symbol", ""),
+            trade.get("tradeType", ""),
+            trade.get("setupType", ""),
+            trade.get("timestamp", ""),
+            _n(trade.get("entryPrice")),
+            _n(trade.get("stopLoss")),
+            _n(trade.get("target")),
+            _n(trade.get("qty")),
+            trade.get("status", ""),
+            trade.get("exitTime", ""),
+            _n(trade.get("exitPrice")),
+            pnl,
+            trade.get("source", "manual"),
+        ]
+        cell = ws.find(tid, in_column=1)
+        if cell:
+            # gspread ≥ 5 uses ws.update(range, values); older uses ws.update(range, values)
+            try:
+                ws.update(f"A{cell.row}:N{cell.row}", [row])
+            except TypeError:
+                ws.update(range_name=f"A{cell.row}:N{cell.row}", values=[row])
+        else:
+            ws.append_row(row, value_input_option="USER_ENTERED")
+        LOG_LINES.append(f"[INFO]  [{_ts()}] EQ Sheet: upserted {tid} pnl={pnl}")
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] EQ Sheet upsert failed: {e}")
+
+def _eq_load_trades_local():
+    if os.path.exists(EQ_TRADES_FILE):
+        try:
+            with open(EQ_TRADES_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def _eq_save_trade_local(trade: dict):
+    try:
+        trades = _eq_load_trades_local()
+        tid = str(trade.get("id", ""))
+        idx = next((i for i, t in enumerate(trades) if str(t.get("id", "")) == tid), None)
+        if idx is not None:
+            trades[idx] = trade
+        else:
+            trades.append(trade)
+        with open(EQ_TRADES_FILE, "w") as f:
+            json.dump(trades, f, indent=2, default=str)
+    except Exception as e:
+        LOG_LINES.append(f"[WARN]  [{_ts()}] EQ local save failed: {e}")
+
+@app.route("/api/eq/trades", methods=["GET"])
+def api_eq_trades_get():
+    """Return all persisted EQ paper trades."""
+    return jsonify({"trades": _eq_load_trades_local()})
+
+@app.route("/api/eq/trades", methods=["POST"])
+def api_eq_trades_post():
+    """Upsert a single EQ trade. Body: {"trade": {...}}
+    Saves to eq_trades.json and async-writes to Google Sheet."""
+    body  = request.get_json(force=True, silent=True) or {}
+    trade = body.get("trade")
+    if not trade or not trade.get("id"):
+        return jsonify({"ok": False, "error": "Missing trade or id"}), 400
+    _eq_save_trade_local(trade)
+    import threading
+    threading.Thread(target=_eq_sheet_upsert, args=(trade,), daemon=True).start()
+    return jsonify({"ok": True})
+
+@app.route("/api/eq/trades/clear", methods=["POST"])
+def api_eq_trades_clear():
+    """Clear all EQ trades (dev/reset use). Requires PIN."""
+    data = request.get_json(force=True, silent=True) or {}
+    pin  = str(data.get("pin", "")).strip()
+    correct = str(config.get("login_pin", os.getenv("LOGIN_PIN", "5599")))
+    if pin != correct:
+        return jsonify({"ok": False, "msg": "Invalid PIN"}), 403
+    try:
+        with open(EQ_TRADES_FILE, "w") as f:
+            json.dump([], f)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "msg": "EQ trades cleared"})
+
 @app.route("/api/state")
 def api_state():
     # Inject live DTE on every poll — cheap calculation
@@ -3772,16 +4166,28 @@ def api_state():
 
     # ── No-trade reason: which checks are blocking entry ──
     if not state.get("active_position") and _is_market_open() and _is_entry_window():
-        c = state.get("checks", {})
+        c    = state.get("checks", {})
+        trend_now = state["market"].get("trend", "FLAT")
+        pcr_now   = state["market"].get("pcr") or 1.0
         failed = []
         if c.get("vix")    is False: failed.append("VIX out of range")
         if c.get("iv")     is False: failed.append("IV too low")
-        if c.get("ema")    is False: failed.append("EMA not flat (trending)")
         if c.get("pcr")    is False: failed.append("PCR out of range")
         if c.get("margin") is False: failed.append("Margin insufficient")
         if c.get("gate")   is False: failed.append("Daily loss limit hit")
         if c.get("weekly_gate")  is False: failed.append("Weekly loss limit hit")
         if c.get("monthly_gate") is False: failed.append("Monthly loss limit hit")
+        # EMA: only flag as a check failure when trend is FLAT (spread trades skip this check).
+        # When trend is UP/DOWN but PCR doesn't confirm, show the real blocker instead.
+        if c.get("ema") is False:
+            if trend_now == "FLAT":
+                failed.append("EMA not flat (trending) — strangle blocked")
+            elif trend_now == "UP" and pcr_now < 1.0:
+                failed.append(f"Trend UP but PCR {pcr_now:.2f} < 1.0 — Bull Put Spread blocked; EMA trending so strangle also blocked")
+            elif trend_now == "DOWN" and pcr_now > 1.0:
+                failed.append(f"Trend DOWN but PCR {pcr_now:.2f} > 1.0 — Bear Call Spread blocked; EMA trending so strangle also blocked")
+            else:
+                failed.append("EMA not flat (trending) — strangle blocked")
         resp["no_trade_reason"] = ("Checks failing: " + ", ".join(failed)) if failed else None
     else:
         resp["no_trade_reason"] = None

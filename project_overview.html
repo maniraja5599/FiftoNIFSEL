@@ -3,1000 +3,607 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FIFTO — Project Overview</title>
+<title>FIFTO — Overview</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%230c0c0f'/%3E%3Ctext x='7' y='44' font-family='Arial Black,sans-serif' font-size='28' font-weight='900' fill='%232dd698'%3EFI%3C/text%3E%3Ctext x='35' y='44' font-family='Arial Black,sans-serif' font-size='28' font-weight='900' fill='%23f75252'%3EFTO%3C/text%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0c0c0f;--surface:#111116;--surface2:#17171e;--surface3:#1e1e28;
+  --bg:#0c0c0f;--surface:#111116;--s2:#17171e;--s3:#1e1e28;
   --line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.12);
-  --green:#2dd698;--green-bg:rgba(45,214,152,.10);
-  --red:#f75252;--red-bg:rgba(247,82,82,.10);
-  --amber:#f5a623;--amber-bg:rgba(245,166,35,.10);
-  --blue:#4f8ef7;--blue-bg:rgba(79,142,247,.10);
-  --purple:#9b72f5;--purple-bg:rgba(155,114,245,.10);
+  --green:#2dd698;--gbg:rgba(45,214,152,.10);--gbdr:rgba(45,214,152,.25);
+  --red:#f75252;--rbg:rgba(247,82,82,.10);--rbdr:rgba(247,82,82,.25);
+  --amber:#f5a623;--abg:rgba(245,166,35,.10);--abdr:rgba(245,166,35,.25);
+  --blue:#4f8ef7;--bbg:rgba(79,142,247,.10);--bbdr:rgba(79,142,247,.25);
+  --purple:#9b72f5;
   --t1:#f0f0f8;--t2:#8a8aa8;--t3:#44445a;
   --mono:'IBM Plex Mono',monospace;--ui:'Inter',sans-serif;
+  --r:10px;
 }
 body{font-family:var(--ui);background:var(--bg);color:var(--t1);line-height:1.6;font-size:14px}
-a{color:var(--blue);text-decoration:none}
-a:hover{text-decoration:underline}
 
-/* ── Topbar ── */
-.topbar{position:sticky;top:0;z-index:100;background:rgba(12,12,15,.92);backdrop-filter:blur(12px);
+/* topbar */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(12,12,15,.95);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);padding:0 24px;height:52px;
   display:flex;align-items:center;justify-content:space-between}
-.topbar-brand{display:flex;align-items:center;gap:10px}
-.brand-logo{font-family:var(--mono);font-size:18px;font-weight:900;letter-spacing:-.02em}
-.brand-logo .fi{color:var(--green)}.brand-logo .fto{color:var(--red)}
-.brand-sub{font-size:11px;color:var(--t3);font-weight:500}
-.topbar-back{font-size:12px;color:var(--t2);display:flex;align-items:center;gap:5px;
-  padding:6px 12px;border:1px solid var(--line2);border-radius:6px;transition:all .2s}
-.topbar-back:hover{color:var(--t1);border-color:var(--line2);background:var(--surface2);text-decoration:none}
+.brand{font-family:var(--mono);font-size:17px;font-weight:900}
+.brand .fi{color:var(--green)}.brand .fto{color:var(--red)}
+.brand-sub{font-size:11px;color:var(--t3);margin-left:8px}
+.back{font-size:12px;color:var(--t2);display:flex;align-items:center;gap:5px;
+  padding:5px 12px;border:1px solid var(--line2);border-radius:6px;text-decoration:none;transition:.2s}
+.back:hover{color:var(--t1);background:var(--s2)}
 
-/* ── Layout ── */
-.page{max-width:960px;margin:0 auto;padding:32px 20px 80px}
-.hero{text-align:center;padding:48px 0 40px}
-.hero-tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--green);background:var(--green-bg);border:1px solid rgba(45,214,152,.2);
-  border-radius:99px;padding:4px 14px;margin-bottom:16px}
-.hero-title{font-size:42px;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:12px}
-.hero-title .fi{color:var(--green)}.hero-title .fto{color:var(--red)}
-.hero-sub{font-size:15px;color:var(--t2);max-width:520px;margin:0 auto 28px}
-.hero-stats{display:flex;justify-content:center;gap:32px;flex-wrap:wrap}
-.hero-stat{text-align:center}
-.hero-stat-val{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--t1)}
-.hero-stat-lbl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+/* layout */
+.page{max-width:900px;margin:0 auto;padding:32px 20px 80px}
+.section{margin-bottom:44px}
+.sec-title{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--t3);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+.sec-title::before,.sec-title::after{content:'';flex:1;height:1px;background:var(--line)}
 
-/* ── Section ── */
-.section{margin-bottom:40px}
-.section-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--t3);margin-bottom:16px;display:flex;align-items:center;gap:8px}
-.section-title::before{content:'';flex:1;height:1px;background:var(--line)}
-.section-title::after{content:'';flex:1;height:1px;background:var(--line)}
+/* hero */
+.hero{text-align:center;padding:44px 0 40px}
+.hero-pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--green);background:var(--gbg);border:1px solid var(--gbdr);border-radius:99px;
+  padding:4px 14px;margin-bottom:14px}
+.hero-title{font-size:38px;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:10px}
+.hero-sub{font-size:14px;color:var(--t2);max-width:500px;margin:0 auto 28px}
+.hero-stats{display:flex;justify-content:center;gap:36px;flex-wrap:wrap}
+.hs-val{font-size:20px;font-weight:700;font-family:var(--mono)}
+.hs-lbl{font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
 
-/* ── Cards ── */
-.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:12px}
-.card-title{font-size:13px;font-weight:700;color:var(--t1);margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.card-grid{display:grid;gap:12px}
-.grid-2{grid-template-columns:1fr 1fr}
-.grid-3{grid-template-columns:1fr 1fr 1fr}
+/* card */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px 22px;margin-bottom:10px}
 
-/* ── Flow diagram ── */
-.flow{display:flex;flex-direction:column;gap:0}
-.flow-step{display:flex;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
-.flow-step:last-child{border-bottom:none}
-.flow-num{width:28px;height:28px;border-radius:50%;background:var(--surface3);border:1px solid var(--line2);
-  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
-  font-family:var(--mono);color:var(--t2);flex-shrink:0;margin-top:2px}
-.flow-body{flex:1}
-.flow-label{font-size:12px;font-weight:700;color:var(--t1);margin-bottom:3px}
-.flow-desc{font-size:12px;color:var(--t2)}
-.flow-code{font-family:var(--mono);font-size:11px;color:var(--green);background:var(--surface2);
-  border:1px solid var(--line);border-radius:6px;padding:6px 10px;margin-top:6px;display:inline-block}
+/* ── ENTRY FLOW ── */
+.entry-flow{display:flex;flex-direction:column;gap:0}
+.ef-step{display:grid;grid-template-columns:32px 1fr;gap:14px;padding:16px 0;border-bottom:1px solid var(--line)}
+.ef-step:last-child{border-bottom:none;padding-bottom:0}
+.ef-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:12px;font-weight:700;flex-shrink:0;margin-top:2px}
+.ef-num.green{background:var(--gbg);border:1px solid var(--gbdr);color:var(--green)}
+.ef-num.red{background:var(--rbg);border:1px solid var(--rbdr);color:var(--red)}
+.ef-num.amber{background:var(--abg);border:1px solid var(--abdr);color:var(--amber)}
+.ef-num.blue{background:var(--bbg);border:1px solid var(--bbdr);color:var(--blue)}
+.ef-body{}
+.ef-title{font-size:13px;font-weight:700;color:var(--t1);margin-bottom:4px}
+.ef-desc{font-size:12px;color:var(--t2);line-height:1.65}
+.ef-pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;
+  background:var(--s3);border:1px solid var(--line2);border-radius:6px;
+  padding:4px 10px;margin-top:8px;color:var(--t2)}
+.ef-pill .g{color:var(--green)}.ef-pill .r{color:var(--red)}.ef-pill .a{color:var(--amber)}
 
-/* ── Strategy diagram ── */
-.strategy-box{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
-.strategy-arrow{text-align:center;color:var(--t3);font-size:18px;padding:6px 0}
+/* ── CONDITIONS GRID ── */
+.cond-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cond{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:11px 13px;display:flex;gap:10px}
+.cond-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.cond-dot.must{background:var(--red)}
+.cond-dot.opt{background:var(--amber)}
+.cond-name{font-size:12px;font-weight:600;color:var(--t1)}
+.cond-val{font-size:11px;color:var(--t3);margin-top:2px;font-family:var(--mono)}
 
-/* ── Arch diagram ── */
-.arch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.arch-node{background:var(--surface2);border:1px solid var(--line);border-radius:9px;
-  padding:12px 14px;text-align:center}
-.arch-node.highlight{border-color:rgba(45,214,152,.3);background:var(--green-bg)}
-.arch-node-icon{font-size:22px;margin-bottom:6px}
-.arch-node-title{font-size:12px;font-weight:700;color:var(--t1)}
-.arch-node-desc{font-size:10px;color:var(--t3);margin-top:3px}
-.arch-connector{display:flex;align-items:center;justify-content:center;color:var(--t3);font-size:11px;gap:4px}
+/* ── SETUP CARDS ── */
+.setup-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.setup{background:var(--s2);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.setup-tag{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+.setup-name{font-size:14px;font-weight:700;color:var(--t1);margin-bottom:6px}
+.setup-when{font-size:11px;color:var(--t3);margin-bottom:10px}
+.setup-leg{font-size:11px;padding:5px 8px;border-radius:6px;margin-bottom:4px;font-family:var(--mono)}
+.setup-leg.sell{background:var(--rbg);color:var(--red)}
+.setup-leg.buy{background:var(--bbg);color:var(--blue)}
+.setup-leg.buy2{background:var(--gbg);color:var(--green)}
 
-/* ── Tables ── */
-.tbl{width:100%;border-collapse:collapse;font-size:12px}
-.tbl th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
-  color:var(--t3);padding:8px 12px;border-bottom:1px solid var(--line2)}
-.tbl td{padding:9px 12px;border-bottom:1px solid var(--line);color:var(--t2);vertical-align:top}
-.tbl tr:last-child td{border-bottom:none}
-.tbl td:first-child{color:var(--t1);font-weight:600}
-.tbl .mono{font-family:var(--mono);font-size:11px}
-.tbl .c-green{color:var(--green)}
-.tbl .c-red{color:var(--red)}
-.tbl .c-amber{color:var(--amber)}
-.tbl .c-blue{color:var(--blue)}
+/* ── EXIT TABLE ── */
+.exit-list{display:flex;flex-direction:column;gap:6px}
+.exit-row{display:grid;grid-template-columns:28px 130px 1fr auto;align-items:center;gap:12px;
+  background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.exit-icon{font-size:16px;text-align:center}
+.exit-name{font-size:12px;font-weight:700;color:var(--t1)}
+.exit-cond{font-size:11px;color:var(--t3)}
+.exit-tag{font-size:10px;font-weight:700;padding:3px 9px;border-radius:5px;white-space:nowrap}
+.exit-tag.win{background:var(--gbg);color:var(--green);border:1px solid var(--gbdr)}
+.exit-tag.lose{background:var(--rbg);color:var(--red);border:1px solid var(--rbdr)}
+.exit-tag.time{background:var(--abg);color:var(--amber);border:1px solid var(--abdr)}
 
-/* ── Checks grid ── */
-.checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
-.check-item{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start}
-.check-icon{font-size:14px;margin-top:1px;flex-shrink:0}
-.check-body{}
-.check-name{font-size:12px;font-weight:600;color:var(--t1)}
-.check-desc{font-size:11px;color:var(--t3);margin-top:2px}
+/* ── TRAIL SL ── */
+.trail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.trail{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:14px 15px}
+.trail-trigger{font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.trail-val{font-size:20px;font-weight:800;font-family:var(--mono);color:var(--green);margin-bottom:4px}
+.trail-desc{font-size:11px;color:var(--t2)}
 
-/* ── DTE table ── */
+/* ── DTE TIERS ── */
 .dte-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
-.dte-card{background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;text-align:center}
-.dte-card.expiry{border-color:rgba(45,214,152,.3);background:var(--green-bg)}
-.dte-day{font-size:20px;font-weight:800;font-family:var(--mono);color:var(--t1)}
-.dte-label{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
-.dte-target{font-size:13px;font-weight:700;color:var(--green)}
-.dte-sl{font-size:13px;font-weight:700;color:var(--red)}
-.dte-sub{font-size:10px;color:var(--t3);margin-top:3px}
+.dte{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:12px 13px;text-align:center}
+.dte.today{border-color:var(--gbdr);background:var(--gbg)}
+.dte-day{font-size:22px;font-weight:800;font-family:var(--mono);color:var(--t1)}
+.dte-lbl{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.dte-target{font-size:14px;font-weight:700;color:var(--green)}
+.dte-sl{font-size:14px;font-weight:700;color:var(--red)}
+.dte-sub{font-size:10px;color:var(--t3);margin-top:4px}
 
-/* ── Exit triggers ── */
-.exits{display:flex;flex-direction:column;gap:8px}
-.exit-row{display:flex;align-items:center;gap:12px;background:var(--surface2);
-  border:1px solid var(--line);border-radius:8px;padding:10px 14px}
-.exit-badge{font-size:14px;width:28px;text-align:center;flex-shrink:0}
-.exit-name{font-size:12px;font-weight:700;color:var(--t1);width:140px;flex-shrink:0}
-.exit-cond{font-size:11px;color:var(--t3);font-family:var(--mono);flex:1}
-.exit-result{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;flex-shrink:0}
-.exit-result.profit{background:var(--green-bg);color:var(--green)}
-.exit-result.loss{background:var(--red-bg);color:var(--red)}
-.exit-result.time{background:var(--amber-bg);color:var(--amber)}
+/* ── RISK CONTROLS ── */
+.risk-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.risk{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:13px 14px}
+.risk-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);margin-bottom:5px}
+.risk-val{font-size:18px;font-weight:800;font-family:var(--mono);color:var(--red)}
+.risk-desc{font-size:11px;color:var(--t2);margin-top:4px}
 
-/* ── Files ── */
-.files{display:flex;flex-direction:column;gap:6px}
-.file-row{display:flex;align-items:flex-start;gap:12px;padding:8px 12px;
-  background:var(--surface2);border:1px solid var(--line);border-radius:7px}
-.file-icon{font-size:14px;flex-shrink:0;margin-top:1px}
-.file-name{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--t1)}
-.file-desc{font-size:11px;color:var(--t3);margin-top:2px}
+/* ── DELTA GUIDE ── */
+.delta-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.dlt{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:13px 14px;text-align:center}
+.dlt-vix{font-size:11px;font-weight:700;color:var(--t3);margin-bottom:5px}
+.dlt-val{font-size:22px;font-weight:800;font-family:var(--mono);color:var(--blue)}
+.dlt-pop{font-size:12px;font-weight:600;color:var(--green);margin-top:3px}
+.dlt-desc{font-size:10px;color:var(--t3);margin-top:3px}
 
-/* ── Telegram alerts ── */
-.alerts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.alert-row{display:flex;align-items:flex-start;gap:10px;background:var(--surface2);
-  border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-.alert-emoji{font-size:18px;flex-shrink:0}
-.alert-title{font-size:12px;font-weight:600;color:var(--t1)}
-.alert-desc{font-size:11px;color:var(--t3);margin-top:2px}
+/* ── ALERTS ── */
+.alert-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.al{display:flex;align-items:flex-start;gap:10px;background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:11px 13px}
+.al-icon{font-size:18px;flex-shrink:0}
+.al-name{font-size:12px;font-weight:600;color:var(--t1)}
+.al-desc{font-size:11px;color:var(--t3);margin-top:2px}
 
-/* ── Inline badges ── */
-.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;
-  vertical-align:middle;margin-left:6px}
-.badge.green{background:var(--green-bg);color:var(--green);border:1px solid rgba(45,214,152,.2)}
-.badge.red{background:var(--red-bg);color:var(--red);border:1px solid rgba(247,82,82,.2)}
-.badge.amber{background:var(--amber-bg);color:var(--amber);border:1px solid rgba(245,166,35,.2)}
-.badge.blue{background:var(--blue-bg);color:var(--blue);border:1px solid rgba(79,142,247,.2)}
+/* ── SAFETY GRID ── */
+.safety-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.safety-item{background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:13px 15px;display:flex;flex-direction:column;gap:5px}
+.safety-icon{font-size:20px;margin-bottom:2px}
+.safety-name{font-size:12px;font-weight:700;color:var(--t1)}
+.safety-desc{font-size:11px;color:var(--t3);line-height:1.6}
+.safety-code{font-family:var(--mono);font-size:10px;color:var(--green);background:var(--s3);border:1px solid var(--line2);border-radius:5px;padding:4px 9px;margin-top:4px;display:inline-block}
 
-/* ── Config table ── */
-.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.cfg-item{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-.cfg-key{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--blue)}
-.cfg-val{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--t1);margin:3px 0}
-.cfg-desc{font-size:11px;color:var(--t3)}
+/* badge */
+.badge{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;vertical-align:middle;margin-left:5px}
+.bg{background:var(--gbg);color:var(--green);border:1px solid var(--gbdr)}
+.bb{background:var(--bbg);color:var(--blue);border:1px solid var(--bbdr)}
+.ba{background:var(--abg);color:var(--amber);border:1px solid var(--abdr)}
+.br{background:var(--rbg);color:var(--red);border:1px solid var(--rbdr)}
 
-/* ── Code block ── */
-pre{background:var(--surface2);border:1px solid var(--line);border-radius:8px;
-  padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:11px;
-  color:var(--t2);line-height:1.7}
-pre .c-green{color:var(--green)}pre .c-red{color:var(--red)}
-pre .c-amber{color:var(--amber)}pre .c-blue{color:var(--blue)}
-pre .c-purple{color:var(--purple)}pre .c-t3{color:var(--t3)}
-
-/* ── Quick start steps ── */
-.qs{display:flex;flex-direction:column;gap:8px}
-.qs-step{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;
-  background:var(--surface2);border:1px solid var(--line);border-radius:8px}
-.qs-num{width:24px;height:24px;border-radius:50%;background:var(--green);color:#000;
-  font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.qs-body{}
-.qs-title{font-size:12px;font-weight:700;color:var(--t1)}
-.qs-code{font-family:var(--mono);font-size:11px;color:var(--green);margin-top:4px}
-
-/* ── Responsive ── */
 @media(max-width:640px){
-  .grid-2,.grid-3,.arch,.dte-grid,.alerts,.cfg-grid{grid-template-columns:1fr}
-  .hero-title{font-size:30px}
-  .hero-stats{gap:20px}
-  .exit-name{width:auto}
+  .setup-grid,.risk-grid,.delta-grid,.cond-grid,.trail-grid,.dte-grid,.alert-grid,.safety-grid{grid-template-columns:1fr}
+  .exit-row{grid-template-columns:28px 1fr auto;grid-template-rows:auto auto}
+  .exit-cond{grid-column:2/4}
+  .hero-title{font-size:28px}
   .page{padding:20px 14px 60px}
-
-  /* ── Tables: responsive ── */
-  .tbl {
-    font-size: 10px;
-    overflow-x: auto;
-    display: block;
-  }
-  .tbl th, .tbl td {
-    padding: 6px 8px;
-    white-space: nowrap;
-  }
 }
 </style>
 </head>
 <body>
 
 <header class="topbar">
-  <div class="topbar-brand">
-    <div class="brand-logo"><span class="fi">FI</span><span class="fto">FTO</span></div>
-    <div class="brand-sub">Project Overview</div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="brand"><span class="fi">FI</span><span class="fto">FTO</span></div>
+    <span class="brand-sub">How It Works</span>
   </div>
-  <a class="topbar-back" href="/">← Dashboard</a>
+  <a class="back" href="/">← Dashboard</a>
 </header>
 
 <div class="page">
 
   <!-- HERO -->
   <div class="hero">
-    <div class="hero-tag">NIFTY Options AI Trading System</div>
-    <div class="hero-title"><span class="fi">FI</span><span class="fto">FTO</span> AI Trading</div>
-    <div class="hero-sub">A fully-automated NIFTY options bot — 3 setup types (Strangle, Bull Put Spread, Bear Call Spread), 16 entry conditions, DTE-tiered targets and SL, trailing breakeven lock.</div>
+    <div class="hero-pill">NIFTY Options Auto-Trading</div>
+    <div class="hero-title"><span style="color:var(--green)">FI</span><span style="color:var(--red)">FTO</span> AI Trading</div>
+    <div class="hero-sub">Sells NIFTY options premium every day — Short Strangle, Bull Put Spread or Bear Call Spread — selected automatically based on market trend. Built-in holiday detection, duplicate prevention, and live closed-reason display.</div>
     <div class="hero-stats">
-      <div class="hero-stat"><div class="hero-stat-val" style="color:var(--green)">₹15L</div><div class="hero-stat-lbl">Capital</div></div>
-      <div class="hero-stat"><div class="hero-stat-val">3 Lots</div><div class="hero-stat-lbl">Per Trade</div></div>
-      <div class="hero-stat"><div class="hero-stat-val">195</div><div class="hero-stat-lbl">Qty per Leg</div></div>
-      <div class="hero-stat"><div class="hero-stat-val" style="color:var(--red)">₹45K</div><div class="hero-stat-lbl">Daily Loss Limit</div></div>
-      <div class="hero-stat"><div class="hero-stat-val">3</div><div class="hero-stat-lbl">Max Trades/Day</div></div>
+      <div><div class="hs-val" style="color:var(--green)">₹15L</div><div class="hs-lbl">Capital</div></div>
+      <div><div class="hs-val">3 Lots</div><div class="hs-lbl">Per Trade</div></div>
+      <div><div class="hs-val">195</div><div class="hs-lbl">Qty / Leg</div></div>
+      <div><div class="hs-val" style="color:var(--red)">₹45K</div><div class="hs-lbl">Daily Stop</div></div>
+      <div><div class="hs-val">3</div><div class="hs-lbl">Max Trades</div></div>
     </div>
   </div>
 
-  <!-- RECENT UPDATES -->
+
+  <!-- ── ENTRY FLOW ── -->
   <div class="section">
-    <div class="section-title">Recent Updates</div>
-
-    <!-- Fast P&L Refresh -->
-    <div class="card" style="border-left:3px solid var(--green);margin-bottom:10px">
-      <div class="card-title">
-        <span style="font-size:18px">⚡</span>
-        Fast P&amp;L Refresh — every 5 seconds
-        <span class="badge green">New</span>
-      </div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.7">
-        A new background thread (<code>fast_ltp_refresh</code>) fetches position LTPs every <strong>5 seconds</strong>, so P&amp;L on the dashboard updates smoothly. The position monitor still runs every 30 s for SL/target checks — the 5 s thread is only for price display.
-      </div>
-    </div>
-
-    <!-- Selectable LTP Source -->
-    <div class="card" style="border-left:3px solid var(--blue);margin-bottom:10px">
-      <div class="card-title">
-        <span style="font-size:18px">🔀</span>
-        Selectable LTP Data Source
-        <span class="badge blue">New</span>
-      </div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:10px">
-        You can now choose which broker feeds live prices. Three modes, switchable from the <strong>Open Positions tab</strong> or via API:
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px">
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
-          <div style="font-weight:700;color:var(--t1);margin-bottom:4px">Auto <span class="badge green" style="font-size:9px">Default</span></div>
-          <div style="color:var(--t3)">Tries AngelOne first. Falls back to Upstox if AngelOne fails. Best for reliability.</div>
-        </div>
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
-          <div style="font-weight:700;color:var(--t1);margin-bottom:4px">AngelOne only</div>
-          <div style="color:var(--t3)">Uses AngelOne exclusively. No fallback. Use if Upstox token is stale.</div>
-        </div>
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
-          <div style="font-weight:700;color:var(--t1);margin-bottom:4px">Upstox only</div>
-          <div style="color:var(--t3)">Uses Upstox exclusively. No fallback. Use if AngelOne is rate-limiting.</div>
-        </div>
-      </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--t3)">
-        API: <code style="color:var(--blue)">POST /api/ltp-source</code> with <code style="color:var(--amber)">{source: "auto" | "angel" | "upstox"}</code> &nbsp;·&nbsp; The dashboard shows which broker served the last price and when.
-      </div>
-    </div>
-
-    <!-- 30-day IV Percentile -->
-    <div class="card" style="border-left:3px solid var(--amber);margin-bottom:10px">
-      <div class="card-title">
-        <span style="font-size:18px">📊</span>
-        IV Check — 30-Day Historical Percentile
-        <span class="badge amber">Improved</span>
-      </div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:10px">
-        The IV entry condition now uses a real 30-day rolling percentile instead of a fixed threshold. Each day's closing ATM IV is saved to <code>iv_history.json</code>. The logic:
-      </div>
-      <div class="flow" style="gap:0">
-        <div class="flow-step">
-          <div class="flow-num">≥10</div>
-          <div class="flow-body">
-            <div class="flow-label">Enough history → percentile check</div>
-            <div class="flow-desc">Uses 30-day percentile. Pass condition: <strong>IV percentile &gt; 40</strong> (current IV is in the top 60% of recent range). This adapts to changing market regimes.</div>
-          </div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">&lt;10</div>
-          <div class="flow-body">
-            <div class="flow-label">Thin history → fallback check</div>
-            <div class="flow-desc">Falls back to raw ATM IV. Pass condition: <strong>IV ATM &gt; 10%</strong>. Label in dashboard shows "(fallback)" so you know which mode is active.</div>
-          </div>
-        </div>
-        <div class="flow-step" style="border-bottom:none">
-          <div class="flow-num">—</div>
-          <div class="flow-body">
-            <div class="flow-label">No IV data at all → skipped</div>
-            <div class="flow-desc">Check is skipped (shown as <span style="color:var(--t3)">—</span> in dashboard). Trade can still enter if all other checks pass.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- No-position pre-conditions card -->
-    <div class="card" style="border-left:3px solid var(--purple);margin-bottom:10px">
-      <div class="card-title">
-        <span style="font-size:18px">🔍</span>
-        "Why No Trade?" — Live Pre-condition Checklist
-        <span class="badge" style="background:var(--purple-bg);color:var(--purple);border:1px solid rgba(155,114,245,.2)">New</span>
-      </div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.7">
-        When no position is open, the <strong>Active Position card</strong> now shows every entry condition with a live pass/fail indicator. No more guessing why the bot hasn't entered.
-      </div>
-      <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px">
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 10px">
-          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Pre-conditions</div>
-          <div style="color:var(--t2)">Agent running · Market open · Entry window · Trades left today</div>
-        </div>
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 10px">
-          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Setup checks</div>
-          <div style="color:var(--t2)">VIX · PCR · IV% · EMA flat/trend · Margin · Daily loss gate</div>
-        </div>
-      </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--t3)">
-        Each row shows: <span style="color:var(--green)">OK</span> / <span style="color:var(--red)">FAIL</span> / <span style="color:var(--t3)">—</span> (no data), plus the live value (e.g. VIX 14.3, PCR 0.97). A reason line at the top shows the last signal engine message.
-      </div>
-    </div>
-
-    <!-- P&L Summary Bar -->
-    <div class="card" style="border-left:3px solid var(--green)">
-      <div class="card-title">
-        <span style="font-size:18px">💰</span>
-        P&amp;L Summary Bar in Open Positions
-        <span class="badge green">New</span>
-      </div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:10px">
-        The <strong>Open Positions tab</strong> now has a summary bar at the top with three numbers side by side:
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:11px;text-align:center">
-        <div style="background:var(--surface2);padding:10px 8px">
-          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Running P&amp;L</div>
-          <div style="font-family:var(--mono);font-weight:700;color:var(--green)">Live, updates every 5s</div>
-        </div>
-        <div style="background:var(--surface2);padding:10px 8px">
-          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Target P&amp;L</div>
-          <div style="font-family:var(--mono);font-weight:700;color:var(--green)">Max profit at target</div>
-        </div>
-        <div style="background:var(--surface2);padding:10px 8px">
-          <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Stop Loss P&amp;L</div>
-          <div style="font-family:var(--mono);font-weight:700;color:var(--red)">Max loss at SL</div>
-        </div>
-      </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--t3)">
-        Below the P&amp;L bar is the data source selector (Auto / AngelOne / Upstox) showing which broker served the last price update and at what time.
-      </div>
-    </div>
-  </div>
-
-  <!-- WHAT IS A SHORT STRANGLE -->
-  <div class="section">
-    <div class="section-title">The Strategy — 3 Setup Types</div>
+    <div class="sec-title">How Entry Works — Step by Step</div>
     <div class="card">
-      <!-- Short Strangle -->
-      <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">① Short Strangle <span class="badge green">Neutral</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div style="background:var(--red-bg);border:1px solid rgba(247,82,82,.2);border-radius:9px;padding:14px 16px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:6px">CE Leg — SELL Call</div>
-          <div style="font-size:13px;font-weight:600;color:var(--t1)">OTM Call above ATM</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23850 CE @ ₹192<br>Profit if NIFTY stays below 23850</div>
-        </div>
-        <div style="background:var(--green-bg);border:1px solid rgba(45,214,152,.2);border-radius:9px;padding:14px 16px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:6px">PE Leg — SELL Put</div>
-          <div style="font-size:13px;font-weight:600;color:var(--t1)">OTM Put below ATM</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23750 PE @ ₹186<br>Profit if NIFTY stays above 23750</div>
-        </div>
-      </div>
-      <div style="text-align:center;background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px;margin-bottom:20px">
-        <div style="font-size:11px;color:var(--t3);margin-bottom:8px">PROFIT ZONE — NIFTY stays between the two strikes</div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:0">
-          <div style="font-size:11px;color:var(--red);font-weight:700">23750 PE</div>
-          <div style="flex:1;height:4px;background:linear-gradient(90deg,var(--red),var(--green),var(--green),var(--red));border-radius:2px;margin:0 10px"></div>
-          <div style="font-size:11px;color:var(--red);font-weight:700">23850 CE</div>
-        </div>
-        <div style="font-size:11px;color:var(--green);margin-top:8px;font-weight:600">Combined Premium = ₹192 + ₹186 = ₹378 collected</div>
-        <div style="font-size:11px;color:var(--t3);margin-top:4px">Max profit: ₹378 × 195 = ₹73,710 &nbsp;|&nbsp; Both options expire worthless</div>
-      </div>
+      <div class="entry-flow">
 
-      <!-- Bull Put Spread -->
-      <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">② Bull Put Spread <span class="badge blue">Bullish</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div style="background:var(--green-bg);border:1px solid rgba(45,214,152,.2);border-radius:9px;padding:14px 16px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:6px">Sell Leg — SELL OTM Put</div>
-          <div style="font-size:13px;font-weight:600;color:var(--t1)">Higher strike put (closer to ATM)</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23700 PE @ ₹120<br>Premium received</div>
+        <div class="ef-step">
+          <div class="ef-num green">1</div>
+          <div class="ef-body">
+            <div class="ef-title">Entry Window Opens — 9:30 AM to 11:00 AM</div>
+            <div class="ef-desc">Signal engine wakes up and scans every <strong>5 minutes</strong>. Outside this window the bot does nothing — no entries after 11 AM to avoid choppy afternoon conditions.</div>
+            <div class="ef-pill"><span class="g">▶</span> 09:30 &nbsp;→&nbsp; scan every 5 min &nbsp;→&nbsp; <span class="r">stop</span> 11:00</div>
+          </div>
         </div>
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px 16px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-bottom:6px">Hedge Leg — BUY Lower Put</div>
-          <div style="font-size:13px;font-weight:600;color:var(--t1)">Lower strike put (deeper OTM)</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23600 PE @ ₹65<br>Premium paid (caps max loss)</div>
-        </div>
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:20px">
-        <div style="font-family:var(--mono);font-size:11px;color:var(--green)">Net Premium = ₹120 − ₹65 = ₹55 collected &nbsp;|&nbsp; Max loss capped at spread width − net premium</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:6px">Target, SL and trail SL are all calculated on the <strong style="color:var(--t1)">net spread premium (₹55)</strong>, not the sold leg alone.</div>
-      </div>
 
-      <!-- Bear Call Spread -->
-      <div style="font-size:11px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">③ Bear Call Spread <span class="badge amber">Bearish</span></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div style="background:var(--red-bg);border:1px solid rgba(247,82,82,.2);border-radius:9px;padding:14px 16px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--red);margin-bottom:6px">Sell Leg — SELL OTM Call</div>
-          <div style="font-size:13px;font-weight:600;color:var(--t1)">Lower strike call (closer to ATM)</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 23900 CE @ ₹100<br>Premium received</div>
+        <div class="ef-step">
+          <div class="ef-num blue">2</div>
+          <div class="ef-body">
+            <div class="ef-title">All Conditions Must Pass</div>
+            <div class="ef-desc">Before placing any order, every mandatory check must be green. If even one fails, the bot waits for the next 5-minute scan.</div>
+            <div class="cond-grid" style="margin-top:10px">
+              <div class="cond"><div class="cond-dot must"></div><div><div class="cond-name">VIX in range</div><div class="cond-val">13 – 28</div></div></div>
+              <div class="cond"><div class="cond-dot must"></div><div><div class="cond-name">Daily loss gate</div><div class="cond-val">P&L &gt; –₹45,000</div></div></div>
+              <div class="cond"><div class="cond-dot must"></div><div><div class="cond-name">Weekly loss gate</div><div class="cond-val">Week P&L &gt; –₹90,000</div></div></div>
+              <div class="cond"><div class="cond-dot must"></div><div><div class="cond-name">Monthly loss gate</div><div class="cond-val">Month P&L &gt; –₹1,50,000</div></div></div>
+              <div class="cond"><div class="cond-dot must"></div><div><div class="cond-name">Spot not spiking</div><div class="cond-val">Move &lt; 0.5% in 15 min</div></div></div>
+              <div class="cond"><div class="cond-dot opt"></div><div><div class="cond-name">IV rank</div><div class="cond-val">IVP &gt; 40% (if available)</div></div></div>
+              <div class="cond"><div class="cond-dot opt"></div><div><div class="cond-name">PCR balanced</div><div class="cond-val">0.8 – 1.4 (if available)</div></div></div>
+              <div class="cond"><div class="cond-dot opt"></div><div><div class="cond-name">EMA flat</div><div class="cond-val">Only for Strangle</div></div></div>
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--t3)">
+              <span style="color:var(--red)">●</span> Mandatory &nbsp;&nbsp;
+              <span style="color:var(--amber)">●</span> Optional — skipped if data unavailable, never blocks entry alone
+            </div>
+          </div>
         </div>
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px 16px">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--t2);margin-bottom:6px">Hedge Leg — BUY Higher Call</div>
-          <div style="font-size:13px;font-weight:600;color:var(--t1)">Higher strike call (deeper OTM)</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:4px">e.g. NIFTY 24000 CE @ ₹50<br>Premium paid (caps max loss)</div>
+
+        <div class="ef-step">
+          <div class="ef-num amber">3</div>
+          <div class="ef-body">
+            <div class="ef-title">Trend Detected → Setup Type Chosen</div>
+            <div class="ef-desc">The bot reads 15-minute EMA9 vs EMA21 + PCR to pick the best setup for current market direction.</div>
+            <div class="setup-grid" style="margin-top:10px">
+              <div class="setup">
+                <div class="setup-tag" style="color:var(--t2)">When FLAT</div>
+                <div class="setup-name">Short Strangle <span class="badge bg">Neutral</span></div>
+                <div class="setup-when">EMA9 ≈ EMA21, market ranging</div>
+                <div class="setup-leg sell">SELL OTM Call</div>
+                <div class="setup-leg sell">SELL OTM Put</div>
+                <div style="font-size:10px;color:var(--t3);margin-top:6px">Profit if NIFTY stays between the two strikes</div>
+              </div>
+              <div class="setup">
+                <div class="setup-tag" style="color:var(--blue)">When UP + PCR ≥ 1.0</div>
+                <div class="setup-name">Bull Put Spread <span class="badge bb">Bullish</span></div>
+                <div class="setup-when">EMA9 &gt; EMA21, trending up</div>
+                <div class="setup-leg sell">SELL OTM Put</div>
+                <div class="setup-leg buy">BUY lower Put (hedge)</div>
+                <div style="font-size:10px;color:var(--t3);margin-top:6px">Profit if NIFTY stays above sold strike</div>
+              </div>
+              <div class="setup">
+                <div class="setup-tag" style="color:var(--amber)">When DOWN + PCR ≤ 1.0</div>
+                <div class="setup-name">Bear Call Spread <span class="badge ba">Bearish</span></div>
+                <div class="setup-when">EMA9 &lt; EMA21, trending down</div>
+                <div class="setup-leg sell">SELL OTM Call</div>
+                <div class="setup-leg buy">BUY higher Call (hedge)</div>
+                <div style="font-size:10px;color:var(--t3);margin-top:6px">Profit if NIFTY stays below sold strike</div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:12px 14px">
-        <div style="font-family:var(--mono);font-size:11px;color:var(--amber)">Net Premium = ₹100 − ₹50 = ₹50 collected &nbsp;|&nbsp; Max loss capped at spread width − net premium</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:6px">Target, SL and trail SL are all calculated on the <strong style="color:var(--t1)">net spread premium (₹50)</strong>, not the sold leg alone.</div>
+
+        <div class="ef-step">
+          <div class="ef-num green">4</div>
+          <div class="ef-body">
+            <div class="ef-title">Strikes Selected — Delta-Based (Probability-First)</div>
+            <div class="ef-desc">Instead of just walking for a minimum premium, the bot picks strikes based on <strong>option delta</strong> — how likely the option is to expire worthless. Lower delta = further OTM = higher probability of profit.</div>
+            <div class="delta-grid" style="margin-top:10px">
+              <div class="dlt">
+                <div class="dlt-vix">VIX &lt; 14 (Calm)</div>
+                <div class="dlt-val">δ 0.20</div>
+                <div class="dlt-pop">~80% POP</div>
+                <div class="dlt-desc">Closer to ATM, collect more premium</div>
+              </div>
+              <div class="dlt" style="border-color:var(--bbdr)">
+                <div class="dlt-vix">VIX 14–20 (Normal)</div>
+                <div class="dlt-val">δ 0.16</div>
+                <div class="dlt-pop">~84% POP</div>
+                <div class="dlt-desc">Standard OTM, balanced risk/reward</div>
+              </div>
+              <div class="dlt">
+                <div class="dlt-vix">VIX &gt; 20 (Volatile)</div>
+                <div class="dlt-val">δ 0.12</div>
+                <div class="dlt-pop">~88% POP</div>
+                <div class="dlt-desc">Wider strikes, more cushion for moves</div>
+              </div>
+            </div>
+            <div class="ef-pill" style="margin-top:10px"><span class="g">✓</span> Also requires: Premium ≥ ₹40/leg &nbsp;·&nbsp; OI ≥ 3 lakh &nbsp;·&nbsp; Combined ≥ ₹150 (Strangle)</div>
+          </div>
+        </div>
+
+        <div class="ef-step">
+          <div class="ef-num red">5</div>
+          <div class="ef-body">
+            <div class="ef-title">Straddle Premium Filter — IV Environment Check</div>
+            <div class="ef-desc">Compares today's ATM straddle premium against the <strong>last 10 recordings at the same DTE</strong> (e.g. DTE=3 vs DTE=3 history). If today's premium is less than 80% of that average, IV is too low — skip and wait.</div>
+            <div class="ef-pill"><span class="r">✗</span> Premium ₹158 &lt; 80% of avg ₹207 → skip &nbsp;&nbsp;<span class="g">✓</span> Premium ₹220 ≥ 80% of avg ₹207 → enter</div>
+            <div style="margin-top:8px;font-size:11px;color:var(--t3)">Needs 5+ trading days of history to activate. Allows all entries while history is thin.</div>
+          </div>
+        </div>
+
+        <div class="ef-step" style="border-bottom:none">
+          <div class="ef-num green">6</div>
+          <div class="ef-body">
+            <div class="ef-title">Orders Placed — Auto or Manual</div>
+            <div class="ef-desc">In <strong>AUTO</strong> mode: orders fire immediately, Telegram alert sent. In <strong>MANUAL</strong> mode: signal waits for your approval on the dashboard. Position monitoring starts right after fill.</div>
+            <div class="ef-pill"><span class="a">→</span> AUTO: order placed instantly &nbsp;&nbsp;<span class="g">→</span> MANUAL: "Approve Buy" button appears</div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
 
-  <!-- DAILY FLOW -->
+
+  <!-- ── EXIT FLOW ── -->
   <div class="section">
-    <div class="section-title">How Each Day Works</div>
-    <div class="card">
-      <div class="flow">
-        <div class="flow-step">
-          <div class="flow-num">1</div>
-          <div class="flow-body">
-            <div class="flow-label">9:30 AM — Signal Engine Scans <span class="badge green">Every 5 min</span></div>
-            <div class="flow-desc">Checks all 16 conditions across 5 groups: pre-conditions → loss gates → market checks → trend detection → strike filters. Determines setup type (Strangle/Bull Put Spread/Bear Call Spread) from EMA trend + PCR. Margin check is display-only and does not block entry.</div>
-            <div class="flow-code">ATM = round(spot/50)×50 → walk up/down until LTP ≥ ₹40 → OI ≥ 3L → combined ≥ ₹150 (strangle)</div>
-          </div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">2</div>
-          <div class="flow-body">
-            <div class="flow-label">Order Placement <span class="badge blue">AngelOne API</span></div>
-            <div class="flow-desc">Three setup types supported. Strangle: SELL CE + SELL PE. Bull Put Spread: SELL PE + BUY lower PE. Bear Call Spread: SELL CE + BUY higher CE. If any leg fails, filled legs are immediately bought back (partial fill recovery). For spreads, the hedge LTP is fetched right after placement to compute the actual <strong>net spread premium</strong>.</div>
-            <div class="flow-code">Strangle: SELL 23850CE + SELL 23750PE &nbsp;|&nbsp; Bull Put: SELL 23700PE + BUY 23600PE</div>
-          </div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">3</div>
-          <div class="flow-body">
-            <div class="flow-label">Position Monitoring <span class="badge amber">Every 5 sec (LTP) / 30 sec (SL check)</span></div>
-            <div class="flow-desc">Fetches live LTP for all legs including hedge. For spreads, current cost = short leg LTP − hedge leg LTP (net). Calculates open P&L. At 20% profit, trailing SL locks to breakeven. Watches for target / SL / time exits.</div>
-            <div class="flow-code">Strangle: current_cost = CE_ltp + PE_ltp &nbsp;|&nbsp; Spread: current_cost = sell_ltp − hedge_ltp</div>
-          </div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">4</div>
-          <div class="flow-body">
-            <div class="flow-label">Exit — Square Off All Legs</div>
-            <div class="flow-desc">Square off triggered by target hit, SL hit, dead zone (2:30 PM), or EOD (3:20 PM). For spreads: BUY back the sold leg + SELL the hedge leg. Telegram alert sent. Trade recorded to local JSON + Google Sheets.</div>
-            <div class="flow-code">Spread exit: BUY sold_leg + SELL hedge_leg → net P&L saved → active_pos.json deleted</div>
-          </div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">5</div>
-          <div class="flow-body">
-            <div class="flow-label">Repeat <span class="badge green">Up to 3 trades/day</span></div>
-            <div class="flow-desc">After exit, signal engine resumes scanning. Max 3 trades per day or until daily loss limit hit. Agent stops automatically at end of day.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    <div class="sec-title">How Exit Works — All 6 Ways a Trade Closes</div>
 
-  <!-- ARCHITECTURE -->
-  <div class="section">
-    <div class="section-title">System Architecture</div>
-    <div class="card">
-      <div style="text-align:center;margin-bottom:16px">
-        <div style="display:inline-block;background:var(--green-bg);border:1px solid rgba(45,214,152,.25);border-radius:10px;padding:12px 24px">
-          <div style="font-size:11px;color:var(--t3);margin-bottom:4px">Core Engine</div>
-          <div style="font-size:14px;font-weight:700;color:var(--green);font-family:var(--mono)">dev_server.py</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:4px">Flask + 4 background threads</div>
-        </div>
+    <div class="card" style="margin-bottom:16px">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:14px;line-height:1.7">
+        Once in a position, the bot monitors LTP every <strong>30 seconds</strong>. Exit triggers are checked in order of priority: Target → Stop Loss → Expiry Cut → Dead Zone → EOD. The first trigger that fires wins.
       </div>
-      <div class="arch">
-        <div class="arch-node">
-          <div class="arch-node-icon">📡</div>
-          <div class="arch-node-title">AngelOne Smart API</div>
-          <div class="arch-node-desc">Live NIFTY/VIX data<br>Option chain<br>Order placement<br>Margin check</div>
-        </div>
-        <div class="arch-node">
-          <div class="arch-node-icon">📊</div>
-          <div class="arch-node-title">Dashboard (Browser)</div>
-          <div class="arch-node-desc">Real-time web UI<br>Desktop + Mobile PWA<br>REST API polling</div>
-        </div>
-        <div class="arch-node">
-          <div class="arch-node-icon">📱</div>
-          <div class="arch-node-title">Telegram Bot</div>
-          <div class="arch-node-desc">Trade alerts<br>Exit notifications<br>Signal updates</div>
-        </div>
-        <div class="arch-node">
-          <div class="arch-node-icon">📁</div>
-          <div class="arch-node-title">Local JSON</div>
-          <div class="arch-node-desc">trades.json<br>active_pos.json<br>Crash recovery</div>
-        </div>
-        <div class="arch-node">
-          <div class="arch-node-icon">📋</div>
-          <div class="arch-node-title">Google Sheets</div>
-          <div class="arch-node-desc">22-column trade log<br>CE/PE entry + exit LTP<br>Auto-updated on exit</div>
-        </div>
-        <div class="arch-node">
-          <div class="arch-node-icon">⚙️</div>
-          <div class="arch-node-title">Windows Auto-Start</div>
-          <div class="arch-node-desc">Task Scheduler<br>Runs silently on login<br>No console window</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ENTRY CONDITIONS -->
-  <div class="section">
-    <div class="section-title">Entry Conditions — Complete Checklist</div>
-
-    <!-- Legend -->
-    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;font-size:11px">
-      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--red);display:inline-block"></span> Hard block — trade cannot enter</span>
-      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--amber);display:inline-block"></span> Optional — skipped when data unavailable</span>
-      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--blue);display:inline-block"></span> Display only — shown on dashboard, does not block</span>
-      <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:var(--purple);display:inline-block"></span> Strike-level filter — runs inside _select_strikes()</span>
-    </div>
-
-    <!-- GROUP 1: Pre-conditions -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">① Pre-conditions — Checked Before Any Scan</div>
-      <table class="tbl" style="width:100%">
-        <thead><tr><th>Condition</th><th>Rule</th><th>Type</th><th>Detail</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>🤖 Agent Running</td>
-            <td class="mono">bot_running = True</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Start/stop button on dashboard. Telegram <code>/run</code> / <code>/stop</code>. No scan happens when stopped.</td>
-          </tr>
-          <tr>
-            <td>🏦 Market Open</td>
-            <td class="mono">Mon–Fri, 9:15–15:30</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Weekday check + time range. Signal engine sleeps 5 min between checks when market is closed. No orders possible outside market hours.</td>
-          </tr>
-          <tr>
-            <td>⏰ Entry Window</td>
-            <td class="mono">9:30 AM – 11:00 AM</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Only scan for new trades in this window. Avoids 9:15–9:30 opening volatility and avoids entering too late (low theta decay benefit). Configurable via <code>entry_start</code> / <code>entry_end</code>.</td>
-          </tr>
-          <tr>
-            <td>🔢 Max Trades/Day</td>
-            <td class="mono">trades_today &lt; 3</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Hard cap at 3 trades per day (configurable: <code>max_trades_per_day</code>). Prevents over-trading after a loss. Counter resets at midnight. Incremented at entry, NOT at exit.</td>
-          </tr>
-          <tr>
-            <td>⏱️ Signal Cooldown</td>
-            <td class="mono">≥ 5 min since last signal</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Signal engine enforces a 5-minute cooldown between signal evaluations. Even if all checks pass, the engine won't fire again until 5 min has elapsed.</td>
-          </tr>
-          <tr>
-            <td>📡 Active Position</td>
-            <td class="mono">active_position = False</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>No new trade is opened while one is already running. Bot is single-position — one open trade at a time. Signal engine skips entirely if active_position is True.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- GROUP 2: Risk Gates -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">② Loss Gates — Circuit Breakers</div>
-      <table class="tbl" style="width:100%">
-        <thead><tr><th>Condition</th><th>Rule</th><th>Type</th><th>Detail</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>📉 Daily Loss Gate</td>
-            <td class="mono">daily_pnl &gt; −₹45,000</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Daily realized P&L must stay above the loss limit. Configurable: <code>daily_loss_limit</code>. Checked every cycle. Once hit, no new trades for the rest of the day. Gate resets at midnight.</td>
-          </tr>
-          <tr>
-            <td>📆 Weekly Loss Gate</td>
-            <td class="mono">week_pnl &gt; −₹60,000</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Sum of closed P&L from Mon–Sun week. Configurable: <code>weekly_loss_limit</code>. Protects against a run of consecutive losing days. Trades blocked for the rest of the week if hit.</td>
-          </tr>
-          <tr>
-            <td>📅 Monthly Loss Gate</td>
-            <td class="mono">month_pnl &gt; −₹1,50,000</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Sum of closed P&L for the calendar month. Configurable: <code>monthly_loss_limit</code>. Largest safety net — protects capital across the full month.</td>
-          </tr>
-          <tr>
-            <td>🔴 Stop-After-SL</td>
-            <td class="mono">_sl_hit_today = False</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>When <code>stop_after_sl = True</code> in config, the daily gate is force-set to False after any SL hit. No further trades for that day after a stop loss. Resets at midnight.</td>
-          </tr>
-          <tr>
-            <td>📅 NSE Holiday</td>
-            <td class="mono">today not in holiday_set</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>Holiday list is fetched from NSE API on startup each day. Falls back to a hard-coded set of known 2026 NSE F&amp;O holidays if the API call fails.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- GROUP 3: Market Condition Checks -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">③ Market Condition Checks — Run on Every Scan Cycle</div>
-      <table class="tbl" style="width:100%">
-        <thead><tr><th>Condition</th><th>Rule</th><th>Type</th><th>Detail</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>🌡️ VIX Range</td>
-            <td class="mono">13 ≤ VIX ≤ 28</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>India VIX must be in range. Below 13 = premiums too cheap to sell profitably. Above 28 = dangerous gamma, SL hit probability too high. Configurable: <code>vix_min</code> / <code>vix_max</code>. Refreshed every 15 s from AngelOne/Upstox.</td>
-          </tr>
-          <tr>
-            <td>📌 Spot Stability</td>
-            <td class="mono">|Δspot| &lt; 0.5% in 15 min</td>
-            <td><span class="badge red">Hard</span></td>
-            <td>NIFTY spot is tracked in a rolling history every 15 s. If the absolute % change in the last 15 minutes exceeds <code>spot_momentum_limit</code> (default 0.5%), entry is blocked. Avoids selling into a fast directional move.</td>
-          </tr>
-          <tr>
-            <td>⚖️ PCR Range</td>
-            <td class="mono">0.8 ≤ PCR ≤ 1.4</td>
-            <td><span class="badge amber">Optional</span></td>
-            <td>Put-Call Ratio from NSE option chain. Range [0.8, 1.4] means sentiment is not extreme. Passed when data is unavailable (None = skip). If PCR is outside range it means strong directional bias — skip neutral setups. Also used for setup-type selection: PCR ≥ 1.0 = bullish bias → Bull Put Spread; PCR ≤ 1.0 = bearish → Bear Call Spread.</td>
-          </tr>
-          <tr>
-            <td>📊 IV Percentile</td>
-            <td class="mono">IVP &gt; 40  (or IV_ATM &gt; 10%)</td>
-            <td><span class="badge amber">Optional</span></td>
-            <td>Primary: 30-day rolling historical percentile from <code>iv_history.json</code>. Pass = IVP &gt; 40 (current IV is in top 60% of recent history). When &lt; 10 days of history exist, falls back to raw ATM IV &gt; 10%. When no IV data at all: skipped (None). Ensures we only sell options when IV is relatively elevated and premiums are worth collecting.</td>
-          </tr>
-          <tr>
-            <td>📈 EMA Trend / Flat</td>
-            <td class="mono">Depends on trend</td>
-            <td><span class="badge amber">Optional</span></td>
-            <td>
-              <strong>EMA 9 vs EMA 21 on 15-min candles</strong> + ATR comparison.<br>
-              <strong>FLAT:</strong> spread ≤ 0.20× ATR &amp; slope_gap ≤ 0.08× ATR → Short Strangle allowed.<br>
-              <strong>UP:</strong> EMA9 &gt; EMA21, both sloping up, spread &gt; 0.30× ATR → Bull Put Spread.<br>
-              <strong>DOWN:</strong> EMA9 &lt; EMA21, both sloping down, spread &gt; 0.30× ATR → Bear Call Spread.<br>
-              For FLAT trend, if EMA check returns False (not flat), strangle entry is blocked. For UP/DOWN, the EMA check is skipped in <code>_all_checks_pass</code> (trend already known) but PCR must confirm direction.
-            </td>
-          </tr>
-          <tr>
-            <td>💰 Margin Available</td>
-            <td class="mono">avail_cash &gt; 0</td>
-            <td><span class="badge blue">Display Only</span></td>
-            <td>Available margin is fetched from AngelOne. Shown on the dashboard as an informational check but does <strong>not block entry</strong>. Broker will reject the order at placement time if margin is insufficient — that failure is handled by the partial fill recovery logic.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- GROUP 4: Trend → Setup Selection -->
-    <div class="card" style="margin-bottom:12px">
-      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">④ Trend Detection → Setup Type Selection</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px">
-        Before calling strike selection, the signal engine determines <strong>which setup to trade</strong> based on EMA trend + PCR confirmation. This happens every scan cycle once all checks above pass.
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;font-size:11px">
-        <div style="background:var(--surface2);border:1px solid rgba(45,214,152,.25);border-radius:9px;padding:14px">
-          <div style="font-weight:700;color:var(--green);margin-bottom:6px">FLAT Trend</div>
-          <div style="color:var(--t3);margin-bottom:6px;font-size:10px">Condition: EMA spread ≤ 0.20× ATR</div>
-          <div style="color:var(--t2)">→ <strong>Short Strangle</strong></div>
-          <div style="color:var(--t3);margin-top:4px">EMA flat check enforced.<br>If EMA is not flat → skip this cycle.</div>
-        </div>
-        <div style="background:var(--surface2);border:1px solid rgba(79,142,247,.25);border-radius:9px;padding:14px">
-          <div style="font-weight:700;color:var(--blue);margin-bottom:6px">UP Trend + PCR ≥ 1.0</div>
-          <div style="color:var(--t3);margin-bottom:6px;font-size:10px">EMA9 &gt; EMA21, both slopes positive</div>
-          <div style="color:var(--t2)">→ <strong>Bull Put Spread</strong></div>
-          <div style="color:var(--t3);margin-top:4px">SELL OTM PE + BUY PE 100pts lower.<br>PCR ≥ 1 confirms bullish sentiment.</div>
-        </div>
-        <div style="background:var(--surface2);border:1px solid rgba(247,82,82,.25);border-radius:9px;padding:14px">
-          <div style="font-weight:700;color:var(--red);margin-bottom:6px">DOWN Trend + PCR ≤ 1.0</div>
-          <div style="color:var(--t3);margin-bottom:6px;font-size:10px">EMA9 &lt; EMA21, both slopes negative</div>
-          <div style="color:var(--t2)">→ <strong>Bear Call Spread</strong></div>
-          <div style="color:var(--t3);margin-top:4px">SELL OTM CE + BUY CE 100pts higher.<br>PCR ≤ 1 confirms bearish sentiment.</div>
-        </div>
-      </div>
-      <div style="margin-top:10px;font-size:11px;color:var(--t3);background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 12px">
-        <strong style="color:var(--amber)">Fallback:</strong> If trend is UP/DOWN but PCR doesn't confirm (e.g. trend UP but PCR &lt; 1.0), falls back to Short Strangle — but only if EMA is flat. If EMA is not flat in this case, the cycle is skipped entirely.
-      </div>
-    </div>
-
-    <!-- GROUP 5: Strike Selection Filters -->
-    <div class="card">
-      <div class="card-title" style="color:var(--t2);font-size:11px;text-transform:uppercase;letter-spacing:.1em">⑤ Strike Selection Filters — Run Inside _select_strikes()</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px">
-        These filters apply <em>after</em> the setup type is chosen. They validate whether valid strikes exist with enough premium and liquidity. If any fails, no signal is generated for that cycle.
-      </div>
-      <table class="tbl" style="width:100%">
-        <thead><tr><th>Filter</th><th>Rule</th><th>Applies To</th><th>Detail</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>💵 Min Leg Premium</td>
-            <td class="mono">LTP ≥ ₹40</td>
-            <td>All setups</td>
-            <td>Each leg's LTP must be ≥ <code>min_premium</code> (₹40). Walk OTM in ₹50 strike steps from ATM until a qualifying strike is found (up to ₹500 away). If no strike qualifies, no signal.</td>
-          </tr>
-          <tr>
-            <td>💎 Min Combined Premium</td>
-            <td class="mono">CE_LTP + PE_LTP ≥ ₹150</td>
-            <td>Strangle only</td>
-            <td>Combined CE + PE premium must be ≥ <code>min_combined_premium</code> (₹150). Ensures the strangle collects enough premium to cover brokerage and still profit. <strong>Not applied to spreads</strong> (only one leg is sold).</td>
-          </tr>
-          <tr>
-            <td>📊 OI Filter</td>
-            <td class="mono">OI ≥ 3,00,000</td>
-            <td>Per-setup leg only</td>
-            <td>Open Interest at the selected strike must be ≥ <code>min_strike_oi</code> (3 lakh contracts). Ensures adequate liquidity — low OI = slippage risk. <strong>Strangle:</strong> both CE and PE must pass. <strong>Bull Put Spread:</strong> only PE checked. <strong>Bear Call Spread:</strong> only CE checked.</td>
-          </tr>
-          <tr>
-            <td>📈 20-Day Straddle Avg</td>
-            <td class="mono">ATM_straddle ≥ 80% of 20d avg</td>
-            <td>Strangle only</td>
-            <td>ATM straddle (CE + PE at ATM) is compared against the 20-day rolling average premium stored in <code>straddle_history.json</code>. If today's straddle is &lt; 80% of the average, premiums are abnormally cheap — entry blocked. Today's premium is also recorded for future averaging. <strong>Skipped for spread setups.</strong></td>
-          </tr>
-        </tbody>
-      </table>
-      <div style="margin-top:10px;font-size:11px;color:var(--t3);background:var(--surface2);border:1px solid var(--line);border-radius:7px;padding:8px 12px">
-        <strong style="color:var(--amber)">ATM calculation:</strong> <code>ATM = round(spot / 50) × 50</code>. Strikes walk from ATM+50 upward for CE, ATM−50 downward for PE, in ₹50 increments. First strike with LTP ≥ ₹40 is selected.
-      </div>
-    </div>
-
-  </div>
-
-  <!-- DTE-TIERED RISK -->
-  <div class="section">
-    <div class="section-title">Target &amp; Stop Loss — DTE Tiered</div>
-    <div class="card">
-      <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Risk/reward auto-adjusts based on days remaining to expiry. More DTE = conservative targets.</div>
-      <div style="font-size:11px;color:var(--amber);background:var(--amber-bg);border:1px solid rgba(245,166,35,.2);border-radius:7px;padding:7px 12px;margin-bottom:14px">
-        <strong>Spreads:</strong> All percentages apply to the <strong>net spread premium</strong> (sell leg LTP − hedge leg LTP). Example: SELL PE ₹120 − BUY PE ₹65 = net ₹55. Target &amp; SL calculated on ₹55, not ₹120.
-      </div>
-      <div class="dte-grid">
-        <div class="dte-card expiry">
-          <div class="dte-label">Days to Expiry</div>
-          <div class="dte-day" style="color:var(--green)">0</div>
-          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">Expiry Day</div>
-          <div class="dte-target">45% target</div>
-          <div class="dte-sub">e.g. ₹378 → exit ₹208</div>
-          <div class="dte-sl" style="margin-top:6px">1.5× SL</div>
-          <div class="dte-sub">exit at ₹567</div>
-        </div>
-        <div class="dte-card">
-          <div class="dte-label">Days to Expiry</div>
-          <div class="dte-day">1</div>
-          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">Tomorrow</div>
-          <div class="dte-target">28% target</div>
-          <div class="dte-sub">e.g. ₹378 → exit ₹272</div>
-          <div class="dte-sl" style="margin-top:6px">1.4× SL</div>
-          <div class="dte-sub">exit at ₹529</div>
-        </div>
-        <div class="dte-card">
-          <div class="dte-label">Days to Expiry</div>
-          <div class="dte-day">2</div>
-          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">2 Days</div>
-          <div class="dte-target">22% target</div>
-          <div class="dte-sub">e.g. ₹378 → exit ₹295</div>
-          <div class="dte-sl" style="margin-top:6px">1.3× SL</div>
-          <div class="dte-sub">exit at ₹491</div>
-        </div>
-        <div class="dte-card">
-          <div class="dte-label">Days to Expiry</div>
-          <div class="dte-day">3+</div>
-          <div style="font-size:10px;color:var(--t2);margin:6px 0 10px">3+ Days</div>
-          <div class="dte-target">18% target</div>
-          <div class="dte-sub">e.g. ₹378 → exit ₹310</div>
-          <div class="dte-sl" style="margin-top:6px">1.25× SL</div>
-          <div class="dte-sub">exit at ₹473</div>
-        </div>
-      </div>
-      <div style="margin-top:14px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:12px 14px">
-        <div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:6px">🔒 Trailing SL — Breakeven Lock</div>
-        <div style="font-size:11px;color:var(--t2)">When profit reaches <strong style="color:var(--t1)">20%</strong> of premium collected, stop loss automatically tightens to breakeven (= entry premium). Worst case after trail: <strong style="color:var(--green)">₹0 loss</strong>. For spreads, "entry premium" is the net spread premium (sold leg − hedge leg).</div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--green);margin-top:8px;background:var(--surface3);padding:6px 10px;border-radius:6px">
-          Strangle: Net ₹378 × 20% = ₹75.6 → SL locks at ₹378 &nbsp;|&nbsp; Spread: Net ₹55 × 20% = ₹11 → SL locks at ₹55
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- EXIT TRIGGERS -->
-  <div class="section">
-    <div class="section-title">Exit Triggers</div>
-    <div class="card">
-      <div class="exits">
+      <div class="exit-list">
         <div class="exit-row">
-          <div class="exit-badge">🎯</div>
+          <div class="exit-icon">🎯</div>
           <div class="exit-name">Target Hit</div>
-          <div class="exit-cond">current_cost ≤ entry_prem − target &nbsp;<span style="color:var(--t3);font-size:10px">(net spread for spreads)</span></div>
-          <div class="exit-result profit">PROFIT</div>
+          <div class="exit-cond">Current cost decays to entry premium × (1 − target%). e.g. Entry ₹254 → Target 18% → exit at ₹208</div>
+          <div class="exit-tag win">Profit</div>
         </div>
         <div class="exit-row">
-          <div class="exit-badge">🛑</div>
-          <div class="exit-name">Stop Loss Hit</div>
-          <div class="exit-cond">current_cost > sl &nbsp;<span style="color:var(--t3);font-size:10px">(net spread for spreads)</span></div>
-          <div class="exit-result loss">LOSS</div>
+          <div class="exit-icon">🔒</div>
+          <div class="exit-name">Trail-1 (20%)</div>
+          <div class="exit-cond">When profit reaches 20% → SL moves to breakeven (entry premium). Position can only improve from here.</div>
+          <div class="exit-tag win">Protected</div>
         </div>
         <div class="exit-row">
-          <div class="exit-badge">⏰</div>
+          <div class="exit-icon">🔒</div>
+          <div class="exit-name">Trail-2 (60%)</div>
+          <div class="exit-cond">When profit reaches 60% → SL tightens to 70% of entry. Locks in at least 30% gain permanently.</div>
+          <div class="exit-tag win">+30% locked</div>
+        </div>
+        <div class="exit-row">
+          <div class="exit-icon">🛑</div>
+          <div class="exit-name">Stop Loss</div>
+          <div class="exit-cond">Current cost rises above SL level. e.g. Entry ₹254, SL mult 1.25x → SL at ₹317. Bot halts for rest of day.</div>
+          <div class="exit-tag lose">Loss</div>
+        </div>
+        <div class="exit-row">
+          <div class="exit-icon">⏰</div>
           <div class="exit-name">Expiry Cut-Time</div>
-          <div class="exit-cond">On expiry day, after 1:00 PM</div>
-          <div class="exit-result time">TIME</div>
+          <div class="exit-cond">On expiry day, if still open at 1:00 PM → force exit. Avoids last-hour gamma risk.</div>
+          <div class="exit-tag time">Time Exit</div>
         </div>
         <div class="exit-row">
-          <div class="exit-badge">🚫</div>
+          <div class="exit-icon">🌙</div>
           <div class="exit-name">Dead Zone</div>
-          <div class="exit-cond">Any day after 2:30 PM (low liquidity)</div>
-          <div class="exit-result time">TIME</div>
+          <div class="exit-cond">If still open at 2:30 PM → exit. Low liquidity after this, spreads widen, theta slows.</div>
+          <div class="exit-tag time">Time Exit</div>
         </div>
         <div class="exit-row">
-          <div class="exit-badge">🌙</div>
+          <div class="exit-icon">🔔</div>
           <div class="exit-name">EOD Auto-Exit</div>
-          <div class="exit-cond">3:20 PM — before market close</div>
-          <div class="exit-result time">TIME</div>
-        </div>
-        <div class="exit-row">
-          <div class="exit-badge">⚠️</div>
-          <div class="exit-name">Emergency Exit</div>
-          <div class="exit-cond">User presses button in dashboard</div>
-          <div class="exit-result loss">MANUAL</div>
+          <div class="exit-cond">Safety net at 3:20 PM. Closes any position still open before market close.</div>
+          <div class="exit-tag time">Safety</div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- CRASH RECOVERY -->
-  <div class="section">
-    <div class="section-title">Crash Recovery</div>
+    <!-- Trailing SL detail -->
     <div class="card">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div style="background:var(--green-bg);border:1px solid rgba(45,214,152,.2);border-radius:9px;padding:14px 16px">
-          <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">① active_pos.json <span class="badge green">Priority</span></div>
-          <div style="font-size:11px;color:var(--t2)">Written on every trade entry and when trailing SL activates. Has the <strong style="color:var(--t1)">full position detail</strong> — tokens, entry prices, SL state, trail_locked flag.</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:6px">Deleted when position closes.</div>
+      <div style="font-size:12px;font-weight:700;color:var(--t1);margin-bottom:12px">Trailing Stop Loss — Two-Stage Lock</div>
+      <div class="trail-grid">
+        <div class="trail">
+          <div class="trail-trigger">Trail 1 — at 20% profit</div>
+          <div class="trail-val">Breakeven</div>
+          <div class="trail-desc">SL moves to entry premium. You can't lose from this point. Theta keeps working.</div>
         </div>
-        <div style="background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:14px 16px">
-          <div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:8px">② trades.json <span class="badge amber">Fallback</span></div>
-          <div style="font-size:11px;color:var(--t2)">Contains all trade records. An entry with <strong style="color:var(--t1)">exit_time = null</strong> means trade is still open. Used if active_pos.json is missing.</div>
-          <div style="font-size:11px;color:var(--t2);margin-top:6px">Always kept in sync — entry + exit both saved here.</div>
+        <div class="trail" style="border-color:var(--gbdr)">
+          <div class="trail-trigger">Trail 2 — at 60% profit</div>
+          <div class="trail-val">30% Locked</div>
+          <div class="trail-desc">SL tightens to 70% of entry. A 30% gain is guaranteed even if market reverses.</div>
         </div>
       </div>
-      <div style="margin-top:12px;font-size:12px;color:var(--t2);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 14px">
-        <strong style="color:var(--t1)">On restart:</strong> Bot reads active_pos.json → restores position → re-resolves tokens from AngelOne after login → continues monitoring with no data loss.
+      <div style="margin-top:12px;background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:11px;color:var(--t2);line-height:1.8">
+        Example — Entry premium ₹254:<br>
+        <span style="color:var(--t3)">→</span> At ₹203 (20% gain): SL locked at <span style="color:var(--amber)">₹254</span> (breakeven)<br>
+        <span style="color:var(--t3)">→</span> At ₹102 (60% gain): SL tightened to <span style="color:var(--green)">₹178</span> (30% profit locked)<br>
+        <span style="color:var(--t3)">→</span> Target at 18%: exit at <span style="color:var(--green)">₹208</span> (~₹9,000 profit on 3 lots)
       </div>
     </div>
   </div>
 
-  <!-- GOOGLE SHEETS -->
-  <div class="section">
-    <div class="section-title">Google Sheets — Trade Log</div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <table class="tbl">
-        <thead><tr><th>#</th><th>Column</th><th>Written</th><th>Example</th></tr></thead>
-        <tbody>
-          <tr><td class="mono">1</td><td>Trade ID</td><td>Entry</td><td class="mono c-blue">T1775708570</td></tr>
-          <tr><td class="mono">2</td><td>Entry Time</td><td>Entry</td><td class="mono">09-04-2026 09:52:50</td></tr>
-          <tr><td class="mono">3</td><td>Exit Time</td><td>Exit</td><td class="mono">09-04-2026 14:30:00</td></tr>
-          <tr><td class="mono">4–8</td><td>Setup / CE Strike / PE Strike / CE Symbol / PE Symbol</td><td>Entry</td><td class="mono">Bull Put Spread, —, 23700</td></tr>
-          <tr><td class="mono">9–10</td><td>Qty / Premium</td><td>Entry</td><td class="mono">195 / ₹55.00 <span style="color:var(--t3);font-size:10px">(net for spreads)</span></td></tr>
-          <tr><td class="mono c-green">11</td><td><strong>CE Entry LTP</strong></td><td>Entry</td><td class="mono c-green">₹192.30</td></tr>
-          <tr><td class="mono c-green">12</td><td><strong>PE Entry LTP</strong></td><td>Entry</td><td class="mono c-green">₹120.00 <span style="color:var(--t3);font-size:10px">(sold leg)</span></td></tr>
-          <tr><td class="mono c-red">13</td><td><strong>CE Exit LTP</strong></td><td>Exit</td><td class="mono c-red">₹216.00</td></tr>
-          <tr><td class="mono c-red">14</td><td><strong>PE Exit LTP</strong></td><td>Exit</td><td class="mono c-red">₹98.00 <span style="color:var(--t3);font-size:10px">(sold leg)</span></td></tr>
-          <tr><td class="mono">15–17</td><td>Target / Initial SL / Final SL</td><td>Entry/Exit</td><td class="mono">₹24.75 / ₹68.75 / ₹55.00 <span style="color:var(--t3);font-size:10px">(net basis)</span></td></tr>
-          <tr><td class="mono">18</td><td>Trail Locked</td><td>Exit</td><td class="mono c-amber">Yes / No</td></tr>
-          <tr><td class="mono c-green">19</td><td><strong>P&amp;L</strong></td><td>Exit</td><td class="mono c-green">+₹7,137</td></tr>
-          <tr><td class="mono">20</td><td>Exit Reason</td><td>Exit</td><td class="mono">TARGET / DEAD_ZONE / SL</td></tr>
-          <tr><td class="mono">21–22</td><td>Expiry / Duration</td><td>Entry/Exit</td><td class="mono">13-Apr-2026 / 295 min</td></tr>
-          <tr><td class="mono c-blue">23</td><td><strong>Hedge PE Exit LTP</strong></td><td>Exit</td><td class="mono c-blue">₹42.00 <span style="color:var(--t3);font-size:10px">(spread only)</span></td></tr>
-          <tr><td class="mono c-blue">24</td><td><strong>Hedge CE Exit LTP</strong></td><td>Exit</td><td class="mono c-blue">₹28.50 <span style="color:var(--t3);font-size:10px">(spread only)</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
 
-  <!-- TELEGRAM ALERTS -->
+  <!-- ── DTE TIERS ── -->
   <div class="section">
-    <div class="section-title">Telegram Alerts</div>
+    <div class="sec-title">Target &amp; SL by Days-to-Expiry (DTE)</div>
     <div class="card">
-      <div class="alerts">
-        <div class="alert-row"><div class="alert-emoji">📊</div><div><div class="alert-title">Signal Ready (MANUAL)</div><div class="alert-desc">CE/PE strikes + premium. Awaiting your approval.</div></div></div>
-        <div class="alert-row"><div class="alert-emoji">✅</div><div><div class="alert-title">Trade Executed (AUTO)</div><div class="alert-desc">Both legs placed. Entry prices, target, SL.</div></div></div>
-        <div class="alert-row"><div class="alert-emoji">🔒</div><div><div class="alert-title">Trailing SL Locked</div><div class="alert-desc">Profit ≥ 20%. SL moved to breakeven.</div></div></div>
-        <div class="alert-row"><div class="alert-emoji">🎯</div><div><div class="alert-title">Target Hit</div><div class="alert-desc">P&L amount. Squaring off.</div></div></div>
-        <div class="alert-row"><div class="alert-emoji">🛑</div><div><div class="alert-title">Stop Loss Hit</div><div class="alert-desc">Loss amount. Squaring off immediately.</div></div></div>
-        <div class="alert-row"><div class="alert-emoji">⏰</div><div><div class="alert-title">Dead Zone / EOD Exit</div><div class="alert-desc">Time-based force exit. P&L shown.</div></div></div>
-        <div class="alert-row"><div class="alert-emoji">🚨</div><div><div class="alert-title">Emergency Exit</div><div class="alert-desc">Manual trigger from dashboard button.</div></div></div>
-        <div class="alert-row"><div class="alert-emoji">⏰</div><div><div class="alert-title">Expiry Cut-Time</div><div class="alert-desc">On expiry day before 1 PM, force exit.</div></div></div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:14px">Target and SL adjust automatically based on how many days remain to expiry. On expiry day, theta decay is fastest — grab profits quickly. Further from expiry, be patient.</div>
+      <div class="dte-grid">
+        <div class="dte today">
+          <div class="dte-lbl">Expiry Day</div>
+          <div class="dte-day">0</div>
+          <div class="dte-lbl">DTE</div>
+          <div class="dte-target">45% target</div>
+          <div class="dte-sl">1.5× SL</div>
+          <div class="dte-sub">Massive theta, grab fast</div>
+        </div>
+        <div class="dte">
+          <div class="dte-lbl">Day Before</div>
+          <div class="dte-day">1</div>
+          <div class="dte-lbl">DTE</div>
+          <div class="dte-target">28% target</div>
+          <div class="dte-sl">1.4× SL</div>
+          <div class="dte-sub">Good theta, achievable</div>
+        </div>
+        <div class="dte">
+          <div class="dte-lbl">2 Days Out</div>
+          <div class="dte-day">2</div>
+          <div class="dte-lbl">DTE</div>
+          <div class="dte-target">22% target</div>
+          <div class="dte-sl">1.3× SL</div>
+          <div class="dte-sub">Moderate theta</div>
+        </div>
+        <div class="dte">
+          <div class="dte-lbl">3+ Days Out</div>
+          <div class="dte-day">3+</div>
+          <div class="dte-lbl">DTE</div>
+          <div class="dte-target">18% target</div>
+          <div class="dte-sl">1.25× SL</div>
+          <div class="dte-sub">Low theta, be patient</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--t3)">
+        DTE is calculated live. NIFTY expires on <strong>Tuesday</strong> (SEBI change). If Tuesday is a holiday, expiry shifts to Monday — AngelOne's option chain handles this automatically.
       </div>
     </div>
   </div>
 
-  <!-- TELEGRAM BOT COMMANDS -->
+
+  <!-- ── RISK CONTROLS ── -->
   <div class="section">
-    <div class="section-title">Telegram Bot Commands</div>
+    <div class="sec-title">Risk Controls — Hard Stops</div>
     <div class="card">
-      <div style="font-size:12px;color:var(--t3);margin-bottom:14px;line-height:1.6">
-        Send commands directly to the bot from your Telegram chat. Only messages from the configured <code>TELEGRAM_CHAT_ID</code> are accepted — all others are silently ignored. No PIN required (chat identity is the auth).
-      </div>
-      <table class="tbl" style="width:100%">
-        <thead><tr><td style="font-weight:700;color:var(--t1)">Command</td><td style="font-weight:700;color:var(--t1)">Action</td></tr></thead>
-        <tbody>
-          <tr><td><code>/status</code></td><td>Live NIFTY spot, VIX, bot state, active position, open P&amp;L</td></tr>
-          <tr><td><code>/pnl</code></td><td>Today's realized P&amp;L and trade count</td></tr>
-          <tr><td><code>/run</code></td><td>Start the trading agent (begin scanning for signals)</td></tr>
-          <tr><td><code>/stop</code></td><td>Stop the trading agent (no new trades, existing position monitored)</td></tr>
-          <tr><td><code>/exit</code></td><td>Emergency square-off — closes both CE &amp; PE legs immediately</td></tr>
-          <tr><td><code>/approve</code></td><td>Execute the pending trade signal (MANUAL mode only)</td></tr>
-          <tr><td><code>/mode auto</code></td><td>Switch to AUTO mode — trades execute automatically on signal</td></tr>
-          <tr><td><code>/mode manual</code></td><td>Switch to MANUAL mode — wait for /approve before executing</td></tr>
-          <tr><td><code>/menu</code></td><td>Show the full command list in chat (also shown on /start)</td></tr>
-        </tbody>
-      </table>
-      <div style="margin-top:14px;padding:10px 14px;background:var(--surface2,rgba(255,255,255,0.04));border-radius:8px;font-size:11px;color:var(--t3)">
-        ⚙️ <strong>How it works:</strong> Server long-polls <code>getUpdates</code> every 20 s. No webhook or public URL needed. Polling starts automatically with the server.
+      <div class="risk-grid">
+        <div class="risk">
+          <div class="risk-lbl">Daily Stop</div>
+          <div class="risk-val">₹45,000</div>
+          <div class="risk-desc">Bot halts for the day if daily loss exceeds this. Resets at midnight.</div>
+        </div>
+        <div class="risk">
+          <div class="risk-lbl">Weekly Stop</div>
+          <div class="risk-val">₹90,000</div>
+          <div class="risk-desc">Bot halts for the rest of the week. Protects from a bad streak.</div>
+        </div>
+        <div class="risk">
+          <div class="risk-lbl">Monthly Stop</div>
+          <div class="risk-val">₹1,50,000</div>
+          <div class="risk-desc">Hard cap for the month. 10% of capital.</div>
+        </div>
+        <div class="risk">
+          <div class="risk-lbl">SL Circuit</div>
+          <div class="risk-val" style="color:var(--amber)">1 SL/day</div>
+          <div class="risk-desc">After any SL hit, bot stops for the rest of that day.</div>
+        </div>
+        <div class="risk">
+          <div class="risk-lbl">Max Trades</div>
+          <div class="risk-val" style="color:var(--blue)">3/day</div>
+          <div class="risk-desc">Maximum 3 entries per trading day regardless of P&L.</div>
+        </div>
+        <div class="risk">
+          <div class="risk-lbl">Spot Spike</div>
+          <div class="risk-val" style="color:var(--amber)">0.5%</div>
+          <div class="risk-desc">Blocks entry if NIFTY moved more than 0.5% in the last 15 min.</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- CONFIG -->
+
+  <!-- ── TELEGRAM ALERTS ── -->
   <div class="section">
-    <div class="section-title">Key Configuration</div>
+    <div class="sec-title">Telegram Alerts</div>
     <div class="card">
-      <div class="cfg-grid">
-        <div class="cfg-item"><div class="cfg-key">capital</div><div class="cfg-val">₹15,00,000</div><div class="cfg-desc">Used for overall P&L % calculation</div></div>
-        <div class="cfg-item"><div class="cfg-key">base_lots / lot_size</div><div class="cfg-val">3 × 65 = 195</div><div class="cfg-desc">Qty per leg. lot_size auto-fetched from NSE daily</div></div>
-        <div class="cfg-item"><div class="cfg-key">min_premium</div><div class="cfg-val">₹40</div><div class="cfg-desc">Minimum LTP per leg to select a strike</div></div>
-        <div class="cfg-item"><div class="cfg-key">trail_trigger_pct</div><div class="cfg-val">20%</div><div class="cfg-desc">Profit % to activate breakeven trailing SL</div></div>
-        <div class="cfg-item"><div class="cfg-key">daily_loss_limit</div><div class="cfg-val">₹45,000</div><div class="cfg-desc">Bot stops trading if daily loss exceeds this</div></div>
-        <div class="cfg-item"><div class="cfg-key">max_trades_per_day</div><div class="cfg-val">3</div><div class="cfg-desc">Hard cap on trades per session</div></div>
-        <div class="cfg-item"><div class="cfg-key">entry_start / end</div><div class="cfg-val">9:30 – 11:00</div><div class="cfg-desc">Only look for signals in this window</div></div>
-        <div class="cfg-item"><div class="cfg-key">execution_mode</div><div class="cfg-val">AUTO / MANUAL</div><div class="cfg-desc">AUTO = instant execution; MANUAL = wait for button</div></div>
+      <div class="alert-grid">
+        <div class="al"><div class="al-icon">📊</div><div><div class="al-name">Signal — Auto Executing</div><div class="al-desc">Setup type, strike prices, premium, target and SL</div></div></div>
+        <div class="al"><div class="al-icon">✅</div><div><div class="al-name">Position Entered</div><div class="al-desc">Confirmed fill prices and actual premium received</div></div></div>
+        <div class="al"><div class="al-icon">🔒</div><div><div class="al-name">Trail-1 Activated</div><div class="al-desc">Breakeven locked — 20% profit milestone reached</div></div></div>
+        <div class="al"><div class="al-icon">🔒</div><div><div class="al-name">Trail-2 Activated</div><div class="al-desc">30% gain locked — 60% profit milestone reached</div></div></div>
+        <div class="al"><div class="al-icon">🎯</div><div><div class="al-name">Target Hit</div><div class="al-desc">Position closed at target, P&L shown</div></div></div>
+        <div class="al"><div class="al-icon">🛑</div><div><div class="al-name">Stop Loss Hit</div><div class="al-desc">Position closed at SL, bot halts for the day</div></div></div>
+        <div class="al"><div class="al-icon">⏰</div><div><div class="al-name">Time Exit</div><div class="al-desc">Dead zone / expiry cut / EOD — P&L at exit</div></div></div>
+        <div class="al"><div class="al-icon">📊</div><div><div class="al-name">Daily Summary (3:35 PM)</div><div class="al-desc">Trades taken, wins, total P&L, failed checks</div></div></div>
       </div>
     </div>
   </div>
 
-  <!-- FILES -->
+
+  <!-- ── SAFETY & RELIABILITY ── -->
   <div class="section">
-    <div class="section-title">File Structure</div>
-    <div class="card">
-      <div class="files">
-        <div class="file-row"><div class="file-icon">🐍</div><div><div class="file-name">dev_server.py</div><div class="file-desc">Main server — Flask API + all trading logic (~3,700 lines). Signal engine, order placement, position monitor, fast LTP refresh, P&L, Sheets, Telegram.</div></div></div>
-        <div class="file-row"><div class="file-icon">🌐</div><div><div class="file-name">nifty_dashboard.html</div><div class="file-desc">Single-file web dashboard. Real-time UI with CE/PE position card, trade log modal, settings panel. PWA-ready.</div></div></div>
-        <div class="file-row"><div class="file-icon">💾</div><div><div class="file-name">trades.json</div><div class="file-desc">All trade records (open + closed). Survives restarts. Source of truth for trade history and daily P&L recovery.</div></div></div>
-        <div class="file-row"><div class="file-icon">🔴</div><div><div class="file-name">active_pos.json</div><div class="file-desc">Full snapshot of current open position. Written on entry, updated on trailing SL. Deleted on exit. Used for crash recovery.</div></div></div>
-        <div class="file-row"><div class="file-icon">📈</div><div><div class="file-name">iv_history.json</div><div class="file-desc">Rolling 30-day ATM IV history (one entry per trading day). Used to compute IV percentile for the entry check. Falls back to raw ATM IV check when &lt; 10 days exist. Keeps last 60 days.</div></div></div>
-        <div class="file-row"><div class="file-icon">🔑</div><div><div class="file-name">.env</div><div class="file-desc">API keys: ANGEL_API_KEY, TELEGRAM_TOKEN, GSHEET_ID, OPENAI_API_KEY. Never committed to git.</div></div></div>
-        <div class="file-row"><div class="file-icon">📋</div><div><div class="file-name">gsheet_creds.json</div><div class="file-desc">Google Service Account credentials for Sheets API access. Never committed to git.</div></div></div>
-        <div class="file-row"><div class="file-icon">📱</div><div><div class="file-name">manifest.json + sw.js</div><div class="file-desc">PWA files — makes dashboard installable on mobile (Android + iOS). Service worker caches shell, API always live.</div></div></div>
-        <div class="file-row"><div class="file-icon">🚀</div><div><div class="file-name">setup_auto_start.bat</div><div class="file-desc">One-time Windows Task Scheduler setup. Runs FIFTO silently on every login. No console window.</div></div></div>
+    <div class="sec-title">Safety &amp; Reliability Systems</div>
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:14px;line-height:1.7">
+        Built-in guards prevent the bot from trading on wrong days, firing duplicate orders, or running while the market is closed. These work silently in the background every session.
+      </div>
+      <div class="safety-grid">
+
+        <div class="safety-item">
+          <div class="safety-icon">🗓️</div>
+          <div class="safety-name">NSE Holiday Detection</div>
+          <div class="safety-desc">
+            All NSE F&amp;O trading holidays for 2026 are hardcoded as a fallback. On startup the bot also tries to fetch the live NSE holiday list and merges both. If the API fails, the hardcoded set is used — the bot <strong>never trades on a holiday</strong> regardless of connectivity.
+          </div>
+          <span class="safety-code">_NSE_HOLIDAYS_2026 dict · 2026-04-14 → "Dr. B.R. Ambedkar Jayanti"</span>
+        </div>
+
+        <div class="safety-item">
+          <div class="safety-icon">🔒</div>
+          <div class="safety-name">Duplicate Trade Prevention</div>
+          <div class="safety-desc">
+            Two independent layers stop the same signal firing twice. First, <code style="font-family:var(--mono);font-size:10px;color:var(--amber)">signal_pending = True</code> is set in AUTO mode the moment a signal is generated — any further scans skip entry until the trade completes. Second, a threading lock (<code style="font-family:var(--mono);font-size:10px;color:var(--amber)">_trade_exec_lock</code>) blocks concurrent calls to <code style="font-family:var(--mono);font-size:10px;color:var(--amber)">_execute_trade()</code>.
+          </div>
+          <span class="safety-code">threading.Lock() · non-blocking acquire · signal_pending flag</span>
+        </div>
+
+        <div class="safety-item">
+          <div class="safety-icon">⏸️</div>
+          <div class="safety-name">Market-Closed Thread Gates</div>
+          <div class="safety-desc">
+            All three active background threads (signal engine, market-data fetch, fast LTP refresh) check <code style="font-family:var(--mono);font-size:10px;color:var(--amber)">_is_market_open()</code> before doing any work. If the market is closed they sleep and poll — no broker API calls, no LTP reads, no signals generated.
+          </div>
+          <span class="safety-code">signal_engine: waits at 9:15 · market_data: sleep 300s · ltp: sleep 60s</span>
+        </div>
+
+        <div class="safety-item">
+          <div class="safety-icon">🟢</div>
+          <div class="safety-name">Google Sheet Deduplication</div>
+          <div class="safety-desc">
+            Before appending a trade to the Google Sheet log, the bot searches column A for the trade ID. If the row already exists it skips the write and logs a warning. Prevents duplicate rows from appearing after retries or restarts.
+          </div>
+          <span class="safety-code">ws.find(trade_id, in_column=1) → skip if exists</span>
+        </div>
+
+        <div class="safety-item">
+          <div class="safety-icon">🔴</div>
+          <div class="safety-name">Market Closed Reason — Live UI</div>
+          <div class="safety-desc">
+            The dashboard shows <em>why</em> the market is closed: Weekend (Saturday/Sunday), NSE holiday by name, before 9:15 AM, or after 3:30 PM. The server computes this and sends it via <code style="font-family:var(--mono);font-size:10px;color:var(--amber)">/api/state</code> so the UI is always accurate even without the browser knowing about holidays.
+          </div>
+          <span class="safety-code">market_closed_reason: "NSE Holiday — Dr. B.R. Ambedkar Jayanti"</span>
+        </div>
+
+        <div class="safety-item">
+          <div class="safety-icon">⚠️</div>
+          <div class="safety-name">No-Trade Reason — Live UI</div>
+          <div class="safety-desc">
+            During the entry window, if conditions are failing the dashboard shows exactly which checks are blocking entry: VIX out of range, IV too low, EMA trending, PCR out of range, margin insufficient, or any loss gate hit. Updated every poll cycle so you can see live why the bot is waiting.
+          </div>
+          <span class="safety-code">no_trade_reason: "Checks failing: VIX out of range, IV too low"</span>
+        </div>
+
       </div>
     </div>
   </div>
 
-  <!-- QUICK START -->
+
+  <!-- ── FILES ── -->
   <div class="section">
-    <div class="section-title">Quick Start</div>
+    <div class="sec-title">Key Files</div>
     <div class="card">
-      <div class="qs">
-        <div class="qs-step"><div class="qs-num">1</div><div class="qs-body"><div class="qs-title">Install Python dependencies</div><div class="qs-code">.venv/Scripts/pip install flask python-dotenv requests gspread google-auth smart-api-python pyotp</div></div></div>
-        <div class="qs-step"><div class="qs-num">2</div><div class="qs-body"><div class="qs-title">Fill in .env with your credentials</div><div class="qs-code">ANGEL_API_KEY, ANGEL_CLIENT_ID, ANGEL_PASSWORD, ANGEL_TOTP_SECRET, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, GSHEET_ID</div></div></div>
-        <div class="qs-step"><div class="qs-num">3</div><div class="qs-body"><div class="qs-title">Start the server</div><div class="qs-code">.venv/Scripts/python dev_server.py</div></div></div>
-        <div class="qs-step"><div class="qs-num">4</div><div class="qs-body"><div class="qs-title">Open dashboard in browser</div><div class="qs-code">http://localhost:8080</div></div></div>
-        <div class="qs-step"><div class="qs-num">5</div><div class="qs-body"><div class="qs-title">(Optional) Auto-start on Windows login</div><div class="qs-code">Run setup_auto_start.bat as Administrator</div></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;padding:9px 12px;background:var(--s2);border:1px solid var(--line);border-radius:7px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--green)">dev_server.py</div>
+          <div style="font-size:11px;color:var(--t3)">Main bot — signal engine, order execution, position monitor, API routes</div>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;padding:9px 12px;background:var(--s2);border:1px solid var(--line);border-radius:7px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--blue)">nifty_dashboard.html</div>
+          <div style="font-size:11px;color:var(--t3)">Live dashboard — all tabs, charts, signal display, position P&L</div>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;padding:9px 12px;background:var(--s2);border:1px solid var(--line);border-radius:7px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--amber)">trades.json</div>
+          <div style="font-size:11px;color:var(--t3)">Persistent trade history — all entry/exit records with P&L</div>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;padding:9px 12px;background:var(--s2);border:1px solid var(--line);border-radius:7px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--amber)">settings.json</div>
+          <div style="font-size:11px;color:var(--t3)">Persisted config — capital, loss limits, VIX range, entry window</div>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;padding:9px 12px;background:var(--s2);border:1px solid var(--line);border-radius:7px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--t2)">straddle_history.json</div>
+          <div style="font-size:11px;color:var(--t3)">Daily ATM straddle premiums with DTE tag — used for IV environment filter</div>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;padding:9px 12px;background:var(--s2);border:1px solid var(--line);border-radius:7px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--t2)">iv_history.json</div>
+          <div style="font-size:11px;color:var(--t3)">30-day ATM IV percentile history — drives the IV rank entry check</div>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center;padding:9px 12px;background:var(--s2);border:1px solid var(--line);border-radius:7px">
+          <div style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--t2)">active_pos.json</div>
+          <div style="font-size:11px;color:var(--t3)">Runtime file — current open position state, survives server restarts. Auto-deleted on clean exit.</div>
+        </div>
       </div>
     </div>
-  </div>
-
-  <div style="text-align:center;padding:24px 0;color:var(--t3);font-size:11px">
-    FIFTO AI Trading &nbsp;•&nbsp; NIFTY Weekly Options &nbsp;•&nbsp; AngelOne Smart API &nbsp;•&nbsp;
-    <a href="/" style="color:var(--t3)">← Back to Dashboard</a>
   </div>
 
 </div>
