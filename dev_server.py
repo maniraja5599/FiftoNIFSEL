@@ -285,6 +285,15 @@ def _load_open_position_from_sheet():
     }
 
     if trade_id:
+        # Check disk first — if trade already closed locally, don't restore from stale sheet row
+        _disk_trades = _load_trades_from_disk()
+        _already_closed = any(
+            t.get("trade_id") == trade_id and t.get("exit_time") not in (None, "")
+            for t in _disk_trades
+        )
+        if _already_closed:
+            LOG_LINES.append(f"[WARN]  [{_ts()}] Sheet shows {trade_id} open but it's already closed in local trades.json — skipping ghost restore")
+            return None
         if any(t.get("trade_id") == trade_id for t in state.get("trade_history", [])):
             LOG_LINES.append(f"[WARN]  [{_ts()}] Trade {trade_id} already in history, skipping duplicate from Sheet")
         else:

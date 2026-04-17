@@ -3462,17 +3462,26 @@ function applyState(d) {
       pcr: { id: 'val-pcr', format: (v) => v != null ? v.toFixed(2) : '—', range: [0.8, 1.4] },
       gate: { id: 'val-gate', format: (v) => v != null ? (v ? 'OK' : 'BREACHED') : '—' }
     };
+    const trend = d.market?.trend || 'FLAT';
+    const pcr   = d.market?.pcr   || 1.0;
     Object.entries(map).forEach(([k,id]) => {
       const row  = document.getElementById(id)?.closest('.ck');
       const dot  = row?.querySelector('.ck-dot');
+      const nameEl = row?.querySelector('.ck-name');
       let val = d.checks[k];
       if (k === 'pcr' && marketClosed) val = null;
+      // EMA: treat as skipped (pass) when trend is UP/DOWN — spread trades don't require flat EMA
+      let emaSkipped = false;
+      if (k === 'ema' && val === false && (trend === 'UP' || trend === 'DOWN')) {
+        val = true;
+        emaSkipped = true;
+      }
       const cls  = val === true ? 'pass' : val === false ? 'fail' : 'wait';
       const text = val === true ? 'OK'   : val === false ? 'FAIL' : '—';
       if (dot) dot.className = 'ck-dot ' + cls;
       const el = document.getElementById(id);
       if (el) { el.textContent = text; el.style.color = val === true ? 'var(--green)' : val === false ? 'var(--red)' : 'var(--t3)'; }
-      
+
       // Show real value
       const realEl = document.getElementById(realMap[k].id);
       if (realEl) {
@@ -3481,14 +3490,32 @@ function applyState(d) {
         else if (k === 'iv') {
           if (d.market?.iv_percentile != null) {
             realEl.textContent = d.market.iv_percentile.toFixed(1) + '%ile';
-            const nameEl = row?.querySelector('.ck-name'); if (nameEl) nameEl.textContent = 'IV percentile >40 (30d)';
+            if (nameEl) nameEl.textContent = 'IV percentile >40 (30d)';
           } else if (d.market?.iv_atm != null) {
             realEl.textContent = d.market.iv_atm.toFixed(1) + ' ATM';
-            const nameEl = row?.querySelector('.ck-name'); if (nameEl) nameEl.textContent = 'IV ATM >10 (fallback)';
+            if (nameEl) nameEl.textContent = 'IV ATM >10 (fallback)';
           } else { realEl.textContent = '—'; }
           return; // skip default realEl assignment below
         }
-        else if (k === 'ema' && d.market?.ema_trend_flat != null) realVal = d.market.ema_trend_flat;
+        else if (k === 'ema') {
+          if (emaSkipped) {
+            // EMA skipped because trend is UP/DOWN — spread trades don't need flat EMA
+            // Show why the trade is still blocked if PCR doesn't confirm the trend
+            if (trend === 'UP' && pcr < 1.0)
+              realEl.textContent = 'Skipped↑ PCR ' + pcr.toFixed(2) + '<1.0 blocks spread';
+            else if (trend === 'DOWN' && pcr > 1.0)
+              realEl.textContent = 'Skipped↓ PCR ' + pcr.toFixed(2) + '>1.0 blocks spread';
+            else
+              realEl.textContent = 'Skipped (' + trend + ' trend)';
+            if (nameEl) nameEl.textContent = 'EMA flat (skipped)';
+          } else {
+            // Flat trend — EMA is a real check
+            if (nameEl) nameEl.textContent = 'EMA trend flat';
+            realVal = d.market?.ema_trend_flat != null ? d.market.ema_trend_flat : null;
+            realEl.textContent = realMap[k].format(realVal);
+          }
+          return;
+        }
         else if (k === 'pcr' && d.market?.pcr) realVal = d.market.pcr;
         else if (k === 'gate' && d.daily_pnl != null) realVal = d.daily_pnl > -45000;
         realEl.textContent = realMap[k].format(realVal);
