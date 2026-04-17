@@ -4564,20 +4564,60 @@ def api_analytics():
         eq_points.append({
             "pnl":        round(float(t.get("final_pnl", 0)), 2),
             "cumulative": round(running, 2),
-            "date":       str(t.get("entry_time", ""))[:10],
+            "date":       str(t.get("entry_time", "")).strip()[:10],
         })
 
     # Weekly P&L (last 8 calendar weeks)
+    def _parse_trade_dt(entry_time):
+        raw = str(entry_time).strip()
+        if "T" in raw:
+            return datetime.fromisoformat(raw)
+        if raw[2:3] == "-":
+            return datetime.strptime(raw[:10], "%d-%m-%Y")
+        return datetime.strptime(raw[:10], "%Y-%m-%d")
+
     weekly = defaultdict(float)
     for t in closed:
-        raw = str(t.get("entry_time", ""))[:10]
         try:
-            dt = datetime.fromisoformat(raw)
+            dt = _parse_trade_dt(t.get("entry_time", ""))
             wk = dt.strftime("%Y-W%W")
             weekly[wk] += float(t.get("final_pnl", 0))
         except Exception:
             pass
     weekly_sorted = {k: round(v, 2) for k, v in sorted(weekly.items())[-8:]}
+
+    # Setup type breakdown
+    setups = {}
+    for t in closed:
+        s = (t.get("setup_type") or "Unknown").strip()
+        if s not in setups:
+            setups[s] = {"count": 0, "wins": 0, "pnl": 0.0, "best": None, "worst": None}
+        p = float(t.get("final_pnl", 0))
+        setups[s]["count"] += 1
+        setups[s]["pnl"]   += p
+        if p > 0: setups[s]["wins"] += 1
+        if setups[s]["best"]  is None or p > setups[s]["best"]:  setups[s]["best"]  = p
+        if setups[s]["worst"] is None or p < setups[s]["worst"]: setups[s]["worst"] = p
+    for s in setups:
+        setups[s]["pnl"]   = round(setups[s]["pnl"], 2)
+        setups[s]["win_rate"] = round(setups[s]["wins"] / setups[s]["count"] * 100, 1) if setups[s]["count"] else 0
+
+    # Monthly P&L
+    monthly = defaultdict(float)
+    for t in closed:
+        raw = str(t.get("entry_time", "")).strip()
+        try:
+            if "T" in raw:
+                dt = datetime.fromisoformat(raw)
+            elif raw[2:3] == "-":   # DD-MM-YYYY  HH:MM:SS
+                dt = datetime.strptime(raw[:10], "%d-%m-%Y")
+            else:
+                dt = datetime.strptime(raw[:10], "%Y-%m-%d")
+            mk = dt.strftime("%b %Y")
+            monthly[mk] += float(t.get("final_pnl", 0))
+        except Exception:
+            pass
+    monthly_sorted = {k: round(v, 2) for k, v in monthly.items()}
 
     return jsonify({
         "has_data":        True,
@@ -4604,6 +4644,8 @@ def api_analytics():
         "exit_reasons":    reasons,
         "equity_curve":    eq_points,
         "weekly_pnl":      weekly_sorted,
+        "monthly_pnl":     monthly_sorted,
+        "setups":          setups,
     })
 
 @app.route("/api/test_telegram", methods=["POST"])

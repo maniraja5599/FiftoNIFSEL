@@ -2009,9 +2009,9 @@ html.light .toggle-name      { color: #111827; }
 
     <!-- ═══ ANALYTICS PAGE ═══ -->
     <div class="page" id="page-analytics">
-      <div style="padding:18px; display:flex; flex-direction:column; gap:16px;">
+      <div style="padding:18px; display:flex; flex-direction:column; gap:14px;">
 
-        <!-- Reload button -->
+        <!-- Header -->
         <div style="display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:13px;font-weight:600;color:var(--t1)">Performance Analytics</span>
           <button class="btn-ghost" style="padding:4px 14px;font-size:11px" onclick="fetchAnalytics()">Refresh</button>
@@ -2026,140 +2026,103 @@ html.light .toggle-name      { color: #111827; }
           </div>
         </div>
 
-        <!-- Content (hidden until data loads) -->
-        <div id="analytics-content" style="display:none; flex-direction:column; gap:16px;">
+        <!-- Content -->
+        <div id="analytics-content" style="display:none;flex-direction:column;gap:14px;">
 
-          <!-- Row 1: Key metrics -->
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
-
-            <div class="card" style="padding:16px;text-align:center">
-              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Win Rate</div>
-              <div id="an-win-rate" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--green)">—%</div>
-              <div id="an-win-loss" style="font-size:11px;color:var(--t3);margin-top:4px">— W / — L</div>
+          <!-- Hero row: Total P&L + Win Rate + Profit Factor -->
+          <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px">
+            <div class="card" style="padding:18px 20px;background:linear-gradient(135deg,rgba(45,214,152,.08),rgba(45,214,152,.02))">
+              <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Total P&amp;L (All-Time)</div>
+              <div id="an-total-pnl" style="font-size:32px;font-weight:700;font-family:var(--mono)">—</div>
+              <div style="display:flex;gap:16px;margin-top:8px">
+                <span style="font-size:11px;color:var(--t3)">Gross profit: <span id="an-gp" style="color:var(--green)">—</span></span>
+                <span style="font-size:11px;color:var(--t3)">Gross loss: <span id="an-gl" style="color:var(--red)">—</span></span>
+              </div>
             </div>
-
-            <div class="card" style="padding:16px;text-align:center">
-              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Profit Factor</div>
-              <div id="an-pf" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--blue)">—</div>
-              <div style="font-size:11px;color:var(--t3);margin-top:4px">Gross P / Gross L</div>
+            <div class="card" style="padding:18px 20px;text-align:center">
+              <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Win Rate</div>
+              <div id="an-win-rate" style="font-size:32px;font-weight:700;font-family:var(--mono)">—%</div>
+              <div id="an-win-loss" style="font-size:11px;color:var(--t3);margin-top:8px">— W / — L / — trades</div>
             </div>
-
-            <div class="card" style="padding:16px;text-align:center">
-              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Max Drawdown</div>
-              <div id="an-mdd" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--red)">—</div>
-              <div id="an-mdd-pct" style="font-size:11px;color:var(--t3);margin-top:4px">—% of capital</div>
-            </div>
-
-            <div class="card" style="padding:16px;text-align:center">
-              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">DD Efficiency</div>
-              <div id="an-dde" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--purple)">—</div>
-              <div style="font-size:11px;color:var(--t3);margin-top:4px">PF ÷ (1 + DD%)</div>
-            </div>
-
-            <div class="card" style="padding:16px;text-align:center">
-              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Avg R:R</div>
-              <div id="an-rr" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--amber)">—</div>
-              <div style="font-size:11px;color:var(--t3);margin-top:4px">Avg Win / Avg Loss</div>
-            </div>
-
-            <div class="card" style="padding:16px;text-align:center">
-              <div style="font-size:11px;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Calmar Ratio</div>
-              <div id="an-calmar" style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--t1)">—</div>
-              <div style="font-size:11px;color:var(--t3);margin-top:4px">Total PnL / Max DD</div>
-            </div>
-
-          </div>
-
-          <!-- Row 2: Trade stats -->
-          <div class="card">
-            <div class="card-head"><span class="card-label">Trade Statistics</span></div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0">
-
-              <div style="padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Total Trades</div>
-                <div id="an-total" style="font-size:18px;font-weight:600;font-family:var(--mono);margin-top:4px">—</div>
-              </div>
-              <div style="padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Avg Win</div>
-                <div id="an-avg-win" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green);margin-top:4px">—</div>
-              </div>
-              <div style="padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Avg Loss</div>
-                <div id="an-avg-loss" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red);margin-top:4px">—</div>
-              </div>
-              <div style="padding:12px 16px;border-bottom:1px solid var(--line)">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Avg Hold Time</div>
-                <div id="an-duration" style="font-size:18px;font-weight:600;font-family:var(--mono);margin-top:4px">—</div>
-              </div>
-
-              <div style="padding:12px 16px;border-right:1px solid var(--line)">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Best Trade</div>
-                <div id="an-best" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green);margin-top:4px">—</div>
-              </div>
-              <div style="padding:12px 16px;border-right:1px solid var(--line)">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Worst Trade <span style="font-size:9px;color:var(--t3)">(min P&amp;L)</span></div>
-                <div id="an-worst" style="font-size:18px;font-weight:600;font-family:var(--mono);margin-top:4px">—</div>
-              </div>
-              <div style="padding:12px 16px;border-right:1px solid var(--line)">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Gross Profit</div>
-                <div id="an-gp" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--green);margin-top:4px">—</div>
-              </div>
-              <div style="padding:12px 16px">
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Gross Loss</div>
-                <div id="an-gl" style="font-size:18px;font-weight:600;font-family:var(--mono);color:var(--red);margin-top:4px">—</div>
-              </div>
-
+            <div class="card" style="padding:18px 20px;text-align:center">
+              <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Profit Factor</div>
+              <div id="an-pf" style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--blue)">—</div>
+              <div style="font-size:11px;color:var(--t3);margin-top:8px">Gross P ÷ Gross L</div>
             </div>
           </div>
 
-          <!-- Streak badge + Total PnL -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="card" style="padding:16px;display:flex;align-items:center;gap:16px">
-              <div id="an-streak-icon" style="font-size:32px">🔥</div>
-              <div>
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Current Streak</div>
-                <div id="an-streak" style="font-size:20px;font-weight:700;font-family:var(--mono);margin-top:2px">—</div>
-                <div id="an-streak-type" style="font-size:11px;color:var(--t2);margin-top:2px">—</div>
-              </div>
+          <!-- KPI row -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+            <div class="card" style="padding:14px 16px">
+              <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Max Drawdown</div>
+              <div id="an-mdd" style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--red)">—</div>
+              <div id="an-mdd-pct" style="font-size:11px;color:var(--t3);margin-top:3px">—% of capital</div>
             </div>
-            <div class="card" style="padding:16px;display:flex;align-items:center;gap:16px">
-              <div style="font-size:32px">💰</div>
-              <div>
-                <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Total P&amp;L (All Time)</div>
-                <div id="an-total-pnl" style="font-size:20px;font-weight:700;font-family:var(--mono);margin-top:2px">—</div>
-                <div style="font-size:11px;color:var(--t2);margin-top:2px">Closed trades only</div>
+            <div class="card" style="padding:14px 16px">
+              <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Avg Win / Loss</div>
+              <div style="font-size:14px;font-weight:700;font-family:var(--mono);margin-top:4px">
+                <span id="an-avg-win" style="color:var(--green)">—</span>
+                <span style="color:var(--t3);font-size:11px;margin:0 4px">/</span>
+                <span id="an-avg-loss" style="color:var(--red)">—</span>
+              </div>
+              <div style="font-size:11px;color:var(--t3);margin-top:3px">R:R <span id="an-rr" style="color:var(--amber);font-weight:600">—</span></div>
+            </div>
+            <div class="card" style="padding:14px 16px">
+              <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Best / Worst</div>
+              <div style="font-size:14px;font-weight:700;font-family:var(--mono);margin-top:4px">
+                <span id="an-best" style="color:var(--green)">—</span>
+                <span style="color:var(--t3);font-size:11px;margin:0 4px">/</span>
+                <span id="an-worst" style="color:var(--red)">—</span>
+              </div>
+              <div style="font-size:11px;color:var(--t3);margin-top:3px">Single trade P&amp;L</div>
+            </div>
+            <div class="card" style="padding:14px 16px">
+              <div style="font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px">Avg Hold / Streak</div>
+              <div id="an-duration" style="font-size:20px;font-weight:700;font-family:var(--mono)">—</div>
+              <div style="font-size:11px;margin-top:3px">
+                <span id="an-streak" style="font-weight:600">—</span>
+                <span id="an-streak-type" style="color:var(--t3);margin-left:4px">—</span>
               </div>
             </div>
           </div>
 
           <!-- Equity Curve -->
           <div class="card">
-            <div class="card-head"><span class="card-label">Equity Curve</span><span id="an-eq-sub" style="font-size:11px;color:var(--t3)">Last 60 trades</span></div>
-            <div style="padding:12px 0 4px">
-              <svg id="an-equity-svg" width="100%" height="140" viewBox="0 0 800 140" preserveAspectRatio="none" style="display:block"></svg>
+            <div class="card-head">
+              <span class="card-label">Equity Curve</span>
+              <span id="an-eq-sub" style="font-size:11px;color:var(--t3)">Cumulative P&amp;L per trade</span>
+            </div>
+            <div style="padding:4px 4px 0;position:relative">
+              <div id="an-equity-labels" style="display:flex;justify-content:space-between;padding:0 8px;font-size:10px;color:var(--t3);font-family:var(--mono);margin-bottom:4px"></div>
+              <svg id="an-equity-svg" width="100%" height="160" viewBox="0 0 800 160" preserveAspectRatio="none" style="display:block"></svg>
+              <div id="an-equity-yaxis" style="position:absolute;right:8px;top:20px;font-size:9px;color:var(--t3);font-family:var(--mono);text-align:right;line-height:1.8"></div>
             </div>
           </div>
 
-          <!-- Weekly P&L bars -->
-          <div class="card">
-            <div class="card-head"><span class="card-label">Weekly P&amp;L</span><span style="font-size:11px;color:var(--t3)">Last 8 weeks</span></div>
-            <div style="padding:8px 0 4px">
-              <svg id="an-weekly-svg" width="100%" height="100" viewBox="0 0 800 100" preserveAspectRatio="none" style="display:block"></svg>
-              <div id="an-weekly-labels" style="display:flex;justify-content:space-around;padding:4px 8px 0;font-size:10px;color:var(--t3);font-family:var(--mono)"></div>
+          <!-- Weekly + Monthly side by side -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card">
+              <div class="card-head"><span class="card-label">Weekly P&amp;L</span></div>
+              <div style="padding:4px 0 0">
+                <div id="an-weekly-bars" style="padding:0 12px"></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><span class="card-label">Monthly P&amp;L</span></div>
+              <div id="an-monthly-bars" style="padding:4px 12px 8px"></div>
             </div>
           </div>
 
-          <!-- Exit reason breakdown -->
-          <div class="card">
-            <div class="card-head"><span class="card-label">Exit Reason Breakdown</span></div>
-            <table class="trade-tbl">
-              <thead>
-                <tr><th>Exit Reason</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Total P&amp;L</th></tr>
-              </thead>
-              <tbody id="an-exit-tbody">
-                <tr><td colspan="5" style="text-align:center;color:var(--t3);padding:20px">—</td></tr>
-              </tbody>
-            </table>
+          <!-- Setup breakdown + Exit reasons side by side -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card">
+              <div class="card-head"><span class="card-label">By Setup Type</span></div>
+              <div id="an-setups" style="padding:4px 0 4px"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><span class="card-label">Exit Reasons</span></div>
+              <div id="an-exit-bars" style="padding:4px 0 4px"></div>
+            </div>
           </div>
 
         </div><!-- /analytics-content -->
@@ -4425,80 +4388,152 @@ async function pollNotifications() {
 }
 
 // ── Analytics ──
-function _inr(v, showPlus=false) {
+function _inr(v, showSign=false) {
   if (v == null || v === '') return '—';
   const n = parseFloat(v);
   if (isNaN(n)) return '—';
-  const s = '₹' + Math.abs(n).toLocaleString('en-IN', {maximumFractionDigits:0});
-  return n >= 0 ? (showPlus && n > 0 ? '+' + s : s) : '−' + s;
+  const abs = '₹' + Math.abs(n).toLocaleString('en-IN', {maximumFractionDigits:0});
+  if (!showSign) return n < 0 ? '−' + abs : abs;
+  return (n >= 0 ? '+' : '−') + abs;
 }
-function _clr(v, invert=false) {
+function _clr(v) {
   const n = parseFloat(v);
   if (isNaN(n) || n === 0) return 'var(--t2)';
-  const pos = n > 0;
-  return (pos !== invert) ? 'var(--green)' : 'var(--red)';
+  return n > 0 ? 'var(--green)' : 'var(--red)';
 }
 
 function _drawEquityCurve(points) {
   const svg = document.getElementById('an-equity-svg');
-  if (!points || points.length < 2) { svg.innerHTML = '<text x="400" y="75" text-anchor="middle" fill="var(--t3)" font-size="13">Not enough data</text>'; return; }
+  const lblDiv = document.getElementById('an-equity-labels');
+  if (!points || points.length < 2) {
+    svg.innerHTML = '<text x="400" y="85" text-anchor="middle" fill="var(--t3)" font-size="13">Not enough data</text>';
+    return;
+  }
   const vals = points.map(p => p.cumulative);
   const minV = Math.min(...vals, 0);
   const maxV = Math.max(...vals, 0);
   const range = maxV - minV || 1;
-  const W = 800, H = 140, pad = 12;
-  const x = (i) => pad + (i / (vals.length - 1)) * (W - 2*pad);
-  const y = (v) => H - pad - ((v - minV) / range) * (H - 2*pad);
-  // Zero line
-  const zy = y(0);
-  let path = `M ${x(0)} ${y(vals[0])}`;
-  for (let i = 1; i < vals.length; i++) path += ` L ${x(i)} ${y(vals[i])}`;
-  // Area fill (gradient simulation: two paths)
-  let areaPos = `M ${x(0)} ${zy} L ${x(0)} ${y(vals[0])}`;
-  let areaNeg = `M ${x(0)} ${zy} L ${x(0)} ${y(vals[0])}`;
-  for (let i = 1; i < vals.length; i++) { areaPos += ` L ${x(i)} ${y(vals[i])}`; areaNeg += ` L ${x(i)} ${y(vals[i])}`; }
-  areaPos += ` L ${x(vals.length-1)} ${zy} Z`;
-  areaNeg += ` L ${x(vals.length-1)} ${zy} Z`;
+  const W = 800, H = 160, padL = 10, padR = 10, padT = 16, padB = 20;
+  const xFn = i => padL + (i / (vals.length - 1)) * (W - padL - padR);
+  const yFn = v => H - padB - ((v - minV) / range) * (H - padT - padB);
+  const zy  = yFn(0);
 
-  const lastVal = vals[vals.length-1];
+  // grid lines
+  let grid = '';
+  const steps = 4;
+  for (let s = 0; s <= steps; s++) {
+    const gv  = minV + (s / steps) * range;
+    const gy  = yFn(gv);
+    grid += `<line x1="${padL}" y1="${gy}" x2="${W-padR}" y2="${gy}" stroke="var(--line)" stroke-width="0.5" stroke-dasharray="3,3"/>`;
+  }
+
+  // path + area
+  let path = `M ${xFn(0)} ${yFn(vals[0])}`;
+  for (let i = 1; i < vals.length; i++) path += ` L ${xFn(i)} ${yFn(vals[i])}`;
+  let areaPath = `M ${xFn(0)} ${zy} L ${xFn(0)} ${yFn(vals[0])}` + path.slice(path.indexOf(' L'));
+  areaPath += ` L ${xFn(vals.length-1)} ${zy} Z`;
+
+  const lastVal = vals[vals.length - 1];
   const lineColor = lastVal >= 0 ? 'var(--green)' : 'var(--red)';
+  const fillColor = lastVal >= 0 ? 'rgba(45,214,152,0.10)' : 'rgba(247,82,82,0.10)';
+
+  // dot + value labels on last point
+  const dots = points.map((p, i) => {
+    const cx = xFn(i), cy = yFn(p.cumulative);
+    const c = p.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${c}" stroke="var(--bg)" stroke-width="1.5"/>`;
+  }).join('');
 
   svg.innerHTML = `
     <defs>
-      <clipPath id="cp-pos"><rect x="${pad}" y="${pad}" width="${W-2*pad}" height="${Math.max(zy-pad,0)}"/></clipPath>
-      <clipPath id="cp-neg"><rect x="${pad}" y="${zy}" width="${W-2*pad}" height="${Math.max(H-zy-pad,0)}"/></clipPath>
+      <clipPath id="ecp"><rect x="${padL}" y="${padT}" width="${W-padL-padR}" height="${H-padT-padB}"/></clipPath>
     </defs>
-    <line x1="${pad}" y1="${zy}" x2="${W-pad}" y2="${zy}" stroke="var(--line2)" stroke-width="1"/>
-    <path d="${areaPos}" clip-path="url(#cp-pos)" fill="rgba(45,214,152,0.12)"/>
-    <path d="${areaNeg}" clip-path="url(#cp-neg)" fill="rgba(247,82,82,0.12)"/>
-    <path d="${path}" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linejoin="round"/>
-    <circle cx="${x(vals.length-1)}" cy="${y(vals[vals.length-1])}" r="4" fill="${lineColor}"/>
+    ${grid}
+    <line x1="${padL}" y1="${zy}" x2="${W-padR}" y2="${zy}" stroke="var(--line2)" stroke-width="1"/>
+    <path d="${areaPath}" clip-path="url(#ecp)" fill="${fillColor}"/>
+    <path d="${path}" clip-path="url(#ecp)" fill="none" stroke="${lineColor}" stroke-width="2" stroke-linejoin="round"/>
+    ${dots}
   `;
+
+  // date labels below
+  const step = Math.max(1, Math.floor(points.length / 6));
+  const lbls = points.filter((_, i) => i % step === 0 || i === points.length - 1)
+    .map(p => `<span>${String(p.date).replace(/^\d{4}-/,'').replace(/^(\d{2})-(\d{2})-\d{4}/,'$1/$2')}</span>`);
+  lblDiv.innerHTML = lbls.join('');
 }
 
-function _drawWeeklyBars(weekly) {
-  const svg = document.getElementById('an-weekly-svg');
-  const lblDiv = document.getElementById('an-weekly-labels');
-  const keys = Object.keys(weekly);
-  const vals = keys.map(k => weekly[k]);
-  if (!vals.length) { svg.innerHTML = ''; lblDiv.innerHTML = ''; return; }
+function _drawBarChart(containerId, data, labelFn) {
+  const el = document.getElementById(containerId);
+  if (!el || !data || !Object.keys(data).length) { if(el) el.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:8px 0">No data</div>'; return; }
+  const keys = Object.keys(data);
+  const vals = keys.map(k => data[k]);
   const maxAbs = Math.max(...vals.map(Math.abs), 1);
-  const W = 800, H = 100, midY = H / 2;
-  const barW = Math.floor((W / vals.length) * 0.6);
-  const gap  = W / vals.length;
-  let bars = '';
-  vals.forEach((v, i) => {
-    const cx = gap * i + gap / 2;
-    const barH = Math.abs(v) / maxAbs * (H / 2 - 6);
+  el.innerHTML = keys.map((k, i) => {
+    const v = vals[i];
+    const pct = Math.abs(v) / maxAbs * 100;
     const color = v >= 0 ? 'var(--green)' : 'var(--red)';
-    const ry = v >= 0 ? midY - barH : midY;
-    bars += `<rect x="${cx - barW/2}" y="${ry}" width="${barW}" height="${Math.max(barH,2)}" rx="2" fill="${color}" fill-opacity="0.7"/>`;
-  });
-  svg.innerHTML = `
-    <line x1="0" y1="${midY}" x2="${W}" y2="${midY}" stroke="var(--line2)" stroke-width="1"/>
-    ${bars}
-  `;
-  lblDiv.innerHTML = keys.map(k => `<span>${k.replace(/\d{4}-W/,'W')}</span>`).join('');
+    const lbl = labelFn ? labelFn(k) : k;
+    const valStr = _inr(v, true);
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:3px">
+        <span>${lbl}</span><span style="color:${color};font-family:var(--mono);font-weight:600">${valStr}</span>
+      </div>
+      <div style="height:6px;background:var(--line);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct.toFixed(1)}%;background:${color};border-radius:3px;opacity:0.75;transition:width .4s"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _drawExitBars(reasons) {
+  const el = document.getElementById('an-exit-bars');
+  if (!el) return;
+  const keys = Object.keys(reasons).sort((a,b) => reasons[b].count - reasons[a].count);
+  if (!keys.length) { el.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:8px 12px">No data</div>'; return; }
+  const maxCount = Math.max(...keys.map(k => reasons[k].count), 1);
+  el.innerHTML = keys.map(k => {
+    const rec = reasons[k];
+    const wr  = rec.count ? Math.round(rec.wins / rec.count * 100) : 0;
+    const pct = rec.count / maxCount * 100;
+    const pnlColor = rec.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const barColor = wr >= 50 ? 'var(--green)' : 'var(--red)';
+    return `<div style="padding:8px 12px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-size:11px;font-weight:600;color:var(--t1)">${k}</span>
+        <span style="font-size:11px;font-family:var(--mono);color:${pnlColor};font-weight:600">${_inr(rec.pnl, true)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:5px;background:var(--line);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct.toFixed(1)}%;background:${barColor};border-radius:3px;opacity:.7"></div>
+        </div>
+        <span style="font-size:10px;color:var(--t3);white-space:nowrap">${rec.count} trades · ${wr}% win</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _drawSetupBars(setups) {
+  const el = document.getElementById('an-setups');
+  if (!el) return;
+  const keys = Object.keys(setups).sort((a,b) => setups[b].pnl - setups[a].pnl);
+  if (!keys.length) { el.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:8px 12px">No data</div>'; return; }
+  el.innerHTML = keys.map(k => {
+    const s = setups[k];
+    const pnlColor = s.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const wrColor  = s.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
+    return `<div style="padding:8px 12px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:11px;font-weight:600;color:var(--t1)">${k}</span>
+        <span style="font-size:12px;font-family:var(--mono);color:${pnlColor};font-weight:700">${_inr(s.pnl, true)}</span>
+      </div>
+      <div style="display:flex;gap:14px;font-size:10px;color:var(--t3)">
+        <span>${s.count} trades</span>
+        <span>Win rate <b style="color:${wrColor}">${s.win_rate}%</b></span>
+        <span>Best <b style="color:var(--green)">${_inr(s.best)}</b></span>
+        <span>Worst <b style="color:var(--red)">${_inr(s.worst)}</b></span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 async function fetchAnalytics() {
@@ -4514,80 +4549,53 @@ async function fetchAnalytics() {
     empty.style.display   = 'none';
     content.style.display = 'flex';
 
-    // Key metrics
+    // Hero: Total P&L
+    const tpEl = document.getElementById('an-total-pnl');
+    tpEl.textContent = _inr(d.total_pnl, true);
+    tpEl.style.color = d.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('an-gp').textContent = _inr(d.gross_profit);
+    document.getElementById('an-gl').textContent = _inr(d.gross_loss);
+
+    // Win rate
     const wrEl = document.getElementById('an-win-rate');
     wrEl.textContent = d.win_rate + '%';
     wrEl.style.color = d.win_rate >= 50 ? 'var(--green)' : 'var(--red)';
-    document.getElementById('an-win-loss').textContent = `${d.win_count} W / ${d.loss_count} L`;
+    document.getElementById('an-win-loss').textContent = `${d.win_count} W / ${d.loss_count} L / ${d.total_trades} trades`;
 
+    // Profit factor
     const pfEl = document.getElementById('an-pf');
     pfEl.textContent = d.profit_factor >= 999 ? '∞' : d.profit_factor.toFixed(2);
     pfEl.style.color = d.profit_factor >= 1 ? 'var(--blue)' : 'var(--red)';
 
+    // KPI row
     document.getElementById('an-mdd').textContent = _inr(d.max_drawdown);
     document.getElementById('an-mdd-pct').textContent = d.max_drawdown_pct + '% of capital';
-
-    const ddeEl = document.getElementById('an-dde');
-    ddeEl.textContent = d.dd_efficiency.toFixed(2);
-    ddeEl.style.color = d.dd_efficiency >= 1 ? 'var(--purple)' : 'var(--red)';
-
-    document.getElementById('an-rr').textContent = d.rr_ratio.toFixed(2) + 'x';
-    document.getElementById('an-calmar').textContent = d.calmar_ratio >= 0 ? '+' + d.calmar_ratio.toFixed(2) : d.calmar_ratio.toFixed(2);
-
-    // Trade stats
-    document.getElementById('an-total').textContent = d.total_trades;
     document.getElementById('an-avg-win').textContent  = _inr(d.avg_win);
-    document.getElementById('an-avg-loss').textContent = '−' + _inr(d.avg_loss);
-    document.getElementById('an-duration').textContent = d.avg_duration_mins + ' min';
+    document.getElementById('an-avg-loss').textContent = _inr(d.avg_loss);
+    document.getElementById('an-rr').textContent = d.rr_ratio.toFixed(2) + 'x';
     const bestEl  = document.getElementById('an-best');
     const worstEl = document.getElementById('an-worst');
-    bestEl.textContent  = '+' + _inr(d.best_trade);
+    bestEl.textContent  = _inr(d.best_trade, true);
     bestEl.style.color  = 'var(--green)';
     const wv = parseFloat(d.worst_trade);
-    worstEl.textContent = wv >= 0 ? ('+' + _inr(wv)) : ('−' + _inr(Math.abs(wv)));
+    worstEl.textContent = _inr(wv, true);
     worstEl.style.color = wv >= 0 ? 'var(--green)' : 'var(--red)';
-    document.getElementById('an-gp').textContent = _inr(d.gross_profit);
-    document.getElementById('an-gl').textContent = '−' + _inr(d.gross_loss);
+    const durEl = document.getElementById('an-duration');
+    durEl.textContent = d.avg_duration_mins ? d.avg_duration_mins + ' min' : '—';
 
     // Streak
-    const streakEl = document.getElementById('an-streak');
-    const streakIcon = document.getElementById('an-streak-icon');
+    const streakEl   = document.getElementById('an-streak');
     const streakType = document.getElementById('an-streak-type');
-    streakEl.textContent = d.current_streak + ' in a row';
-    streakEl.style.color = d.streak_type === 'win' ? 'var(--green)' : 'var(--red)';
-    streakIcon.textContent = d.streak_type === 'win' ? '🔥' : '❄️';
-    streakType.textContent = d.streak_type === 'win' ? 'Winning streak' : 'Losing streak';
-
-    // Total PnL
-    const tpEl = document.getElementById('an-total-pnl');
-    tpEl.textContent = (d.total_pnl >= 0 ? '+' : '−') + _inr(Math.abs(d.total_pnl));
-    tpEl.style.color = d.total_pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    streakEl.textContent  = d.current_streak + ' in a row';
+    streakEl.style.color  = d.streak_type === 'win' ? 'var(--green)' : 'var(--red)';
+    streakType.textContent = d.streak_type === 'win' ? '🔥 winning' : '❄️ losing';
 
     // Charts
     _drawEquityCurve(d.equity_curve || []);
-    _drawWeeklyBars(d.weekly_pnl || {});
-
-    // Exit reasons table
-    const tbody = document.getElementById('an-exit-tbody');
-    const reasons = d.exit_reasons || {};
-    const rKeys = Object.keys(reasons).sort((a,b) => reasons[b].count - reasons[a].count);
-    if (rKeys.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--t3);padding:20px">—</td></tr>';
-    } else {
-      tbody.innerHTML = rKeys.map(r => {
-        const rec = reasons[r];
-        const wr  = rec.count > 0 ? Math.round(rec.wins / rec.count * 100) : 0;
-        const pnlColor = rec.pnl >= 0 ? 'var(--green)' : 'var(--red)';
-        const pnlStr = (rec.pnl >= 0 ? '+' : '−') + '₹' + Math.abs(rec.pnl).toLocaleString('en-IN', {maximumFractionDigits:0});
-        return `<tr>
-          <td>${r}</td>
-          <td style="text-align:center">${rec.count}</td>
-          <td style="text-align:center;color:var(--green)">${rec.wins}</td>
-          <td style="text-align:center">${wr}%</td>
-          <td style="text-align:right;color:${pnlColor};font-family:var(--mono)">${pnlStr}</td>
-        </tr>`;
-      }).join('');
-    }
+    _drawBarChart('an-weekly-bars', d.weekly_pnl || {}, k => k.replace(/\d{4}-W/,'W'));
+    _drawBarChart('an-monthly-bars', d.monthly_pnl || {}, k => k);
+    _drawExitBars(d.exit_reasons || {});
+    _drawSetupBars(d.setups || {});
   } catch(e) {
     console.error('Analytics fetch failed', e);
   }
