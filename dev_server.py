@@ -73,7 +73,8 @@ _SHEET_HEADERS = [
     "Qty", "Premium", "CE Entry LTP", "PE Entry LTP",
     "CE Exit LTP", "PE Exit LTP",
     "Target", "Initial SL", "Final SL", "Trail Locked",
-    "P&L", "Exit Reason", "Expiry", "Duration (min)"
+    "P&L", "Exit Reason", "Expiry", "Duration (min)",
+    "Hedge Symbol", "Hedge Entry LTP", "Hedge Exit LTP",
 ]
 
 def _get_or_create_sheet():
@@ -137,6 +138,9 @@ def _save_entry_sheets(trade_record):
             "",                                         # exit reason — blank at entry
             trade_record.get("expiry", ""),
             "",                                         # duration — blank at entry
+            trade_record.get("hedge_symbol", ""),
+            trade_record.get("hedge_entry_ltp", ""),
+            "",                                         # hedge exit LTP — blank at entry
         ])
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets entry write failed: {e}")
@@ -156,7 +160,7 @@ def _update_exit_sheets(trade_record):
             if not cell:
                 return
         r = cell.row
-        # Write all 22 columns in one batch update (fast, atomic)
+        # Write all 25 columns in one batch update (fast, atomic)
         full_row = [
             trade_record.get("trade_id", ""),                                       # 1
             trade_record.get("entry_time", ""),                                     # 2
@@ -180,8 +184,11 @@ def _update_exit_sheets(trade_record):
             trade_record.get("exit_reason", ""),                                    # 20 Exit Reason
             trade_record.get("expiry", ""),                                         # 21
             trade_record.get("duration_mins", ""),                                  # 22 Duration
+            trade_record.get("hedge_symbol", ""),                                   # 23 Hedge Symbol
+            trade_record.get("hedge_entry_ltp", ""),                                # 24 Hedge Entry LTP
+            trade_record.get("hedge_exit_ltp", ""),                                 # 25 Hedge Exit LTP
         ]
-        ws.update(range_name=f"A{r}:V{r}", values=[full_row])
+        ws.update(range_name=f"A{r}:Y{r}", values=[full_row])
     except Exception as e:
         LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets exit update failed: {e}")
 
@@ -305,11 +312,13 @@ def _persist_entry(pos):
         "final_pnl":       None,
         "exit_reason":     None,
         "expiry":          pos.get("expiry", ""),
-        "ce_entry_ltp":    pos.get("ce_entry_price", ""),
-        "pe_entry_ltp":    pos.get("pe_entry_price", ""),
+        "ce_entry_ltp":    pos.get("ce_entry_ltp", pos.get("ce_entry_price", "")),
+        "pe_entry_ltp":    pos.get("pe_entry_ltp", pos.get("pe_entry_price", "")),
         "initial_sl":      pos.get("initial_sl", pos.get("sl", "")),
         "target_pct":      pos.get("target_pct", ""),
         "sl_mult":         pos.get("sl_mult", ""),
+        "hedge_symbol":    pos.get("hedge_ce_symbol") or pos.get("hedge_pe_symbol", ""),
+        "hedge_entry_ltp": pos.get("hedge_ce_entry_ltp") or pos.get("hedge_pe_entry_ltp", ""),
     }
     _save_trade_local(entry_record)
     _save_active_position(pos)                  # write full pos dict (has tokens, ltps, etc.)
@@ -1625,7 +1634,10 @@ def _fetch_nifty_candles(interval="FIFTEEN_MINUTE", lookback_days=5):
         "fromdate": (now - timedelta(days=lookback_days)).strftime("%Y-%m-%d %H:%M"),
         "todate": now.strftime("%Y-%m-%d %H:%M"),
     }
-    if angel_obj:
+    _src = state.get("ltp_source", "auto")
+
+    # AngelOne path — skip if source is set to upstox-only
+    if _src != "upstox" and angel_obj:
         try:
             resp = angel_obj.getCandleData(params)
             if resp and resp.get("status") and resp.get("data"):
@@ -1636,8 +1648,8 @@ def _fetch_nifty_candles(interval="FIFTEEN_MINUTE", lookback_days=5):
             LOG_LINES.append(f"[WARN]  [{_ts()}] AngelOne candle fetch error ({interval}): {e}")
             _candle_backoff[cache_key] = now_ts + cache_ttl
 
-    # ── AngelOne failed — try Upstox fallback ──
-    if _upstox_available():
+    # Upstox path — primary when source=upstox, fallback otherwise
+    if _src == "upstox" or _upstox_available():
         ux_candles = _upstox_candles(interval, lookback_days)
         if ux_candles:
             _candle_cache[cache_key] = {"ts": now_ts, "data": ux_candles}
@@ -1677,14 +1689,10 @@ def _compute_ema_trend_flat(candles, atr_15m):
             closes.append(float(row[4]))
         except Exception:
             continue
-    if len(closes) < 4:
-        if len(closes) < 2:
-            return None
-        return abs(closes[-1] - closes[0]) <= atr_15m * 0.50
-    fast_period = 9 if len(closes) >= 9 else max(3, len(closes) // 2)
-    slow_period = 21 if len(closes) >= 21 else min(len(closes), max(fast_period + 1, 4))
-    ema9 = _ema_series(closes, fast_period)
-    ema21 = _ema_series(closes, slow_period)
+    if len(closes) < 21:
+        return None
+    ema9 = _ema_series(closes, 9)
+    ema21 = _ema_series(closes, 21)
     if len(ema9) < 2 or len(ema21) < 2:
         return None
     ema9_now, ema9_prev = ema9[-1], ema9[-2]
@@ -1709,12 +1717,10 @@ def _detect_trend(candles, atr_15m):
             closes.append(float(row[4]))
         except Exception:
             continue
-    if len(closes) < 5:
+    if len(closes) < 21:
         return "FLAT"
-    fast_period = 9 if len(closes) >= 9 else max(3, len(closes) // 2)
-    slow_period = 21 if len(closes) >= 21 else min(len(closes), max(fast_period + 1, 4))
-    ema9  = _ema_series(closes, fast_period)
-    ema21 = _ema_series(closes, slow_period)
+    ema9  = _ema_series(closes, 9)
+    ema21 = _ema_series(closes, 21)
     if len(ema9) < 3 or len(ema21) < 3:
         return "FLAT"
     e9, e9p  = ema9[-1], ema9[-3]
@@ -1886,7 +1892,7 @@ def _safe_ltp_data(exchange, symbol, token, source=None):
 
 def _refresh_market_metrics():
     metrics = _compute_option_metrics(state["market"].get("nifty_spot"))
-    candles_15m = _fetch_nifty_candles("FIFTEEN_MINUTE", 5)
+    candles_15m = _fetch_nifty_candles("FIFTEEN_MINUTE", 10)
     if not candles_15m:
         candles_15m = _synthetic_candles_from_spot(15)
     if len(candles_15m) < 2:
@@ -2432,6 +2438,10 @@ def _execute_trade(signal):
 
 def _execute_trade_inner(signal):
     """Inner trade execution logic (called under _trade_exec_lock)."""
+    if state.get("active_position"):
+        LOG_LINES.append(f"[WARN]  [{_ts()}] _execute_trade_inner: position already active — duplicate execution blocked")
+        state["signal_pending"] = False
+        return False
     lot_size   = state.get("lot_size") or config.get("lot_size", 75)
     # ── Risk-aware position sizing ──
     # If risk_per_trade_pct > 0, cap lots so max loss ≤ capital × risk_pct
@@ -2868,6 +2878,9 @@ def _square_off_position():
         "pe_exit_ltp":     pos.get("current_pe_ltp", ""),
         "hedge_pe_exit_ltp": pos.get("current_hedge_pe_ltp", ""),
         "hedge_ce_exit_ltp": pos.get("current_hedge_ce_ltp", ""),
+        "hedge_symbol":    pos.get("hedge_ce_symbol") or pos.get("hedge_pe_symbol", ""),
+        "hedge_entry_ltp": pos.get("hedge_ce_entry_ltp") or pos.get("hedge_pe_entry_ltp", ""),
+        "hedge_exit_ltp":  pos.get("current_hedge_ce_ltp") or pos.get("current_hedge_pe_ltp", ""),
         "target":          pos["target"],
         "initial_sl":      pos.get("initial_sl", pos.get("sl", "")),
         "stop_loss":       pos["sl"],
@@ -3444,7 +3457,12 @@ def fetch_market_data():
             time.sleep(300)   # re-check every 5 min; do nothing until market opens
             continue
 
-        if angel_obj and connection["status"] == "connected":
+        _src = state.get("ltp_source", "auto")
+        _can_fetch = (
+            (angel_obj and connection["status"] == "connected") or
+            (_src == "upstox" and _upstox_available())
+        )
+        if _can_fetch:
             try:
                 t0    = time.time()
                 nifty = _safe_ltp_data("NSE", "Nifty 50", "26000")
