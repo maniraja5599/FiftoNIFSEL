@@ -4177,6 +4177,10 @@ def api_state():
     state["monthly_pnl"]      = _calc_monthly_pnl()
     state["weekly_loss_limit"]  = config.get("weekly_loss_limit", 60000)
     state["monthly_loss_limit"] = config.get("monthly_loss_limit", 150000)
+    state["daily_loss_limit"]   = config.get("daily_loss_limit", 45000)
+    state["vix_min"]            = config.get("vix_min", 13)
+    state["vix_max"]            = config.get("vix_max", 28)
+    state["max_trades"]         = config.get("max_trades_per_day", 3)
     # Signal age in seconds (so frontend can show countdown/warning)
     gen = state.get("signal_generated_at")
     state["signal_age_secs"] = round(time.time() - gen) if gen else None
@@ -4444,6 +4448,26 @@ def api_delete_trade(trade_id):
                 ws.delete_rows(cell.row)
         except Exception as e:
             LOG_LINES.append(f"[WARN]  [{_ts()}] Sheets delete failed: {e}")
+
+    # Recalculate today's closed PnL after deletion
+    today = datetime.now().date()
+    daily_total = 0.0
+    daily_count = 0
+    for t in state["trade_history"]:
+        exit_t = t.get("exit_time")
+        pnl    = t.get("final_pnl")
+        if not exit_t or pnl is None:
+            continue
+        try:
+            exit_dt = datetime.fromisoformat(exit_t) if "T" in str(exit_t) else datetime.strptime(str(exit_t).strip(), "%d-%m-%Y  %H:%M:%S")
+            if exit_dt.date() == today:
+                daily_total += float(pnl)
+                daily_count += 1
+        except Exception:
+            continue
+    state["closed_pnl"]   = round(daily_total, 2)
+    state["daily_pnl"]    = round(daily_total, 2)
+    state["trades_today"] = daily_count
 
     threading.Thread(target=_delete_from_sheets, daemon=True).start()
     LOG_LINES.append(f"[INFO]  [{_ts()}] Trade {trade_id} deleted")

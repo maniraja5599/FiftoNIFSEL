@@ -1637,9 +1637,11 @@ html.light .toggle-name      { color: #111827; }
               <div class="ck"><div class="ck-dot wait" id="npck-vix-dot"></div><div class="ck-name">VIX (13–28)</div><div class="ck-val" id="npck-vix">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-vix-v"></div></div>
               <div class="ck"><div class="ck-dot wait" id="npck-pcr-dot"></div><div class="ck-name">PCR (0.8–1.4)</div><div class="ck-val" id="npck-pcr">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-pcr-v"></div></div>
               <div class="ck"><div class="ck-dot wait" id="npck-iv-dot"></div><div class="ck-name">IV% &gt;40</div><div class="ck-val" id="npck-iv">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-iv-v"></div></div>
-              <div class="ck"><div class="ck-dot wait" id="npck-ema-dot"></div><div class="ck-name">EMA flat / trend</div><div class="ck-val" id="npck-ema">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-ema-v"></div></div>
-              <div class="ck"><div class="ck-dot wait" id="npck-margin-dot"></div><div class="ck-name">Margin available</div><div class="ck-val" id="npck-margin">—</div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-ema-dot"></div><div class="ck-name" id="npck-ema-lbl">EMA trend</div><div class="ck-val" id="npck-ema">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-ema-v"></div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-margin-dot"></div><div class="ck-name">Margin</div><div class="ck-val" id="npck-margin">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-margin-v"></div></div>
               <div class="ck"><div class="ck-dot wait" id="npck-gate-dot"></div><div class="ck-name">Daily loss gate</div><div class="ck-val" id="npck-gate">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-gate-v"></div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-wgate-dot"></div><div class="ck-name">Weekly loss gate</div><div class="ck-val" id="npck-wgate">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-wgate-v"></div></div>
+              <div class="ck"><div class="ck-dot wait" id="npck-mgate-dot"></div><div class="ck-name">Monthly loss gate</div><div class="ck-val" id="npck-mgate">—</div><div style="font-size:10px;color:var(--t3);margin-left:6px;font-family:var(--mono)" id="npck-mgate-v"></div></div>
             </div>
             <div id="has-pos" style="display:none">
               <!-- Unrealised P&L -->
@@ -3255,20 +3257,59 @@ function applyState(d) {
     // Setup checks
     const c = d.checks || {};
     const m = d.market || {};
-    _npSet('npck-vix',    c.vix,    m.vix    != null ? m.vix.toFixed(2) : null);
+
+    // VIX
+    const vixMin = d.vix_min || 13, vixMax = d.vix_max || 28;
+    const vixLbl = document.querySelector('#npck-vix-dot')?.closest('.ck')?.querySelector('.ck-name');
+    if (vixLbl) vixLbl.textContent = 'VIX ('+vixMin+'–'+vixMax+')';
+    _npSet('npck-vix', c.vix, m.vix != null ? m.vix.toFixed(2) : null);
+
+    // PCR
     const pcrClosed = !mktNow;
-    _npSet('npck-pcr',    pcrClosed ? null : c.pcr, m.pcr != null ? m.pcr.toFixed(2) : null);
+    _npSet('npck-pcr', pcrClosed ? null : c.pcr, m.pcr != null ? m.pcr.toFixed(2) : null);
+
+    // IV
     const ivHasHist = m.iv_percentile != null;
     const ivLabel = document.querySelector('#npck-iv-dot')?.closest('.ck')?.querySelector('.ck-name');
     if (ivLabel) ivLabel.textContent = ivHasHist ? 'IV% >40 (30d hist)' : 'IV ATM >10 (fallback)';
     const ivRealTxt = ivHasHist ? m.iv_percentile.toFixed(1)+'%ile' : (m.iv_atm != null ? m.iv_atm.toFixed(1) : null);
     _npSet('npck-iv', c.iv, ivRealTxt);
+
+    // EMA / Trend — show actual trend direction always
     const trend = m.trend || 'FLAT';
-    const emaVal = c.ema;
-    const emaSkipped = (trend === 'UP' || trend === 'DOWN');
-    _npSet('npck-ema', emaSkipped ? true : emaVal, emaSkipped ? 'Skipped ('+trend+' trend)' : (m.ema_trend_flat != null ? (m.ema_trend_flat ? 'Flat' : 'Trending') : null));
-    _npSet('npck-margin', c.margin);
-    _npSet('npck-gate',   c.gate,   d.daily_pnl != null ? '₹'+Math.round(d.daily_pnl).toLocaleString('en-IN') : null);
+    const emaLbl = document.getElementById('npck-ema-lbl');
+    if (emaLbl) emaLbl.textContent = 'EMA trend';
+    if (trend === 'UP' || trend === 'DOWN') {
+      // Directional trend detected — show direction, amber dot (info)
+      const dot = document.getElementById('npck-ema-dot');
+      const lbl = document.getElementById('npck-ema');
+      if (dot) { dot.className = 'ck-dot'; dot.style.background = 'var(--amber)'; }
+      if (lbl) { lbl.textContent = trend; lbl.style.color = trend === 'UP' ? 'var(--green)' : 'var(--red)'; }
+      const rv = document.getElementById('npck-ema-v');
+      if (rv) rv.textContent = trend === 'UP' ? 'EMA9 > EMA21 ↑' : 'EMA9 < EMA21 ↓';
+    } else {
+      // Flat — use ema check value
+      const emaVal = c.ema;
+      _npSet('npck-ema', emaVal, m.ema_trend_flat != null ? (m.ema_trend_flat ? 'Flat ✓' : 'Trending') : null);
+      const dot = document.getElementById('npck-ema-dot');
+      if (dot) dot.style.background = '';
+    }
+
+    // Margin
+    const avail = d.funds?.available_cash;
+    _npSet('npck-margin', c.margin, avail != null ? '₹'+Math.round(avail).toLocaleString('en-IN') : null);
+
+    // Daily loss gate
+    const dailyLimit = d.daily_loss_limit || 45000;
+    _npSet('npck-gate', c.gate, d.daily_pnl != null ? '₹'+Math.round(d.daily_pnl).toLocaleString('en-IN')+' / -₹'+Math.round(dailyLimit).toLocaleString('en-IN') : null);
+
+    // Weekly loss gate
+    const weeklyLimit = d.weekly_loss_limit || 90000;
+    _npSet('npck-wgate', c.weekly_gate, d.weekly_pnl != null ? '₹'+Math.round(d.weekly_pnl).toLocaleString('en-IN')+' / -₹'+Math.round(weeklyLimit).toLocaleString('en-IN') : null);
+
+    // Monthly loss gate
+    const monthlyLimit = d.monthly_loss_limit || 150000;
+    _npSet('npck-mgate', c.monthly_gate, d.monthly_pnl != null ? '₹'+Math.round(d.monthly_pnl).toLocaleString('en-IN')+' / -₹'+Math.round(monthlyLimit).toLocaleString('en-IN') : null);
   }
   const posPill = document.getElementById('pos-pill');
   posPill.textContent = hasPOS ? '● Active' : 'No position';
